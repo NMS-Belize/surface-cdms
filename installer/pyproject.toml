@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "surface-cdms"
+version = "0.1.0-alpha.1"
+description = "Installer and management CLI for SURFACE CDMS"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "National Meteorological Service of Belize" }
+]
+dependencies = [
+    "click>=8.1.0",
+    "rich>=13.0.0"
+]
+
+[project.scripts]
+surface = "surface_cdms.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
