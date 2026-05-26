@@ -5,6 +5,21 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.1.0-alpha.6] - 2026-05-25
+
+### Changed
+
+- Updated project README with installer usage instructions.
+- Added recommended `pipx` installation workflow.
+- Added development setup instructions.
+- Added package build instructions.
+- Documented available `surface` commands.
+
+### Notes
+
+- This release focuses on documentation and usability for the installer package.
+- The full SURFACE application has not yet been added as a top-level `surface/` folder.
+
 ## [0.1.0-alpha.5] - 2026-05-25
 
 ### Fixed
