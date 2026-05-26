@@ -131,14 +131,3 @@ installer/src/surface_cdms/wx_config/productionfiles/
 
 # Generated artifacts
 **/artifacts/*
-
-# SURFACE CDMS installer runtime/generated files
-installer/src/surface_cdms/wx_playbook/env/become_password
-installer/src/surface_cdms/wx_playbook/env/connection_password
-
-installer/src/surface_cdms/wx_config/ansible/surface_app/env/become_password
-installer/src/surface_cdms/wx_config/ansible/surface_app/env/connection_password
-installer/src/surface_cdms/wx_config/ansible/surface_app/env/user
-# installer/src/surface_cdms/wx_config/ansible/surface_app/env/production.env
-installer/src/surface_cdms/wx_config/ansible/surface_app/env/config_status
-installer/src/surface_cdms/wx_config/ansible/surface_app/env/install_type

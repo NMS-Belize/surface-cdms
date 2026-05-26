@@ -36,6 +36,9 @@ def wx_configuration(sudo_password):
     """
 
     try:
+        # Reset runtime files so old installer values are not reused.
+        reset_runtime_env_files()
+        
         # Write out the current Linux username for local installations.
         write_user_to_file(
             getpass.getuser(),
@@ -114,3 +117,39 @@ def write_user_to_file(name, filename):
     filename = Path(filename)
     filename.parent.mkdir(parents=True, exist_ok=True)
     filename.write_text(name, encoding="utf-8")
+
+
+def reset_runtime_file(file_path):
+    """
+    Ensure a runtime file exists and is empty before the installer writes to it.
+
+    This prevents old values from a previous installer run from being reused.
+    """
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("", encoding="utf-8")
+
+
+def reset_runtime_env_files():
+    """
+    Reset runtime env files used by Ansible Runner and the SURFACE config app.
+
+    These files are packaged as empty placeholders, but during an installer run
+    some of them may receive machine-specific values. Reset them each time.
+    """
+
+    runtime_files = [
+        # Ansible Runner env files
+        WX_PLAYBOOK_PATH / "env" / "become_password",
+        WX_PLAYBOOK_PATH / "env" / "extravars",
+
+        # SURFACE app installer env files
+        WEBAPP_PROJECT_PATH / "ansible" / "surface_app" / "env" / "become_password",
+        WEBAPP_PROJECT_PATH / "ansible" / "surface_app" / "env" / "user",
+        WEBAPP_PROJECT_PATH / "ansible" / "surface_app" / "env" / "extravars",
+        WEBAPP_PROJECT_PATH / "ansible" / "surface_app" / "env" / "config_status",
+        WEBAPP_PROJECT_PATH / "ansible" / "surface_app" / "env" / "install_type",
+    ]
+
+    for file_path in runtime_files:
+        reset_runtime_file(file_path)

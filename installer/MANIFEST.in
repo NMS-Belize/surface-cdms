@@ -10,14 +10,3 @@ recursive-exclude * .DS_Store
 
 exclude src/surface_cdms/wx_config/db.sqlite3
 recursive-exclude src/surface_cdms/wx_config/productionfiles *
-
-exclude src/surface_cdms/wx_playbook/env/become_password
-exclude src/surface_cdms/wx_playbook/env/connection_password
-exclude src/surface_cdms/wx_playbook/env/extravars
-
-exclude src/surface_cdms/wx_config/ansible/surface_app/env/become_password
-exclude src/surface_cdms/wx_config/ansible/surface_app/env/connection_password
-exclude src/surface_cdms/wx_config/ansible/surface_app/env/extravars
-exclude src/surface_cdms/wx_config/ansible/surface_app/env/user
-exclude src/surface_cdms/wx_config/ansible/surface_app/env/config_status
-exclude src/surface_cdms/wx_config/ansible/surface_app/env/install_type
