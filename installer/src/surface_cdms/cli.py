@@ -5,6 +5,8 @@ import sys
 
 import click
 
+from surface_cdms.doctor import run_doctor
+from surface_cdms.info import show_info
 from surface_cdms.install import wx_configuration
 from surface_cdms.version import get_surface_version
 
@@ -39,6 +41,23 @@ def validate_sudo_password(sudo_password: str) -> bool:
 def main(args=None):
     """SURFACE CDMS installer and management command-line interface."""
     return 0
+
+
+@main.command()
+def info():
+    """Show information about the SURFACE CDMS installer environment."""
+
+    show_info()
+
+
+@main.command()
+def doctor():
+    """Check whether the SURFACE CDMS installer environment looks healthy."""
+
+    passed = run_doctor()
+
+    if not passed:
+        raise click.ClickException("SURFACE CDMS doctor checks failed.")
 
 
 @main.command()
