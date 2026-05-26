@@ -1,4 +1,5 @@
 """SURFACE CDMS install/configuration logic."""
+import os
 import sys
 import getpass
 from pathlib import Path
@@ -36,6 +37,9 @@ def wx_configuration(sudo_password):
     """
 
     try:
+        # Ensure pipx/venv-installed commands like ansible-playbook are on PATH.
+        ensure_current_python_bin_on_path()
+        
         # Reset runtime files so old installer values are not reused.
         reset_runtime_env_files()
         
@@ -153,3 +157,22 @@ def reset_runtime_env_files():
 
     for file_path in runtime_files:
         reset_runtime_file(file_path)
+
+
+def ensure_current_python_bin_on_path() -> None:
+    """
+    Ensure commands installed in the active Python environment are available.
+
+    This is especially important for pipx installs. The `surface` command runs
+    from the pipx environment, but subprocesses may not automatically see the
+    pipx venv's bin directory.
+
+    Do not use Path.resolve() here because venv/pipx Python executables may be
+    symlinks to the system Python. We want the venv/pipx bin directory itself.
+    """
+
+    python_bin_dir = Path(sys.executable).parent
+    current_path = os.environ.get("PATH", "")
+
+    if str(python_bin_dir) not in current_path.split(os.pathsep):
+        os.environ["PATH"] = str(python_bin_dir) + os.pathsep + current_path

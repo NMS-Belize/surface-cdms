@@ -16,9 +16,19 @@ def show_info() -> None:
 
     package_dir = Path(__file__).resolve().parent
 
+    try:
+        # This works on almost all modern Linux distros
+        info = platform.freedesktop_os_release()
+        os_name = info.get("NAME", platform.system())
+        os_version = info.get("VERSION_ID", platform.release())
+    except AttributeError:
+        # Fallback
+        os_name = platform.system()
+        os_version = platform.release()
+
     click.echo(click.style("SURFACE CDMS", fg="green", bold=True))
     click.echo(f"Version: {get_surface_version()}")
     click.echo(f"Python executable: {sys.executable}")
     click.echo(f"Python version: {platform.python_version()}")
-    click.echo(f"Operating system: {platform.system()} {platform.release()}")
+    click.echo(f"Operating system: {os_name} {os_version}")
     click.echo(f"Installer package path: {package_dir}")

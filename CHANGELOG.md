@@ -4,6 +4,33 @@ All notable changes to SURFACE CDMS will be documented in this file.
 
 This project follows Semantic Versioning.
 
+
+## [0.1.0-alpha.5] - 2026-05-25
+
+### Fixed
+
+- Fixed pipx compatibility for Ansible Runner by ensuring the active Python environment's `bin` directory is added to `PATH`.
+- Fixed `ansible-playbook` discovery when `surface-cdms` is installed with pipx.
+
+### Changed
+
+- Improved `surface doctor` checks to verify the `ansible-playbook` command is available.
+- Improved installer runtime behavior for pipx-installed environments.
+
+### Verified
+
+- Confirmed the `surface-cdms` wheel can be installed with pipx.
+- Confirmed the `surface` command is exposed correctly after `pipx install`.
+- Confirmed `surface --version` works from a pipx install.
+- Confirmed `surface info` works from a pipx install.
+- Confirmed `surface doctor` works from a pipx install.
+- Confirmed `surface install` starts correctly from a pipx install.
+
+### Notes
+
+- This release focuses on validating the recommended CLI installation method.
+- The full SURFACE application has not yet been added as a top-level `surface/` folder.
+
 ## [0.1.0-alpha.4] - 2026-05-25
 
 ### Changed
