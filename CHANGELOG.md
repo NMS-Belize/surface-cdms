@@ -5,6 +5,31 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.2.0-alpha.2] - 2026-05-26
+
+### Added
+
+- Added `scripts/build_surface_artifact.sh` for creating a versioned SURFACE app artifact.
+- Added support for building `surface-app-v<version>.tar.gz` from the top-level `surface/` directory.
+- Added artifact exclusions for runtime data, generated files, local environment files, caches, and collected static output.
+
+### Changed
+
+- Continued the `0.2.0-alpha` release line for installer plus SURFACE application integration.
+- Kept the installer package version and SURFACE app artifact version aligned through the root `VERSION` file.
+
+### Verified
+
+- Confirmed the SURFACE app artifact can be built from the unified repository.
+- Confirmed the artifact contains the deployable SURFACE application files.
+- Confirmed runtime/generated files are excluded from the artifact.
+
+### Notes
+
+- This release creates the SURFACE app artifact but does not yet modify the installer GUI to consume it.
+- Update, backup, restore, logs, and install directory management are still deferred.
+
+
 ## [0.2.0-alpha.1] - 2026-05-26
 
 ### Added

@@ -449,6 +449,6 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 15000000  #15MB
 # check to ensure the permission map is always up to date
 WX_PERMISSIONS_STRICT_MAP = True  # set False in prod if you’re worried
 
-APP_VERSION = "v1.0.0"
-APP_VERSION_STAGE = "-beta.1"
+APP_VERSION = "v0.2.0"
+APP_VERSION_STAGE = "-alpha.2"
 APP_VERSION_LABEL = f"{APP_VERSION}{APP_VERSION_STAGE}"

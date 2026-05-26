@@ -58,6 +58,9 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# GeoJSON stuff
+*.geojson
+
 # Django migrations should usually be committed.
 # Ignore only generated cache files inside migrations.
 **/migrations/__pycache__/
@@ -150,9 +153,6 @@ surface/api/static/material/
 surface/api/static/rest_framework/
 surface/api/static/ckeditor/
 
-# Optional generated data
-surface/api/LrgsClient/
-
 # Runtime database/log/cache files
 surface/**/*.log
 surface/**/db.sqlite3
@@ -162,3 +162,10 @@ surface/**/*.py[cod]
 
 # OS files
 surface/**/.DS_Store
+
+# Additional SURFACE generated/static runtime files
+surface/api/staticfiles/
+surface/api/productionfiles/
+
+# Release/build artifacts
+dist/
