@@ -1,0 +1,3 @@
+---
+ANSIBLE_CALLBACKS_ENABLED: community.general.yaml
+ANSIBLE_STDOUT_CALLBACK: community.general.yaml
