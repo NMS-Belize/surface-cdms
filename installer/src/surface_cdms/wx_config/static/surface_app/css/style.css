@@ -1,0 +1,832 @@
+body {
+  font-family: "Helvetica", "Arial", sans-serif;
+  margin: 3rem;
+  background: url(../images/background.png) no-repeat center center fixed;
+  background-size: cover;
+  box-sizing: border-box;
+  height: 100vh;
+}
+
+.accent_background{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* keeps it behind the login section */
+  /* z-index: 1; */
+  background: rgba(0, 123, 255, 0.1) !important;
+  background: linear-gradient(0deg, rgba(0, 123, 255, 0.25) 0%, rgba(255, 193, 7, 0.34) 100%) !important;
+}
+  
+.btn-center {
+  display: flex;
+  justify-content: center;
+}
+
+.button {
+  display: inline-block;
+  padding: 10px 20px;
+  margin: 0px 10px;
+  text-decoration: none;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+.dark-text {
+  color: #515151;
+  font-weight: bold;
+}
+
+.button-grey {
+  background-color: #949494;
+}
+
+.button-grey:hover {
+  background-color: #757575;
+}
+
+.button-green {
+  background-color: #28a745;
+}
+
+.button-green:hover {
+  background-color: #198754;
+}
+
+.button-red {
+  background-color: #dc3545;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.button-red:hover {
+  background-color: #bb2b3a;
+  transform: scale(1.05);
+}
+
+.button-orange {
+  background-color: #F7813E;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.button-orange:hover {
+  background-color: #E06C2E;
+  transform: scale(1.05);
+}
+
+.button-blue {
+  background-color: #1e90ff;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.button-blue:hover {
+  background-color: #0a76e2;
+  transform: scale(1.05);
+}
+
+.shutdown-h1 {
+  font-size: 1.75rem;
+  margin-bottom: 1.5rem;
+  color: #dc3545;
+}
+
+.shutdown-p {
+  text-align: center;
+  font-size: 1.2rem;
+  margin-bottom: 1.5rem;
+  color: #666;
+}
+
+.success-h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1.5rem;
+  color: #1e90ff;
+}
+
+.success-p {
+  text-align: center;
+  font-size: 1.2rem;
+  margin-bottom: 1.5rem;
+  color: #666;
+}
+
+h1 {
+  text-align: center;
+  color: #666;
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  margin-top: 0rem;
+}
+
+h3 {
+  text-align: center;
+  color: #666;
+}
+
+section {
+  border-radius: 10px;
+  filter: drop-shadow(-10px -10px 20px rgba(0, 0, 0, 0.16));
+  padding: 2rem;
+  margin-bottom: 2rem;
+  background-color: #fff;
+}
+
+.logo {
+  background-image: url(../images/logo.png);
+  position: relative;
+  width: 100%;
+  height: 100px;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  padding-right: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: #515151;
+}
+
+.password-field {
+  margin-bottom: 1.8rem;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.form-half-size {
+  width: 40% !important;
+}
+
+.form-quarter-size {
+  width: 20% !important;
+}
+
+.form-larger-size {
+  width: 60% !important;
+}
+
+/* remove the carret icon */
+.stripped_select {
+    appearance: none; /* removes default arrow */
+}
+
+.form-control:focus {
+  border-color: #1E90FF;
+  outline: none;
+  box-shadow: 0 0 5px rgba(30, 144, 255, 0.2);
+}
+
+.btn-warning {
+  background-color: #ffc107;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.btn-warning:hover {
+  background-color: #ffca2c;
+  transform: scale(1.05);
+}
+
+.btn-warning:active {
+  background-color: #ffcd39;
+  transform: scale(1);
+}
+
+.btn-generate {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.btn-generate:hover {
+  background-color: #218838;
+  transform: scale(1.05);
+}
+
+.btn-generate:active {
+  background-color: #1e7e34;
+  transform: scale(1);
+}
+
+.btn-submit {
+  background-color: #4ccb3d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.btn-submit:hover {
+  background-color: #38a02c;
+  transform: scale(1.05);
+}
+
+.btn-submit:active {
+  background-color: #30b022;
+  transform: scale(1);
+}
+
+.tab-container {
+  overflow-x: auto;
+}
+
+.tab-center {
+  display: flex;
+  justify-content: center;
+}
+
+.tablinks {
+  background-color: #ffffff;
+  border: none;
+  color: #666;
+  padding: 10px 0;
+  text-align: center;
+  text-decoration: none;
+  flex-grow: 1;
+  font-size: 16px;
+  /* cursor: pointer; */
+  border-bottom: 2px solid transparent;
+}
+
+.tablinks:hover {
+  background-color: #f7f7f7;
+}
+
+.tablinks.active {
+  color: #1E90FF;
+  border-bottom: 2px solid #1E90FF;
+}
+
+.tablinks.active:hover {
+  background-color: #1e8fff19;
+}
+
+.tabcontent {
+  padding: 20px;
+}
+
+.tabcontent h3 {
+  margin-top: 0;
+}
+
+/* spatial analysis map styles */
+#spatial-map { 
+  height: 55vh; 
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+}
+
+/* Style for home buttons */
+#home-button {
+  position: absolute;
+  padding: 10px 20px;
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  top: 20px;
+  left: 20px;
+}
+
+
+/* Style for scroll buttons */
+.scroll-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 24px;
+  color: #555;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.scroll-btn:hover {
+  background-color: #f5f5f5;
+}
+
+.scroll-btn:focus {
+  outline: none;
+}
+
+/* Style for left and right arrow buttons */
+.scroll-btn i {
+  line-height: 40px;
+}
+
+.scroll-btn-top {
+  bottom: auto;
+  top: 20px;
+}
+
+/* Style for disabled form fields */
+.disabled-field {
+  pointer-events: none; /* Disable pointer events */
+  background-color: #f0f0f0; /* Add a different background color to visually indicate disabled state */
+  color: #999; /* Change text color to a lighter shade */
+}
+
+/* Add style for the red asterisk */
+.required::before {
+  content: '*';
+  color: red;
+  margin-right: 4px;
+}
+
+/* Progress bar css */
+#progress-container {
+  width: 100%;
+  background-color: #f3f3f3;
+  border: 1px solid #ccc;
+  margin: 20px 0;
+  border-radius: 20px;
+}
+#progress-bar {
+    width: 0;
+    height: 30px;
+    background-color: #4caf50;
+    text-align: center;
+    line-height: 30px;
+    color: white;
+    border-radius: 20px;
+}
+#status {
+    margin-top: 20px;
+}
+
+/* Password eye icon */
+.password-toggle-icon {
+  /* position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%); */
+  cursor: pointer;
+}
+
+.password-toggle-icon i {
+  font-size: 15px;
+  line-height: 1;
+  color: #666666;
+  transition: color 0.3s ease-in-out;
+}
+
+.password-toggle-icon i:hover {
+  color: #3b3b3b;
+}
+
+/* Style for next buttons */
+.next-btn-class {
+  display: flex;
+  justify-content: space-between;
+}
+
+.btn-continue-class {
+  display: flex;
+  justify-content: right;
+}
+
+.btn-generate {
+  background-color: #4CAF50;
+}
+
+/* hide class */
+.hide {
+  display: none;
+}
+
+/* summary page styling */
+.summary-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 50px 0px;
+}
+
+div.summary-container label {
+  font-weight: normal;
+  font-size: small;
+  color: #a9a9a9;    
+}
+
+div.summary-container input {
+  color: #8d8d8d;    
+}
+
+.summary-item {
+  flex: 0 1 45%;
+  box-sizing: border-box;
+  margin: 10px;
+}
+
+.summary-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1.5px dashed #ccc;
+  padding: 5px 0;
+  background-color: transparent;
+  color: #333;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+/* terminal installation output */
+.output-container {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+#output {
+  padding: 0px 20px;
+  border: 1px solid #ccc;
+  letter-spacing: 3px;
+  border-radius: 10px;
+  line-height: 2.5;
+  max-height: 45vh;
+  overflow: auto; /* Enables both vertical and horizontal scrolling */
+  font-family: monospace; /* Sets a monospace font for code display */
+  white-space: pre-wrap; /* Wraps long lines without breaking words */
+}
+
+.dark-mode {
+  background-color: black;
+  color: white;
+}
+
+
+/* Styling the Test FTP Connection container */
+#test-connection-container {
+    margin-top: 20px; 
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center; /* Align items vertically centered */
+}
+
+/* Styling the Test FTP Connection button */
+/* #test-ftp-button {
+    display: inline-block;
+    background-color: var(--button-bg);
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px; 
+    transition: background 0.15s;
+}
+
+#test-ftp-button:hover {
+    background-color: #609ab6;
+} */
+
+/* Styling for the result message */
+#test-ftp-result {
+    display: inline-block;
+    margin-left: 10px;
+    font-weight: bold;
+}
+
+/* Spinner styling */
+.ftp-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(138, 138, 138, 0.3);
+    border-top: 3px solid #4d4d4d;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 10px; /* Space between button and spinner */
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* accent background for the surface installer
+.accent_background {
+  background: rgba(0, 123, 255, 0.1) !important;
+  background: linear-gradient(0deg, rgba(0, 123, 255, 0.25) 0%, rgba(255, 193, 7, 0.34) 100%) !important;
+} */
+
+
+/* Container */
+.map-container { position: relative; width: 100%; margin-bottom: 1.5rem; z-index: 0; }
+
+
+/* The actual map box (replace height as needed) */
+#initial-map {height: 55vh; border-radius: 10px; overflow: hidden; position: relative; z-index: 1; }
+
+
+/* Overlay that sits on top of the map */
+.map-overlay {
+  position: absolute;
+  inset: 0; /* top:0; right:0; bottom:0; left:0 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(60, 56, 57, 0.264); /* light red tint so you can see it */
+  cursor: pointer;
+  transition: background-color .12s ease, opacity .12s ease;
+  z-index: 10000; /* very high to beat map internals */
+  pointer-events: auto;
+  border-radius: 10px;
+}
+
+
+/* The small message shown on hover */
+.map-overlay .hint {
+  pointer-events: none; /* don't block hover -> overlay still captures clicks */
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.75);
+  color: white;
+  font-size: 14px;
+  transform: translateY(4px);
+  opacity: 0;
+  transition: opacity .12s ease, transform .12s ease;
+}
+
+
+/* Reveal the hint when hovering the overlay */
+.map-overlay:hover .hint {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+/* Floating close/edit button (visible only when editing) */
+.close-edit {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10001 !important; /* even higher */
+  display: none; /* shown when editing */
+  font-family: inherit;
+  border: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.75);
+  color: white;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+
+/* When the container has the .editing class we hide the overlay and show the close button */
+.editing .map-overlay { display: none; }
+.editing .close-edit { display: block; }
+
+/* small visual indicator so users know they're in edit mode */
+.editing #initial-map { outline: 3px dashed rgba(0, 0, 0, 0.26); }
+
+/* Responsive tweaks */
+@media (max-width: 420px) {
+  .map-overlay .hint { font-size: 13px; padding: 6px 10px }
+  .close-edit { padding: 6px 8px; }
+}
+
+/* Hide the info div until a country is selected */
+#country_config {
+  display: none;
+}
+
+.info-section {
+  margin-bottom: 30px !important;
+}
+
+/* loading function */
+.loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh; /* Full viewport height */
+}
+
+#loader {
+    border: 8px solid #ffffff; /* Light grey */
+    border-top: 8px solid #3498db; /* Blue */
+    border-radius: 50%;
+    width: 80px; /* Larger width */
+    height: 80px; /* Larger height */
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* LRGS button styling start */
+#lrgs-details {
+  display: none; /* Hidden by default */
+}
+#regional-wis2 {
+  display: none; /* Hidden by default */
+}
+#local-wis2 {
+  display: none; /* Hidden by default */
+}
+
+/* Existing styles */
+/* Toggle switch styling */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+}
+
+/* Hide default HTML checkbox */
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* The slider */
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc; /* Default gray background when off */
+    transition: 0.4s;
+    border-radius: 34px;
+}
+
+/* Circle inside the slider */
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+
+/* Change the background color when checked (on) */
+input:checked + .slider {
+    background-color: #1e90ff;
+}
+
+/* Move the circle to the right when checked */
+input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+.toggle-btn-container {
+  display: flex; 
+  align-items: center; 
+  justify-content: left;
+  margin-bottom: 10px;
+}
+/* LRGS button styling end */
+
+/* wis2box config styling */
+.toggle-regional-wis2-container {
+      display: flex; 
+      align-items: center; 
+      justify-content: left;
+      margin-bottom: 10px;
+    }
+
+.toggle-local-wis2-container {
+      display: flex;
+      margin-left: 20px; 
+      align-items: center; 
+      justify-content: left;
+      margin-bottom: 10px;
+    }
+
+.toggle-wis2-container {
+  display: flex; 
+  align-items: center; 
+  justify-content: left;
+}
+
+.btn-primary {
+  background-color: #1E90FF;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.btn-primary:hover {
+  background-color: #1C86EE;
+  transform: scale(1.05);
+}
+
+.btn-primary:active {
+  background-color: #1874CD;
+  transform: scale(1);
+}
+
+/* Basic styling for the home button */
+.home-button {
+  background-color: #1E90FF;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.home-button:hover {
+  background-color: #1C86EE; /* Darker green on hover */
+}
+
+/* Align content nicely */
+.version-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: #1e90ff;
+}
+
+.version-label {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+
+  border-radius: 8px;
+  padding: 4px 8px;
+
+  font-size: 0.9rem;
+}
+
+/* Small circular flags */
+.version-flag {
+  width: 14px;   /* 👈 slightly smaller than before */
+  height: 14px;
+  object-fit: cover;
+  border-radius: 50%;
+  opacity: 0.8;  /* 👈 keeps it subtle */
+  transition: 0.2s ease;
+}
+
+/* Optional: slight hover polish */
+.version-label:hover .version-flag {
+  opacity: 1;
+}

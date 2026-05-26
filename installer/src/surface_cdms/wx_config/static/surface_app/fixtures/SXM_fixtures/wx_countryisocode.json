@@ -1,0 +1,24 @@
+[
+    {
+        "model": "wx.countryisocode",
+        "pk": 197,
+        "fields": {
+            "created_at": "2025-04-07T18:28:39.370Z",
+            "updated_at": "2025-04-07T18:38:39.370Z",
+            "name": "Legacy Code (20000)",
+            "notation": "20000",
+            "description": "Legacy Station Code (20000)"
+        }
+    },
+    {
+        "model": "wx.countryisocode",
+        "pk": 203,
+        "fields": {
+            "created_at": "2025-04-07T18:28:39.370Z",
+            "updated_at": "2025-04-07T18:38:39.370Z",
+            "name": "Sint Maarten [Dutch part] (534)",
+            "notation": "534",
+            "description": "ISO 3166-1 numeric code for Sint Maarten [Dutch part]"
+        }
+    }
+]

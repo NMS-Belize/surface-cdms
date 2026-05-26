@@ -1,0 +1,24 @@
+[
+    {
+        "model": "wx.countryisocode",
+        "pk": 197,
+        "fields": {
+            "created_at": "2025-04-07T18:28:39.370Z",
+            "updated_at": "2025-04-07T18:38:39.370Z",
+            "name": "Legacy Code (20000)",
+            "notation": "20000",
+            "description": "Legacy Station Code (20000)"
+        }
+    },
+    {
+        "model": "wx.countryisocode",
+        "pk": 176,
+        "fields": {
+            "created_at": "2024-09-03T18:28:39.370Z",
+            "updated_at": "2024-09-04T13:28:39.370Z",
+            "name": "Trinidad and Tobago (780)",
+            "notation": "780",
+            "description": "ISO 3166-1 numeric code for Trinidad and Tobago"
+        }
+    }
+]

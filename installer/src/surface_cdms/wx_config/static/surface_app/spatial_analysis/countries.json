@@ -1,0 +1,20 @@
+[
+    { "name": "Anguilla", "iso3": "AIA" },
+    { "name": "Antigua and Barbuda", "iso3": "ATG" },
+    { "name": "Bahamas", "iso3": "BHS" },
+    { "name": "Barbados", "iso3": "BRB" },
+    { "name": "Belize", "iso3": "BLZ" },
+    { "name": "British Virgin Islands", "iso3": "VGB" },
+    { "name": "Cayman Islands", "iso3": "CYM" },
+    { "name": "Dominica", "iso3": "DMA" },
+    { "name": "Grenada", "iso3": "GRD" },
+    { "name": "Guyana", "iso3": "GUY" },
+    { "name": "Jamaica", "iso3": "JAM" },
+    { "name": "Montserrat", "iso3": "MSR" },
+    { "name": "Saint Kitts and Nevis", "iso3": "KNA" },
+    { "name": "Saint Lucia", "iso3": "LCA" },
+    { "name": "Saint Vincent and the Grenadines", "iso3": "VCT" },
+    { "name": "Sint Maarten", "iso3": "SXM" },
+    { "name": "Trinidad and Tobago", "iso3": "TTO" },
+    { "name": "Turks and Caicos Islands", "iso3": "TCA" }
+]

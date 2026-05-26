@@ -1,0 +1,13 @@
+[
+    {
+        "model": "wx.country", 
+        "pk": 223, 
+        "fields": {
+            "created_at": "2015-01-21T17:01:28Z", 
+            "updated_at": "2022-04-13T15:24:34.390Z", 
+            "notation": "AIA", 
+            "name": "Anguilla", 
+            "description": "Anguilla"
+        }
+    }
+]

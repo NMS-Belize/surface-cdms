@@ -1,0 +1,123 @@
+[
+  {
+    "model": "wx.administrativeregion",
+    "pk": 1,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Anse la Raye",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 2,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Castries",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 3,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Choiseul",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 4,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Dauphin",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 5,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Dennery",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 6,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Gros Islet",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 7,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Laborie",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 8,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Micoud",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 9,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Soufriere",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 10,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Vieux Fort",
+      "administrative_region_type_id": 1,
+      "country_id": 145
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 11,
+    "fields": {
+      "created_at": "2025-03-30T01:49:31.532Z",
+      "updated_at": "2025-03-30T01:49:31.532Z",
+      "name": "Not Specified",
+      "administrative_region_type_id": 5,
+      "country_id": 145
+    }
+  }
+]

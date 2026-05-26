@@ -1,0 +1,13 @@
+[
+    {
+        "model": "wx.country", 
+        "pk": 227, 
+        "fields": {
+            "created_at": "2015-01-21T17:01:28Z", 
+            "updated_at": "2022-04-13T15:24:34.390Z", 
+            "notation": "VGB", 
+            "name": "British Virgin Islands", 
+            "description": "British Virgin Islands"
+        }
+    }
+]

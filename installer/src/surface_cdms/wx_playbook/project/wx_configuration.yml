@@ -1,0 +1,145 @@
+---
+- name: Check Supported Systems
+  hosts: local
+  gather_facts: true
+  become: false
+
+  tasks:
+  # display Users system information
+    - name: System
+      ansible.builtin.debug:
+        msg: The distribution is "{{ ansible_facts['distribution'] }}" and the version is "{{ ansible_facts['distribution_version'] }}"
+      
+  # Users system must be a Mac or Ubuntu system
+    - name: System check
+      ansible.builtin.fail:
+        msg: This host system is currently not supported.
+      when: ansible_distribution not in ['MacOSX', 'Ubuntu']
+
+
+- name: Configure SURFACE
+  hosts: local
+  become: false
+
+  vars:
+    ansible_python_interpreter: "{{ surface_python_executable | default(ansible_playbook_python) }}"
+
+  tasks:
+  # shutdown old configuration sites that may still be running
+    - name: Cleanup tasks
+      block:
+        # shutdown stale weathereye config site
+        - name: Cleanup tasks
+          ansible.builtin.uri:
+            url: http://localhost:52376/shutdown/
+            method: GET
+            force: true
+            status_code: 200
+          ignore_errors: true
+          no_log: true
+          register: result
+          failed_when: result.status == 'xxx' # Prevents the task from being marked as failed 
+                                              # (red output) by using a condition that will never be met. 
+                                              # This ensures the task always appears successful (green), 
+                                              # even if it fails internally, and the error is ignored.
+
+        # Stop celery worker
+        - name: Stop celery worker
+          ansible.builtin.shell: |
+            pgrep -f "celery -A wx_config worker" | xargs kill -SIGKILL
+          args:
+            chdir: "{{ django_webapp_path }}"
+          ignore_errors: true
+          no_log: true
+          register: celery_result
+          failed_when: celery_result.stderr == 'xxx' # Prevents the task from being marked as failed 
+                                              # (red output) by using a condition that will never be met. 
+                                              # This ensures the task always appears successful (green), 
+                                              # even if it fails internally, and the error is ignored.
+
+        # stop redis
+        - name: Stop redis
+          ansible.builtin.shell: redis-cli -p 52377 SHUTDOWN
+          ignore_errors: true
+          no_log: true
+          register: redis_result
+          failed_when: redis_result.stderr == 'xxx' # Prevents the task from being marked as failed 
+                                              # (red output) by using a condition that will never be met. 
+                                              # This ensures the task always appears successful (green), 
+                                              # even if it fails internally, and the error is ignored.
+
+  # downloading redis on mac machines
+    - name: Install required packages (MacOSX)
+      community.general.homebrew:
+        name: redis
+        state: present
+        update_homebrew: true
+      when: ansible_distribution in ['MacOSX']
+      become: true
+
+  # downloading redis and sshpass on ubuntu machines
+    - name: Update apt cache
+      apt:
+        update_cache: true
+      retries: 2
+      delay: 60 # Wait 1 minute between retires
+      when: ansible_distribution in ['Ubuntu']
+      become: true
+
+    - name: Install required packages (Ubuntu)
+      apt:
+        pkg:
+          - redis
+          - sshpass
+        state: latest
+      when: ansible_distribution in ['Ubuntu']
+      become: true
+    
+
+  # start redis
+    - name: Start redis
+      ansible.builtin.shell: redis-server --port 52377 --save "" --appendonly no
+      async: 10800
+      poll: 0
+
+  # ensure that the manage.py file is executable
+    - name: Ensure manage.py is executable
+      ansible.builtin.file:
+        path: "{{ django_webapp_path }}/manage.py"
+        mode: '0755'
+  
+  # run database migrations and collectstatic Files
+    - name: Reset configuration database
+      ansible.builtin.shell: "{{ surface_python_executable | default(ansible_playbook_python) }} manage.py resetdb"
+      args:
+        chdir: "{{ django_webapp_path }}"
+
+  # starting configuration site
+    - name: Start configuration site
+      ansible.builtin.shell: "{{ surface_python_executable | default(ansible_playbook_python) }} manage.py runserver localhost:52376"
+      args:
+        chdir: "{{ django_webapp_path }}"
+      async: 10800
+      poll: 0
+
+  # start celery worker
+    - name: Start celery worker
+      ansible.builtin.shell: "{{ surface_python_executable | default(ansible_playbook_python) }} -m celery -A wx_config worker"
+      args:
+        chdir: "{{ django_webapp_path }}"
+      async: 10800
+      poll: 0
+
+  # wait 5 seconds for the server to start  
+    - name: Wait for the server to start
+      ansible.builtin.pause:
+        seconds: 5
+  
+  # start the configuration site
+    - name: Start configuration site
+      ansible.builtin.uri:
+        url: http://localhost:52376/
+        method: GET
+        force: true
+        status_code: 200
+

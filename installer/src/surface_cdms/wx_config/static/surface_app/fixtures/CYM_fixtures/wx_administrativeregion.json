@@ -1,0 +1,101 @@
+[
+  {
+    "model": "wx.administrativeregion",
+    "pk": 1,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Bodden Town",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 2,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "East End",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 3,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "George Town",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 4,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "North Side",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 5,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "West Bay",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 6,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Cayman Brac East",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 7,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Cayman Brac West",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 8,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Little Cayman",
+      "administrative_region_type_id": 1,
+      "country_id": 228
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 9,
+    "fields": {
+      "created_at": "2025-03-30T01:49:31.532Z",
+      "updated_at": "2025-03-30T01:49:31.532Z",
+      "name": "Not Specified",
+      "administrative_region_type_id": 5,
+      "country_id": 228
+    }
+  }
+]

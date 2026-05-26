@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="x-ua-compatible" content="ie=edge">
+
+        <link rel="icon" type="image/png" href="{% static 'surface_app/images/circle_logo_small.png' %}">
+        <link rel="stylesheet" href="{% static 'config_app/css/style.css' %}">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+
+        <title>Surface Installer</title>
+    </head>
+
+    <body>
+        <!-- Add the accent background -->
+        <div class="accent_background"></div>
+
+        <section>
+            <!-- SURFACE Logo -->
+            <div class="logo"></div>
+
+            <!-- Installation type selection -->
+            <div class="option-container">
+                {% if allow_surface_install %}
+
+                    <form id="installTypeForm" method="post">
+                        {% csrf_token %}
+                        {% for radio in surface_form.install_type %}
+                        {% if not forloop.first %}
+                            {{ radio.tag }}
+                            <label class="option {{ radio.choice_label|lower }}-btn" for="{{ radio.id_for_label }}">
+                                <!-- {{ radio.choice_label }} Install -->
+                                Install
+                            </label>
+                        {% endif %}
+                        {% endfor %}
+                    </form>
+
+                {% else %}
+
+                    <!-- add either .local or .remote to match the selected install type -->
+                    <div class="install-progress-container" role="status" aria-live="polite">
+                        <div class="install-pulse" aria-hidden="true">
+                            <div class="pulse-circle"></div>
+                            <div class="pulse-lines">
+                            <div class="pulse-line"></div>
+                            <div class="pulse-line short"></div>
+                            </div>
+                        </div>
+
+                        <div class="install-info">
+                            <p class="install-text">Installation in progress…</p>
+                            <div class="view-progress">
+                            <a href="{% url 'config-complete' task_id=surface_task_id %}" class="btn btn-progress">View Progress</a>
+                            </div>
+                        </div>
+                    </div>
+
+                {% endif %}
+
+            </div>
+        </section>
+
+        <!-- <div class="credit">
+            <a href="https://www.vecteezy.com/free-vector/globe-grid" target="_blank" rel="noopener noreferrer">Globe Grid Vectors by Vecteezy</a>
+        </div>  -->
+        
+        <!-- Release Version -->
+        <div class="version-label">
+            <a href="#" class="version-content">
+
+                <img
+                class="version-flag"
+                src="{% static 'config_app/images/bz_flag.png' %}"
+                alt="Flag"
+                >
+
+                <span>{{ APP_VERSION_LABEL }}</span>
+
+                <img
+                class="version-flag"
+                src="{% static 'config_app/images/nms_logo.png' %}"
+                alt="Flag"
+                >
+
+            </a>
+        </div>
+
+        <!-- Including js file -->
+        <script src="{% static 'config_app/js/script.js' %}"></script>
+
+    </body>
+
+</html>

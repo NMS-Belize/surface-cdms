@@ -4,20 +4,43 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "surface-cdms"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 description = "Installer and management CLI for SURFACE CDMS"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT license" }
 authors = [
-    { name = "National Meteorological Service of Belize" }
+  { name = "National Meteorological Service of Belize", email = "nmstechbz@gmail.com" },
 ]
+maintainers = [
+  { name = "Jeremiah Hammond", email = "jeremiahhammond14@gmail.com" },
+  { name = "National Meteorological Service of Belize", email = "nmstechbz@gmail.com" },
+]
+keywords = ["surface", "surface-cdms", "weather", "climate", "cdms"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+]
+
 dependencies = [
     "click>=8.1.0",
-    "rich>=13.0.0"
+    "ansible==10.7.0",
+    "ansible-runner==2.4.0",
+    "django==4.1",
+    "celery==5.5.3",
+    "redis==6.2.0",
+    "whitenoise==6.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NMS-Belize/surface-cdms"
 
 [project.scripts]
 surface = "surface_cdms.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["surface_cdms", "surface_cdms.*"]

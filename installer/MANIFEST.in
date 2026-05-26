@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+
+recursive-include src/surface_cdms/wx_playbook *
+recursive-include src/surface_cdms/wx_config *
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

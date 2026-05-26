@@ -1,0 +1,134 @@
+[
+  {
+    "model": "wx.administrativeregion",
+    "pk": 1,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Christ Church",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 2,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Andrew",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 3,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint George",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 4,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint James",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 5,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint John",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 6,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Joseph",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 7,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Lucy",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 8,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Michael",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 9,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Peter",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 10,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Philip",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 11,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Saint Thomas",
+      "administrative_region_type_id": 2,
+      "country_id": 15
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 12,
+    "fields": {
+      "created_at": "2025-03-30T01:49:31.532Z",
+      "updated_at": "2025-03-30T01:49:31.532Z",
+      "name": "Not Specified",
+      "administrative_region_type_id": 5,
+      "country_id": 15
+    }
+  }
+]

@@ -1,0 +1,354 @@
+[
+  {
+    "model": "wx.administrativeregion",
+    "pk": 1,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Acklins",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 2,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Berry Islands",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 3,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Bimini",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 4,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Black Point",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 5,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Cat Island",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 6,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Central Abaco",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 7,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Central Andros",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 8,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Central Eleuthera",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 9,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Crooked Island",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 10,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "East Grand Bahama",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 11,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Exuma",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 12,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Freeport",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 13,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Fresh Creek",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 14,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Governor's Harbour",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 15,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Green Turtle Cay",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 16,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Harbour Island",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 17,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "High Rock",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 18,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Hope Town",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 19,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Inagua",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 20,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Kemps Bay",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 21,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Long Island",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 22,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Mangrove Cay",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 23,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Mayaguana",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 24,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Moore's Island",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 25,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "New Providence",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 26,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "North Abaco",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 27,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "North Andros",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 28,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "North Eleuthera",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 29,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Ragged Island",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 30,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Rock Sound",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 31,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "San Salvador",
+      "administrative_region_type_id": 1,
+      "country_id": 287
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 33,
+    "fields": {
+      "created_at": "2025-03-30T01:49:31.532Z",
+      "updated_at": "2025-03-30T01:49:31.532Z",
+      "name": "Not Specified",
+      "administrative_region_type_id": 5,
+      "country_id": 287
+    }
+  }
+]

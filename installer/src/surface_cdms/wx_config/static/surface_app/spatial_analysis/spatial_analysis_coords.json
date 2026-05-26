@@ -1,0 +1,272 @@
+[
+    {
+        "notation": "BLZ",
+        "country_center_lat": "17.130292",
+        "country_center_lng": "-88.725586",
+        "map_zoom": "8",
+        "topic_hierarchy": "origin/a/wis2/bz-nms/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Belize",
+        "timezone_offset": "-360",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "15.8469375676",
+            "INITIAL_LONGITUDE": "-89.227",
+            "FINAL_LATITUDE": "18.5299822047",
+            "FINAL_LONGITUDE": "-87.485"
+        }
+    },
+    {
+        "notation": "JAM",
+        "country_center_lat": "17.858519",
+        "country_center_lng": "-77.316284",
+        "map_zoom": "9",
+        "topic_hierarchy": "origin/a/wis2/jm-msj/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Jamaica",
+        "timezone_offset": "-300",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "16.943842",
+            "INITIAL_LONGITUDE": "-78.406677",
+            "FINAL_LATITUDE": "18.542117",
+            "FINAL_LONGITUDE": "-76.168213"
+        }
+    },
+    {
+        "notation": "ATG",
+        "country_center_lat": "17.328353",
+        "country_center_lng": "-61.799469",
+        "map_zoom": "10",
+        "topic_hierarchy": "origin/a/wis2/ag-antiguamet/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Antigua",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "16.926107",
+            "INITIAL_LONGITUDE": "-62.352973",
+            "FINAL_LATITUDE": "17.732388",
+            "FINAL_LONGITUDE": "-61.651840"
+        }
+    },
+    {
+        "notation": "CYM",
+        "country_center_lat": "19.387591",
+        "country_center_lng": "-80.910187",
+        "map_zoom": "10",
+        "topic_hierarchy": "origin/a/wis2/ky-cinws/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Cayman",
+        "timezone_offset": "-300",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "19.255729",
+            "INITIAL_LONGITUDE": "-81.425858",
+            "FINAL_LATITUDE": "19.771873",
+            "FINAL_LONGITUDE": "-79.714050"
+        }
+    },
+    {
+        "notation": "DMA",
+        "country_center_lat": "15.413967",
+        "country_center_lng": "-61.344910",
+        "map_zoom": "11",
+        "topic_hierarchy": "origin/a/wis2/dm-dms/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Dominica",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "15.202037",
+            "INITIAL_LONGITUDE": "-61.487732",
+            "FINAL_LATITUDE": "15.647503",
+            "FINAL_LONGITUDE": "-61.232986"
+        }
+    },
+    {
+        "notation": "GRD",
+        "country_center_lat": "12.231984",
+        "country_center_lng": "-61.624374",
+        "map_zoom": "11",
+        "topic_hierarchy": "origin/a/wis2/gd-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Grenada",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "11.982065",
+            "INITIAL_LONGITUDE": "-61.822987",
+            "FINAL_LATITUDE": "12.531859",
+            "FINAL_LONGITUDE": "-61.363707"
+        }
+    },
+    {
+        "notation": "GUY",
+        "country_center_lat": "4.992450",
+        "country_center_lng": "-59.018555",
+        "map_zoom": "7",
+        "topic_hierarchy": "origin/a/wis2/gy-hydromet/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Guyana",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "1.098565",
+            "INITIAL_LONGITUDE": "-62.050781",
+            "FINAL_LATITUDE": "9.990491",
+            "FINAL_LONGITUDE": "-53.283691"
+        }
+    },
+    {
+        "notation": "KNA",
+        "country_center_lat": "17.261482",
+        "country_center_lng": "-62.694168",
+        "map_zoom": "11",
+        "topic_hierarchy": "origin/a/wis2/kn-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/St_Kitts",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "17.091901",
+            "INITIAL_LONGITUDE": "-62.865829",
+            "FINAL_LATITUDE": "17.419606",
+            "FINAL_LONGITUDE": "-62.536926"
+        }
+    },
+    {
+        "notation": "SXM",
+        "country_center_lat": "18.061496",
+        "country_center_lng": "-63.051910",
+        "map_zoom": "13",
+        "topic_hierarchy": "origin/a/wis2/sx-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Lower_Princes",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "18.004121",
+            "INITIAL_LONGITUDE": "-63.153877",
+            "FINAL_LATITUDE": "18.126928",
+            "FINAL_LONGITUDE": "-62.967453"
+        }
+    },
+    {
+        "notation": "TCA",
+        "country_center_lat": "21.547621",
+        "country_center_lng": "-71.856079",
+        "map_zoom": "10",
+        "topic_hierarchy": "origin/a/wis2/tc-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Grand_Turk",
+        "timezone_offset": "-300",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "21.153677",
+            "INITIAL_LONGITUDE": "-72.513885",
+            "FINAL_LATITUDE": "21.969793",
+            "FINAL_LONGITUDE": "-71.062317"
+        }
+    },
+    {
+        "notation": "LCA",
+        "country_center_lat": "13.890745",
+        "country_center_lng": "-60.972061",
+        "map_zoom": "11",
+        "topic_hierarchy": "origin/a/wis2/lc-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/St_Lucia",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "13.702697",
+            "INITIAL_LONGITUDE": "-61.087418",
+            "FINAL_LATITUDE": "14.113936",
+            "FINAL_LONGITUDE": "-60.862198"
+        }
+    },
+    {
+        "notation": "TTO",
+        "country_center_lat": "10.549922",
+        "country_center_lng": "-61.155396",
+        "map_zoom": "9",
+        "topic_hierarchy": "origin/a/wis2/tt-trin-met/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Port_of_Spain",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "10.020244",
+            "INITIAL_LONGITUDE": "-61.940918",
+            "FINAL_LATITUDE": "11.377724",
+            "FINAL_LONGITUDE": "-60.471497"
+        }
+    },
+    {
+        "notation": "VCT",
+        "country_center_lat": "13.051386",
+        "country_center_lng": "-61.236420",
+        "map_zoom": "10",
+        "topic_hierarchy": "origin/a/wis2/vc-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/St_Vincent",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "12.529429",
+            "INITIAL_LONGITUDE": "-61.533051",
+            "FINAL_LATITUDE": "13.401643",
+            "FINAL_LONGITUDE": "-60.924683"
+        }
+    },
+    {
+        "notation": "AIA",
+        "country_center_lat": "18.203262",
+        "country_center_lng": "-63.072853",
+        "map_zoom": "12",
+        "topic_hierarchy": "origin/a/wis2/ai-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Anguilla",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "18.147483",
+            "INITIAL_LONGITUDE": "-63.280563",
+            "FINAL_LATITUDE": "18.301729",
+            "FINAL_LONGITUDE": "-62.919388"
+        }
+    },
+    {
+        "notation": "BHS",
+        "country_center_lat": "24.026397",
+        "country_center_lng": "-76.453857",
+        "map_zoom": "7",
+        "topic_hierarchy": "origin/a/wis2/bs-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Nassau",
+        "timezone_offset": "-300",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "20.853679",
+            "INITIAL_LONGITUDE": "-80.540771",
+            "FINAL_LATITUDE": "27.313214",
+            "FINAL_LONGITUDE": "-72.674561"
+        }
+    },
+    {
+        "notation": "MSR",
+        "country_center_lat": "16.745866",
+        "country_center_lng": "-62.190342",
+        "map_zoom": "13",
+        "topic_hierarchy": "origin/a/wis2/ms-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Montserrat",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "16.673031",
+            "INITIAL_LONGITUDE": "-62.244072",
+            "FINAL_LATITUDE": "16.826067",
+            "FINAL_LONGITUDE": "-62.142105"
+        }
+    },
+    {
+        "notation": "VGB",
+        "country_center_lat": "18.449649",
+        "country_center_lng": "-64.533691",
+        "map_zoom": "11",
+        "topic_hierarchy": "origin/a/wis2/vg-metservice/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Tortola",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "18.302381",
+            "INITIAL_LONGITUDE": "-64.861908",
+            "FINAL_LATITUDE": "18.755511",
+            "FINAL_LONGITUDE": "-64.263840"
+        }
+    },
+    {
+        "notation": "BRB",
+        "country_center_lat": "13.171091",
+        "country_center_lng": "-59.562378",
+        "map_zoom": "11",
+        "topic_hierarchy": "origin/a/wis2/bb-barbadosmetservices/data/core/weather/surface-based-observations/synop",
+        "timezone_name": "America/Barbados",
+        "timezone_offset": "-240",
+        "spatial_analysis": {
+            "INITIAL_LATITUDE": "13.041686",
+            "INITIAL_LONGITUDE": "-59.681511",
+            "FINAL_LATITUDE": "13.337846",
+            "FINAL_LONGITUDE": "-59.415779"
+        }
+    }
+]

@@ -1,0 +1,123 @@
+[
+  {
+    "model": "wx.administrativeregion",
+    "pk": 1,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Barima-Waini",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 2,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Pomeroon-Supenaam",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 3,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Essequibo Islands-West Demerara",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 4,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Demerara-Mahaica",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 5,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Mahaica-Berbice",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 6,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "East Berbice-Corentyne",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 7,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Cuyuni-Mazaruni",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 8,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Potaro-Siparuni",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 9,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Upper Takutu-Upper Essequibo",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 10,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Upper Demerara-Berbice",
+      "administrative_region_type_id": 4,
+      "country_id": 71
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 11,
+    "fields": {
+      "created_at": "2025-03-30T01:49:31.532Z",
+      "updated_at": "2025-03-30T01:49:31.532Z",
+      "name": "Not Specified",
+      "administrative_region_type_id": 5,
+      "country_id": 71
+    }
+  }
+]

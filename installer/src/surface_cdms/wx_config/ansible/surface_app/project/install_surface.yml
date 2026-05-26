@@ -1,0 +1,407 @@
+---
+- name: Install SURFACE
+  hosts: local
+  become: false
+
+  tasks:  
+    # System checks
+    - name: System Checks
+      block:
+        - name: Check Supported Systems
+          ansible.builtin.fail:
+            msg: This host system is currently not supported.
+          # when: ansible_facts['distribution'] != "Ubuntu" or ansible_facts['distribution_version'] != "22.04"
+          # allow ubuntu versions greater than or equal to 22.04
+          when: ansible_facts['distribution'] != "Ubuntu" or ansible_facts['distribution_version'] not in ["20.04", "22.04", "24.04"]
+
+
+
+    # Prep the system for surface installation
+    - name: System Prep
+      block:
+        - name: Update apt cache
+          become: true
+          apt:
+            update_cache: true
+        
+        - name: Install required system packages
+          become: true
+          apt:
+            pkg:
+              - apt-transport-https
+              - ca-certificates
+              - curl
+              - software-properties-common
+              - python3-pip
+              - virtualenv
+              - git
+              - python3-setuptools
+              - openjdk-11-jdk
+              - gzip
+              - wget
+            state: latest
+
+        - name: Remove docker-ce
+          become: true
+          apt:
+            name: docker-ce
+            state: absent
+        
+        - name: Remove any existing Docker repo list files (avoids signed-by conflicts)
+          become: true
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /etc/apt/sources.list.d/docker.list
+            - /etc/apt/sources.list.d/docker-ce.list
+            - /etc/apt/sources.list.d/docker-ce-stable.list
+          ignore_errors: true
+
+        - name: Install dependencies for managing apt repositories
+          become: true
+          apt:
+            name:
+              - ca-certificates
+              - curl
+              - gnupg
+            state: present
+            update_cache: true
+
+        - name: Ensure keyrings directory exists
+          become: true
+          file:
+            path: /etc/apt/keyrings
+            state: directory
+            mode: '0755'
+
+        - name: Download Docker GPG key (ASCII)
+          become: true
+          get_url:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            dest: /etc/apt/keyrings/docker.asc
+            mode: '0644'
+
+        - name: Convert Docker key to binary gpg keyring
+          become: true
+          command: gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg /etc/apt/keyrings/docker.asc
+
+        - name: Ensure Docker keyring permissions
+          become: true
+          file:
+            path: /etc/apt/keyrings/docker.gpg
+            mode: '0644'
+
+        - name: Add Docker apt repository
+          become: true
+          apt_repository:
+            repo: >
+              deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg]
+              https://download.docker.com/linux/ubuntu
+              {{ ansible_distribution_release }} stable
+            state: present
+            filename: docker
+            update_cache: false
+
+        - name: Update apt cache
+          become: true
+          apt:
+            update_cache: yes
+
+        - name: Install docker-ce
+          become: true
+          apt:
+            name: docker-ce
+            state: present
+
+        - name: Install Docker Module for Python
+          pip:
+            name: docker
+
+        - name: Add current remote user to docker group
+          become: true
+          ansible.builtin.user:
+            name: "{{ ansible_user_id }}"
+            groups: docker
+            append: yes
+
+
+
+    # Retrieve neccessary files and set required permissions for SURFACE installation
+    - name: SUFACE Prep
+      block:
+        - name: Tear down existing Docker services (if any) remove orphans and volumes
+          become: true
+          community.docker.docker_compose_v2:
+            project_src: "{{ surface_repo_path }}"
+            build: never
+            state: absent
+            remove_images: all
+            remove_orphans: true
+            remove_volumes: true
+          ignore_errors: true
+
+        - name: Remove old SUFACE directory clones
+          become: true
+          ansible.builtin.file:
+            path: "{{ surface_repo_path }}"
+            state: absent
+
+        - name: Clone SURFACE Repository
+          ansible.builtin.git:
+            repo: https://github.com/opencdms/surface.git
+            dest: "{{ surface_repo_path }}"
+            force: true
+            version: development
+
+        - name: Remove example SUFACE config file (production.env.example)
+          ansible.builtin.file:
+            path: "{{ surface_repo_path }}api/production.env.example"
+            state: absent
+
+        - name: Add SURFACE config file (production.env)
+          ansible.builtin.copy:
+            src: "{{ prod_env_path }}"
+            dest: "{{ surface_repo_path }}api/"
+
+        - name: Remove example config file (.env.example)
+          ansible.builtin.file:
+            path: "{{ surface_repo_path }}.env.example"
+            state: absent
+
+        - name: Add config file (.env)
+          ansible.builtin.copy:
+            src: "{{ env_path }}"
+            dest: "{{ surface_repo_path }}"
+
+        - name: Add shape.png (spatial analysis)
+          ansible.builtin.copy:
+            src: "{{ spatial_analysis_files_path }}/shape.png"
+            dest: "{{ surface_repo_path }}api/static/shape.png"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: "0644"
+
+        - name: Add Basemap.geojson (spatial analysis)
+          ansible.builtin.copy:
+            src: "{{ spatial_analysis_files_path }}/Basemap.geojson"
+            dest: "{{ surface_repo_path }}api/static/Basemap.geojson"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: "0644"
+
+
+        - name: Add fixtures unique to the country
+          ansible.builtin.copy:
+            src: "{{ fixtures_files_path }}/"   # / ensures contents only
+            dest: "{{ surface_repo_path }}api/fixtures/"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: "0644"
+
+        - name: Create dump files dir
+          ansible.builtin.file:
+            path: "{{ surface_repo_path }}/backup_restore_dumps"
+            state: directory
+            mode: "0755"
+          when: with_data in ['yes', 'Yes', 'YES']
+
+        - name: Retrieve data dump file from FTP server
+          ansible.builtin.get_url:
+            url: "ftp://{{ ftp_username }}:{{ ftp_password }}@{{ ftp_host }}:{{ ftp_port }}{{ ftp_data_dump }}"
+            dest: "{{ surface_repo_path }}backup_restore_dumps/{{ data_file_name }}"
+            force: true
+          when: dump_via_ftp in ['true', 'True', 'TRUE']
+
+        - name: Move data dump file to "backup_restore_dumps" folder
+          ansible.builtin.copy:
+            src: "{{ data_path }}"
+            dest: "{{ surface_repo_path }}backup_restore_dumps/"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: "0644"
+          when: (with_data in ['yes', 'Yes', 'YES']) and (dump_via_ftp in ['false', 'False', 'FALSE'])
+
+
+
+    # LRGS SETUP
+    - name: LRGS setup
+      block:
+        # copy the neccessary files
+        - name: Copy lrgs install .jar file
+          ansible.builtin.copy:
+            src: "{{ lrgs_install_jar }}"
+            dest: "{{ surface_repo_path }}"
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: "0644"
+
+        - name: Copy lrgs installation script
+          ansible.builtin.copy:
+            src: "{{ lrgs_installation_script }}"
+            dest: "{{ surface_repo_path }}" 
+            owner: "{{ ansible_user_id }}"
+            group: "{{ ansible_user_id }}"
+            mode: "0644" 
+
+        # modify the installation script
+        - name: Ensure correct LRGS install location is set
+          ansible.builtin.replace:
+            path: "{{ surface_repo_path }}LRGS-installation-script"
+            regexp: '#PATH-TO-LRGSCLIENT-FOLDER'
+            replace: "{{ LRGSClient_path }}"
+
+        # install LRGS client
+        - name: Install LRGS Client
+          ansible.builtin.shell: java -jar lrgs-client-install-6-2-RC03.jar LRGS-installation-script
+          args:
+            chdir: "{{ surface_repo_path }}"
+
+        # modify the decj file in the LRGS Client
+        - name: Modify decj file in LRGS Client
+          ansible.builtin.replace:
+            path: "{{ lrgs_decj }}"
+            regexp: '.*/surface/api/LrgsClient'
+            replace: 'DH=/surface/LrgsClient'
+
+        # modify the getDcpMessages file in the LRGS Client
+        - name: Modify getDcpMessages file in LRGS Client
+          ansible.builtin.replace:
+            path: "{{ lrgs_getDcpMessages }}"
+            regexp: '.*/surface/api/LrgsClient/bin/decj'
+            replace: '/surface/LrgsClient/bin/decj'
+
+        # modify the msgaccess file in the LRGS Client
+        - name: Modify msgaccess file in LRGS Client
+          ansible.builtin.replace:
+            path: "{{ lrgs_msgaccess }}"
+            regexp: '.*/surface/api/LrgsClient/bin/decj'
+            replace: '/surface/LrgsClient/bin/decj'
+
+        # modify the rtstat file in the LRGS Client
+        - name: Modify rtstat file in LRGS Client
+          ansible.builtin.replace:
+            path: "{{ lrgs_rtstat }}"
+            regexp: '.*/surface/api/LrgsClient/bin/decj'
+            replace: '/surface/LrgsClient/bin/decj'
+
+        # remove the neccessary files after use
+        - name: Remove lrgs install .jar file
+          ansible.builtin.file:
+            path: "{{ surface_repo_path }}lrgs-client-install-6-2-RC03.jar"
+            state: absent
+
+        - name: Remove lrgs installation script
+          ansible.builtin.file:
+            path: "{{ surface_repo_path }}LRGS-installation-script"
+            state: absent
+      when: enable_lrgs in ['true', 'True', 'TRUE']
+
+
+
+    # Start containers and services
+    - name: Start Docker services
+      block:
+        - name: Prep for data dump restoration
+          ansible.builtin.shell: "mkdir -p data/postgresql/pgdata"
+          args:
+            chdir: "{{ surface_repo_path }}"
+          when: with_data in ['yes', 'Yes', 'YES']
+
+        - name: Restore data dump (This may take a while...)
+          ansible.builtin.shell: "tar -xzf {{ surface_repo_path }}backup_restore_dumps/{{ data_file_name }} -C {{ surface_repo_path }}/data/postgresql/pgdata"
+          when: with_data in ['yes', 'Yes', 'YES']
+
+        - name: Creating and starting Postgres, Cache, Redis and Api services (This may take a while...)
+          become: true
+          community.docker.docker_compose_v2:
+            project_src: "{{ surface_repo_path }}"
+            build: always
+            state: present
+            services:
+              - postgres
+              - cache
+              - redis
+              - api
+
+        - name: Wait for containers to fully start
+          ansible.builtin.pause:
+            seconds: 30
+
+        - name: Confirm data dump restoration
+          become: true
+          ansible.builtin.shell: "docker compose exec -T postgres pg_isready"
+          args:
+            chdir: "{{ surface_repo_path }}"
+          when: with_data in ['yes', 'Yes', 'YES']
+
+        - name: Start Without Data (This may take a while...)
+          become: true
+          ansible.builtin.shell: docker compose exec api bash load_initial_data.sh
+          args:
+            chdir: "{{ surface_repo_path }}"
+          when: with_data in ['no', 'No', 'NO']
+
+
+
+    # Verify static dir permissions and ownership
+    - name: Verify static dir permissions and ownership inside api container
+      block:
+        - name: Verify the static dir
+          become: true
+          ansible.builtin.shell: |
+            docker compose exec --user root api chown -R surface:surface /surface
+          args:
+            chdir: "{{ surface_repo_path }}"
+
+
+            
+    # Collect Static files and create admin user
+    - name: Collect static files and create the SURFACE admin user
+      block:
+        - name: Collect Static Files
+          become: true
+          ansible.builtin.shell: docker compose exec api python manage.py collectstatic --noinput
+          args:
+            chdir: "{{ surface_repo_path }}"
+
+        - name: Create Admin User
+          become: true
+          ansible.builtin.shell: docker compose exec api sh -c "export DJANGO_SUPERUSER_USERNAME='{{ admin }}' && export DJANGO_SUPERUSER_EMAIL='{{ admin_email }}' && export DJANGO_SUPERUSER_PASSWORD='{{ admin_password }}' && python manage.py createsuperuser --noinput"
+          args:
+            chdir: "{{ surface_repo_path }}"
+
+
+
+    # Restart all containers and services
+    - name: Restart containers
+      block:
+        # Bringing down the Postgres, Cache, Redis and Api containers 
+        - name: Bringing down all containers
+          become: true
+          community.docker.docker_compose_v2:
+            project_src: "{{ surface_repo_path }}"
+            state: absent
+
+        # Starting SURFACE
+        - name: Starting up SURFACE
+          become: true
+          community.docker.docker_compose_v2:
+            project_src: "{{ surface_repo_path }}"
+            state: present
+
+        # Verify file permissions and ownership
+        - name: Verify file permissions and ownership inside containers
+          block:
+            - name: Verify the data dir
+              become: true
+              # ansible.builtin.shell: docker compose exec --user root api bash -c "chown -R surface /data"
+              ansible.builtin.shell: |
+                docker compose exec --user root api bash -c "find /data -exec chown surface {} \;"
+              args:
+                chdir: "{{ surface_repo_path }}"
+
+        # SUFACE installation complete
+        - name: SURFACE installation complete!
+          ansible.builtin.pause:
+            seconds: 2
