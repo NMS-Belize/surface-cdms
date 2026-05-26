@@ -1,0 +1,583 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maintenance Report Preview</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/vuetify@3.7.3/dist/vuetify.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font/css/materialdesignicons.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.5.12/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vuetify@3.7.3/dist/vuetify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <link rel="icon" type="image/png" href="{% static 'images/circle_logo_small.png' %}">
+
+  <style>
+    :root {
+      --report-primary: #0f4c81;
+      --report-primary-dark: #0a3558;
+      --report-accent: #d9e7f2;
+      --report-border: #d7dee7;
+      --report-soft: #f6f8fb;
+      --report-row: #f9fbfd;
+      --report-text: #1f2937;
+      --report-muted: #5f6b7a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    #app {
+      background: linear-gradient(0deg, rgba(0, 123, 255, 0.25) 0%, rgba(255, 193, 7, 0.34) 100%), white !important;
+      min-height: 100vh;
+      padding: 24px 0;
+    }
+
+    .accent_bg {
+      background: linear-gradient(0deg, rgba(0, 123, 255, 0.25) 0%, rgba(255, 193, 7, 0.34) 100%), white !important;
+    }
+
+    #download-area {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 14mm 12mm 16mm;
+      background: #ffffff;
+      box-shadow: 0 10px 35px rgba(15, 76, 129, 0.12);
+      overflow: hidden;
+      border-radius: 10px;
+    }
+
+    .report-header {
+      border-bottom: 3px solid var(--report-primary);
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .report-logo {
+      display: block;
+      max-width: 92px;
+      max-height: 92px;
+      object-fit: contain;
+      margin: 0 auto 8px;
+    }
+
+    .report-title {
+      font-size: 30px;
+      line-height: 1.15;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--report-primary-dark);
+      margin: 0;
+    }
+
+    .report-subtitle {
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 700;
+      color: var(--report-text);
+      margin-top: 8px;
+    }
+
+    .section-block {
+      margin-top: 18px;
+      border: 1px solid var(--report-border);
+      border-radius: 12px;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .section-title {
+      background: linear-gradient(90deg, var(--report-primary) 0%, #1c639f 100%);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 12px 16px;
+    }
+
+    .info-row {
+      margin: 0 !important;
+      border-bottom: 1px solid var(--report-border);
+      min-height: 44px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-row:nth-child(even) {
+      background: var(--report-row);
+    }
+
+    .label-col,
+    .value-col {
+      padding-top: 12px !important;
+      padding-bottom: 12px !important;
+    }
+
+    .label-col {
+      background: rgba(15, 76, 129, 0.04);
+      font-weight: 700;
+      color: var(--report-primary-dark);
+      font-size: 13px;
+    }
+
+    .value-col {
+      font-size: 13px;
+      color: var(--report-text);
+      word-break: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .full-width-note {
+      line-height: 1.6;
+    }
+
+    .contact-box {
+      padding: 16px;
+      background: #fff;
+      line-height: 1.7;
+      font-size: 13px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .equipment-card {
+      margin: 14px 14px 18px;
+      border: 1px solid var(--report-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .equipment-card-title {
+      background: linear-gradient(90deg, #edf4fb 0%, #e2edf8 100%);
+      color: var(--report-primary-dark);
+      font-size: 18px;
+      font-weight: 800;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--report-border);
+    }
+
+    .equipment-subtitle {
+      background: var(--report-soft);
+      color: var(--report-primary-dark);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--report-border);
+    }
+
+    .equipment-content {
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .classification-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 2px 0;
+    }
+
+    .classification-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--report-border);
+      border-radius: 10px;
+      background: #fbfcfe;
+    }
+
+    .classification-item.active {
+      border-color: var(--report-primary);
+      background: rgba(15, 76, 129, 0.08);
+      font-weight: 700;
+    }
+
+    .classification-item input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--report-primary);
+      flex-shrink: 0;
+    }
+
+.action-row {
+  width: 210mm;
+  margin: 20px auto 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+    .v-btn {
+      text-transform: none !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.01em !important;
+    }
+
+    .pdf-footer-space {
+      height: 6px;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    @media print {
+      html,
+      body,
+      #app {
+        background: #fff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      #download-area {
+        width: 210mm !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+
+      .action-row {
+        display: none !important;
+      }
+
+      .section-block,
+      .equipment-card,
+      .report-header,
+      .info-row,
+      .contact-box {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="app">
+      <v-app class="accent_bg">
+        <div id="download-area">
+          <div class="report-header text-center">
+            <img class="report-logo" src="{% static 'images/org_logo.png' %}?v={{ org_logo_mtime|default:'1' }}" alt="Logo">
+            <div class="report-title text-uppercase">Manual Weather Station Maintenance Report</div>
+            <div class="report-subtitle text-uppercase">{{ station_information.station_name }}</div>
+          </div>
+
+          <!-- Visit summary information -->
+          <div class="section-block">
+            <div class="section-title">Visit Summary Information</div>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Report #</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.report_number }}</v-col>
+              <v-col cols="3" class="label-col">Responsible Technicians</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.responsible_technician }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Date of Visit</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.date_of_visit }}</v-col>
+              <v-col cols="3" class="label-col">Date of Next Visit</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.date_of_next_visit }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Start Time</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.start_time }}</v-col>
+              <v-col cols="3" class="label-col">Other Technicians</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.other_technicians }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">End Time</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.end_time }}</v-col>
+              <v-col cols="3" class="label-col">Type of Visit</v-col>
+              <v-col cols="3" class="value-col">{{ visit_summary_information.type_of_visit }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Description of Station Upon Arrival</v-col>
+              <v-col cols="9" class="value-col full-width-note">{{ visit_summary_information.station_on_arrival_conditions | safe }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Summary of Work Done at Station</v-col>
+              <v-col cols="9" class="value-col full-width-note">{{ visit_summary_information.current_visit_summary | safe }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Work To Be Done On Next Visit</v-col>
+              <v-col cols="9" class="value-col full-width-note">{{ visit_summary_information.next_visit_summary | safe }}</v-col>
+            </v-row>
+          </div>
+
+          <!-- Station Information -->
+          <div class="section-block">
+            <div class="section-title">Station Information</div>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Station Name</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.station_name }}</v-col>
+              <v-col cols="3" class="label-col">Station Host Name</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.station_host_name }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Station ID</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.station_ID }}</v-col>
+              <v-col cols="3" class="label-col">WIGOS ID</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.wigos_ID }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Station Type</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.station_type }}</v-col>
+              <v-col cols="3" class="label-col">Station Profile</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.station_profile }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Latitude</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.latitude }}</v-col>
+              <v-col cols="3" class="label-col">Elevation (m)</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.elevation }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Longitude</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.longitude }}</v-col>
+              <v-col cols="3" class="label-col">District</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.district }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Transmission Type</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.transmission_type }}</v-col>
+              <v-col cols="3" class="label-col">Transmission ID</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.transmission_ID }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Transmission Interval</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.transmission_interval }}</v-col>
+              <v-col cols="3" class="label-col">Measurement Interval</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.measurement_interval }}</v-col>
+            </v-row>
+
+            <v-row class="info-row">
+              <v-col cols="3" class="label-col">Date of First Operation</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.data_of_first_operation }}</v-col>
+              <v-col cols="3" class="label-col">Date(s) of Relocation</v-col>
+              <v-col cols="3" class="value-col">{{ station_information.data_of_relocation }}</v-col>
+            </v-row>
+          </div>
+
+          <!-- Contact Information -->
+          <div class="section-block">
+            <div class="section-title">Contact Information</div>
+            <div class="contact-box">{{ contact_information | safe }}</div>
+          </div>
+
+          <!-- Equipment Record -->
+          <div class="section-block">
+            <div class="section-title">Equipment Record</div>
+
+            <div v-for="equipment_record in {{ equipment_records }}" class="equipment-card">
+              <!-- <div class="equipment-card-title text-center">[[ equipment_record.name ]]</div> -->
+              <div class="equipment-card-title text-center">[[ equipment_record.type ]] - [[ equipment_record.manufacturer ]]</div>
+
+              <!-- Equipment information -->
+              <v-row class="info-row">
+                <v-col cols="3" class="label-col">Instrument Type</v-col>
+                <v-col cols="3" class="value-col">[[ equipment_record.type ]]</v-col>
+                <v-col cols="3" class="label-col">Serial Number</v-col>
+                <v-col cols="3" class="value-col">[[ equipment_record.serial ]]</v-col>
+              </v-row>
+
+              <v-row class="info-row">
+                <v-col cols="3" class="label-col">Model</v-col>
+                <v-col cols="3" class="value-col">[[ equipment_record.model ]]</v-col>
+                <v-col cols="3" class="label-col">Manufacturer</v-col>
+                <v-col cols="3" class="value-col">[[ equipment_record.manufacturer ]]</v-col>
+              </v-row>
+
+              <!-- <v-row class="info-row">
+                <v-col cols="3" class="label-col">Serial Number</v-col>
+                <v-col cols="3" class="value-col">[[ equipment_record.serial ]]</v-col>
+                <v-col cols="3" class="label-col">Model</v-col>
+                <v-col cols="3" class="value-col">[[ equipment_record.model ]]</v-col>
+              </v-row> -->
+        
+              <!-- Component classification -->
+              <div class="equipment-subtitle">Component Classification</div>
+              <div class="equipment-content">
+                <div class="classification-list">
+                  <div class="classification-item" :class="{ active: equipment_record.component_classification === 'F' }">
+                    <input type="radio" disabled :checked="equipment_record.component_classification === 'F'">
+                    <span>Fully Functional</span>
+                  </div>
+                  <div class="classification-item" :class="{ active: equipment_record.component_classification === 'P' }">
+                    <input type="radio" disabled :checked="equipment_record.component_classification === 'P'">
+                    <span>Partially Functional</span>
+                  </div>
+                  <div class="classification-item" :class="{ active: equipment_record.component_classification === 'N' }">
+                    <input type="radio" disabled :checked="equipment_record.component_classification === 'N'">
+                    <span>Not Functional</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Component Condition -->
+              <div class="equipment-subtitle">Component Condition</div>
+              <div class="equipment-content">
+                <div v-html="equipment_record.condition"></div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="pdf-footer-space"></div>
+        </div>
+
+
+        <!-- Action Buttons -->
+        <div class="action-row">
+          <v-btn color="error" size="large" :href="updateMaintenanceReport()">
+            Close Preview
+          </v-btn>
+
+          <v-btn color="primary" size="large" @click="downloadPDF" append-icon="mdi-download">
+            Download PDF
+          </v-btn>
+        </div>
+
+      </v-app>
+    </div>
+  </main>
+
+  <script>
+    const { createApp } = Vue;
+    const { createVuetify } = Vuetify;
+    const { jsPDF } = window.jspdf;
+
+    const vuetify = createVuetify();
+
+    const app = createApp({
+      data() {
+        return {
+          maintenance_report_id: "{{ visit_summary_information.report_number }}",
+          maintenance_report_status: "{{ visit_summary_information.maintenance_report_status }}",
+          source: "{{ source }}",
+        };
+      },
+      methods: {
+        updateMaintenanceReport() {
+          return (this.maintenance_report_status === "A" || this.source === "list")
+            ? "/wx/maintenance_report/"
+            : `/wx/maintenance_report/${this.maintenance_report_id}/update/`;
+        },
+
+        async downloadPDF() {
+          const element = document.getElementById("download-area");
+          const filename = `Maintenance_Report_${this.maintenance_report_id}.pdf`;
+
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "mm",
+            format: "a4",
+          });
+
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            logging: false,
+          });
+
+          const imgWidthPx = canvas.width;
+          const imgHeightPx = canvas.height;
+
+          const pdfWidthMm = 210;
+          const pdfHeightMm = 297;
+
+          const imgHeightMm = (imgHeightPx * pdfWidthMm) / imgWidthPx;
+
+          if (imgHeightMm <= pdfHeightMm) {
+            const imgData = canvas.toDataURL("image/png");
+            pdf.addImage(imgData, "PNG", 0, 0, pdfWidthMm, imgHeightMm);
+            pdf.save(filename);
+            return;
+          }
+
+          const pageHeightPx = Math.floor((pdfHeightMm * imgWidthPx) / pdfWidthMm);
+          let renderedHeightPx = 0;
+          let pageIndex = 0;
+
+          while (renderedHeightPx < imgHeightPx) {
+            const pageCanvas = document.createElement("canvas");
+            pageCanvas.width = imgWidthPx;
+            pageCanvas.height = Math.min(pageHeightPx, imgHeightPx - renderedHeightPx);
+
+            const pageCtx = pageCanvas.getContext("2d");
+            pageCtx.fillStyle = "#ffffff";
+            pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+            pageCtx.drawImage(
+              canvas,
+              0,
+              renderedHeightPx,
+              imgWidthPx,
+              pageCanvas.height,
+              0,
+              0,
+              imgWidthPx,
+              pageCanvas.height
+            );
+
+            const pageImgData = pageCanvas.toDataURL("image/png");
+            const pageHeightMm = (pageCanvas.height * pdfWidthMm) / imgWidthPx;
+
+            if (pageIndex > 0) {
+              pdf.addPage();
+            }
+
+            pdf.addImage(pageImgData, "PNG", 0, 0, pdfWidthMm, pageHeightMm);
+
+            renderedHeightPx += pageHeightPx;
+            pageIndex += 1;
+          }
+
+          pdf.save(filename);
+        },
+      },
+      delimiters: ["[[", "]]"],
+    });
+
+    app.use(vuetify).mount("#app");
+  </script>
+</body>
+</html>

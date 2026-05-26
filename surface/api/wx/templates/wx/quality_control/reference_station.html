@@ -1,0 +1,1572 @@
+{% extends "base.html" %} {% block content %} {% load wx_filters %}
+<div class="srf-container">
+
+  <div id="app" v-cloak>
+    <v-app>
+
+      <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
+        <span class="srf-display-1 text-uppercase">Reference Stations</span>
+
+        <br /><br />
+
+      </div>
+
+        <!-- Add reference btn -->
+        <v-card-title>
+            <v-spacer></v-spacer>
+            
+            {% if request|has_any_feature_permission:"reference-station:write" %}
+            <v-btn
+                color="primary"
+                @click="openCreateDialog"
+            >
+                Add Reference Station
+            </v-btn>
+            {% endif %}
+
+        </v-card-title>
+
+        <!-- station table -->
+        <v-card flat class="mt-4">
+                
+            <v-data-table
+                :headers="stationHeaders"
+                :items="referenceStations"
+                :loading="loadingStations"
+                item-key="id"
+                class="elevation-1"
+            >
+
+                <!-- Active column -->
+                <template v-slot:item.is_active="{ item }">
+                    <v-chip
+                        small
+                        :color="item.is_active ? 'green' : 'grey'"
+                        dark
+                    >
+                        [[ item.is_active ? 'Active' : 'Inactive' ]]
+                    </v-chip>
+                </template>
+
+                <!-- Actions column -->
+                <template v-slot:item.actions="{ item }">
+
+                    <!-- edit btn -->
+                    {% if request|has_any_feature_permission:"reference-station:write" %}
+                    <v-btn
+                        small
+                        outlined
+                        color="primary"
+                        @click="openEditDialog(item)"
+                    >
+                        Edit
+                    </v-btn>
+                    {% endif %}
+
+                    <!-- threshold -->
+                    {% if request|has_any_feature_permission:"reference-station:write" %}
+                    <v-btn
+                        small
+                        outlined
+                        color="purple"
+                        @click="openThresholdDialog(item)"
+                    >
+                        Thresholds
+                    </v-btn>
+                    {% endif %}
+
+                    <!-- deactivate / activate -->
+                    {% if request|has_any_feature_permission:"reference-station:write" %}
+                    <v-btn
+                        small
+                        outlined
+                        :color="item.is_active ? 'orange' : 'green'"
+                        @click="toggleActive(item)"
+                    >
+                        [[ item.is_active ? 'Deactivate' : 'Activate' ]]
+                    </v-btn>
+                    {% endif %}
+
+                    <!-- delete -->
+                    {% if request|has_any_feature_permission:"reference-station:delete" %}
+                    <v-btn
+                        small
+                        outlined
+                        color="red"
+                        @click="deleteReferenceStation(item)"
+                    >
+                        Delete
+                    </v-btn>
+                    {% endif %}
+
+                </template>
+
+            </v-data-table>
+
+        </v-card>
+
+
+        <!-- Create/Edit Reference Station Dialog -->
+        <v-dialog
+            v-model="stationDialog"
+            max-width="760px"
+            persistent
+        >
+            <v-card class="reference-station-dialog">
+                <!-- card title -->
+                <v-card-title class="reference-dialog-title">
+                    [[ dialogMode === 'create' ? 'Create Reference Station' : 'Modify Reference Station' ]]
+                </v-card-title>
+
+                <!-- card body -->
+                <v-card-text class="reference-dialog-text">
+
+                    <v-form
+                        ref="stationFormRef"
+                        v-model="stationFormValid"
+                    >
+
+                        <v-container fluid class="reference-station-form-container">
+                            <v-row>
+
+                                <!-- Code -->
+                                <v-col cols="12" md="6">
+                                    <v-text-field
+                                        v-model="stationForm.code"
+                                        label="Code"
+                                        outlined
+                                        dense
+                                        :rules="stationRules.code"
+                                    ></v-text-field>
+                                </v-col>
+
+                                <!-- Name -->
+                                <v-col cols="12" md="6">
+                                    <v-text-field
+                                        v-model="stationForm.name"
+                                        label="Name"
+                                        outlined
+                                        dense
+                                        :rules="stationRules.name"
+                                    ></v-text-field>
+                                </v-col>
+
+                                <!-- lat -->
+                                <v-col cols="12" md="6">
+                                    <v-text-field
+                                        id="id_latitude"
+                                        v-model="stationForm.latitude"
+                                        label="Latitude"
+                                        type="number"
+                                        outlined
+                                        dense
+                                        :rules="stationRules.latitude"
+                                        @input="updateMapFromLatitude"
+                                    ></v-text-field>
+                                </v-col>
+
+                                <!-- lng -->
+                                <v-col cols="12" md="6">
+                                    <v-text-field
+                                        id="id_longitude"
+                                        v-model="stationForm.longitude"
+                                        label="Longitude"
+                                        type="number"
+                                        outlined
+                                        dense
+                                        :rules="stationRules.longitude"
+                                        @input="updateMapFromLongitude"
+                                    ></v-text-field>
+                                </v-col>
+
+                                <!-- var selector -->
+                                <v-col cols="12">
+                                    <v-card outlined class="pa-3 mb-3" style="border-color: white;">
+
+                                        <div class="d-flex align-center justify-space-between mb-2">
+                                        <div>
+                                            <h6 class="mb-1">Station Variables</h6>
+                                            <small style="color: red;">
+                                                Select the variables associated with this reference station.
+                                            </small>
+                                        </div>
+
+                                        <v-checkbox
+                                            v-model="selectAllVariables"
+                                            label="Select all"
+                                            hide-details
+                                            class="ma-0 pa-0"
+                                            @change="toggleSelectAllVariables"
+                                        ></v-checkbox>
+                                        </div>
+
+                                        <v-autocomplete
+                                            v-model="stationForm.variable_ids"
+                                            :items="availableVariables"
+                                            item-text="display_name"
+                                            item-value="id"
+                                            label="Variables"
+                                            multiple
+                                            chips
+                                            small-chips
+                                            deletable-chips
+                                            outlined
+                                            dense
+                                            :loading="loadingVariables"
+                                            @change="updateSelectAllVariablesState"
+                                        ></v-autocomplete>
+
+                                    </v-card>
+                                </v-col>
+
+                                <!-- Map -->
+                                <v-col cols="12">
+                                    <h6 class="map-title">Select station location on the map</h6>
+
+                                    <div class="map-wrapper">
+                                        <div id="mapid" class="map-small" style="border-radius: 20px !important; border: 2px solid rgba(0, 0, 0, 0.628) !important;"></div>
+                                    </div>
+
+                                    <small class="map-help-text" style="color: red;">
+                                        Click on the map to set the station latitude and longitude.
+                                    </small>
+                                </v-col>
+
+                                <!-- Active -->
+                                <v-col cols="12" class="pt-0">
+                                    <v-switch
+                                        v-model="stationForm.is_active"
+                                        label="Active"
+                                        inset
+                                        hide-details
+                                    ></v-switch>
+                                </v-col>
+
+                            </v-row>
+                        </v-container>
+
+                    </v-form>
+
+                </v-card-text>
+
+                <!-- Card actions -->
+                <v-card-actions class="reference-dialog-actions">
+                    <v-spacer></v-spacer>
+
+                    <!-- cancel btn -->
+                    <v-btn
+                        color="error"
+                        @click="closeStationDialog"
+                    >
+                        Cancel
+                    </v-btn>
+
+                    <!-- save btn -->
+                    <v-btn
+                        color="primary"
+                        :loading="savingStation"
+                        @click="saveStation"
+                    >
+                        Save
+                    </v-btn>
+                </v-card-actions>
+
+            </v-card>
+        </v-dialog>
+
+
+        <!-- Reference Station Threshold Dialog -->
+        <v-dialog
+            v-model="thresholdDialog"
+            max-width="1100px"
+            persistent
+        >
+            <v-card>
+
+                <!-- header -->
+                <v-card-title>
+                    <div>
+                        <div class="threshold-dialog-title">
+                            Reference Station:
+
+                            <span style="color: #2196F3;">
+                                [[ selectedThresholdStation ? selectedThresholdStation.name : '' ]]
+                            </span>
+                        </div>
+
+                        <div class="threshold-dialog-subtitle">
+                        Select variables, then configure Range, Step, and Persist thresholds.
+                        </div>
+                    </div>
+
+                    <v-spacer></v-spacer>
+
+                    <v-btn icon @click="closeThresholdDialog">
+                        <v-icon>close</v-icon>
+                    </v-btn>
+                </v-card-title>
+
+                <v-divider></v-divider>
+
+                <!-- dialog body -->
+                <v-card-text>
+
+                    <!-- alert -->
+                    <v-alert
+                        v-if="thresholdError"
+                        type="error"
+                        dense
+                        dismissible
+                        v-model="thresholdError"
+                    >
+                        [[ thresholdErrorMessage ]]
+                    </v-alert>
+
+                    <!-- overlay -->
+                    <v-overlay :value="loadingThresholds">
+                        <v-progress-circular
+                        indeterminate
+                        size="64"
+                        ></v-progress-circular>
+                    </v-overlay>
+
+                    <!-- Variable selector -->
+                    <v-card outlined class="pa-3 mb-3" style="border-color: white;">
+                        <div class="d-flex align-center justify-space-between mb-2">
+                        <div>
+                            <h6 class="mb-1">Variables</h6>
+                            <small class="text--darken-1" style="color: red;">
+                                Select the variables you want to configure for this reference station.
+                            </small>
+                        </div>
+
+                        <v-checkbox
+                            v-model="thresholdSelectAllVariables"
+                            label="Select all"
+                            hide-details
+                            class="ma-0 pa-0"
+                            @change="toggleThresholdSelectAllVariables"
+                        ></v-checkbox>
+                        </div>
+
+                        <v-autocomplete
+                            v-model="selectedThresholdVariableIds"
+                            :items="thresholdVariables"
+                            item-text="display_name"
+                            item-value="id"
+                            label="Variables"
+                            multiple
+                            outlined
+                            clearable
+                            chips
+                            small-chips
+                            deletable-chips
+                            autocomplete="off"
+                            @change="handleThresholdVariableSelectionChange"
+                        ></v-autocomplete>
+
+                    </v-card>
+
+                    <!-- Variable tabs -->
+                    <v-sheet
+                        v-if="selectedThresholdVariableIds.length"
+                        class="mb-3"
+                    >
+                        <v-slide-group show-arrows>
+                        <v-slide-item
+                            v-for="variable in selectedThresholdVariables"
+                            :key="variable.id"
+                        >
+                            <v-btn
+                            class="ma-1"
+                            small
+                            outlined
+                            :color="selectedThresholdVariableId === variable.id ? 'primary' : ''"
+                            @click="selectedThresholdVariableId = variable.id"
+                            >
+                            [[ variable.name ]]
+                            </v-btn>
+                        </v-slide-item>
+                        </v-slide-group>
+                    </v-sheet>
+
+                    <!-- alert -->
+                    <v-alert
+                        v-else
+                        type="info"
+                        outlined
+                        dense
+                    >
+                        Select at least one variable to edit thresholds.
+                    </v-alert>
+
+                    <!-- Threshold type tabs -->
+                    <v-tabs
+                        v-if="selectedThresholdVariableId"
+                        v-model="thresholdTypeTab"
+                    >
+                        <v-tab>Range</v-tab>
+                        <v-tab>Step</v-tab>
+                        <v-tab>Persist</v-tab>
+                    </v-tabs>
+
+                    <!-- Threshold tabs -->
+                    <v-tabs-items
+                        v-if="selectedThresholdVariableId"
+                        v-model="thresholdTypeTab"
+                    >
+
+                        <!-- Range Thresholds -->
+                        <v-tab-item>
+                        <v-card flat class="mt-4 reference-station-dialog">
+                            <v-data-table
+                                :headers="rangeThresholdHeaders"
+                                :items="selectedVariableRangeThresholds"
+                                :items-per-page="12"
+                                :footer-props="{
+                                'items-per-page-options': [12, 24]
+                                }"
+                                class="elevation-1"
+                                dense
+                            >
+
+                            <template v-slot:item.range_min="{ item }">
+                                <v-text-field
+                                    v-model="item.range_min"
+                                    type="number"
+                                    dense
+                                    outlined
+                                    hide-details
+                                ></v-text-field>
+                            </template>
+
+                            <template v-slot:item.range_max="{ item }">
+                                <v-text-field
+                                    v-model="item.range_max"
+                                    type="number"
+                                    dense
+                                    outlined
+                                    hide-details
+                                ></v-text-field>
+                            </template>
+                            </v-data-table>
+                        </v-card>
+                        </v-tab-item>
+
+                        <!-- Step Thresholds -->
+                        <v-tab-item>
+                        <v-card flat class="mt-4 reference-station-dialog">
+                            <v-data-table
+                            :headers="stepThresholdHeaders"
+                            :items="selectedVariableStepThresholds"
+                            hide-default-footer
+                            disable-pagination
+                            class="elevation-1"
+                            dense
+                            >
+                            <template v-slot:item.step_min="{ item }">
+                                <v-text-field
+                                v-model="item.step_min"
+                                type="number"
+                                dense
+                                outlined
+                                hide-details
+                                ></v-text-field>
+                            </template>
+
+                            <template v-slot:item.step_max="{ item }">
+                                <v-text-field
+                                v-model="item.step_max"
+                                type="number"
+                                dense
+                                outlined
+                                hide-details
+                                ></v-text-field>
+                            </template>
+                            </v-data-table>
+                        </v-card>
+                        </v-tab-item>
+
+                        <!-- Persist Thresholds -->
+                        <v-tab-item>
+                        <v-card flat class="mt-4 reference-station-dialog">
+                            <v-data-table
+                            :headers="persistThresholdHeaders"
+                            :items="selectedVariablePersistThresholds"
+                            hide-default-footer
+                            disable-pagination
+                            class="elevation-1"
+                            dense
+                            >
+                            <template v-slot:item.minimum_variance="{ item }">
+                                <v-text-field
+                                v-model="item.minimum_variance"
+                                type="number"
+                                dense
+                                outlined
+                                hide-details
+                                ></v-text-field>
+                            </template>
+
+                            <template v-slot:item.window="{ item }">
+                                <v-text-field
+                                v-model="item.window"
+                                type="number"
+                                dense
+                                outlined
+                                hide-details
+                                ></v-text-field>
+                            </template>
+                            </v-data-table>
+                        </v-card>
+                        </v-tab-item>
+
+                    </v-tabs-items>
+
+                </v-card-text>
+
+                <v-divider></v-divider>
+
+                <v-card-actions>
+                    <v-spacer></v-spacer>
+
+                    <v-btn
+                        color="error"
+                        @click="closeThresholdDialog"
+                    >
+                        Cancel
+                    </v-btn>
+
+                    <v-btn
+                        color="primary"
+                        :loading="savingThresholds"
+                        @click="saveThresholds"
+                    >
+                        Save Thresholds
+                    </v-btn>
+                </v-card-actions>
+
+            </v-card>
+        </v-dialog>
+
+
+      <!-- Snackbar -->
+      <v-snackbar
+        v-model="snackbar.show"
+        :color="snackbar.color"
+        timeout="4000"
+      >
+        [[ snackbar.message ]]
+
+        <template v-slot:action="{ attrs }">
+          <v-btn
+            text
+            v-bind="attrs"
+            @click="snackbar.show = false"
+          >
+            Close
+          </v-btn>
+        </template>
+      </v-snackbar>
+
+      <!-- Loader -->
+    <v-overlay :value="loading">
+        <v-progress-circular
+        indeterminate
+        size="64"
+        ></v-progress-circular>
+    </v-overlay>
+
+    </v-app>
+  </div>
+
+</div>
+{% endblock %}
+
+
+{% block localjavascript %}
+<script>
+  Vue.use(window.vuelidate.default);
+
+  new Vue({
+    el: "#app",
+    vuetify: new Vuetify(),
+    delimiters: ["[[", "]]"],
+
+    data: {
+      // Table loading state.
+      loadingStations: false,
+
+      // Page loading state
+      loading: false,
+
+      // Save button loading state.
+      savingStation: false,
+
+      // Controls whether the create/edit dialog is visible.
+      stationDialog: false,
+
+      // Tracks whether the dialog is creating or editing.
+      dialogMode: 'create',
+
+      // Holds the selected station id when editing.
+      selectedStationId: null,
+
+      // Form validation state.
+      stationFormValid: false,
+
+      // Leaflet map object.
+      map: null,
+
+      // Leaflet marker object for selected station location.
+      stationMarker: null,
+
+      // List of reference stations loaded from the backend.
+      referenceStations: [],
+
+      // Table headers.
+      stationHeaders: [
+        { text: 'Code', value: 'code' , align: "center"},
+        { text: 'Name', value: 'name' , align: "center"},
+        { text: 'Latitude', value: 'latitude' , align: "center"},
+        { text: 'Longitude', value: 'longitude' , align: "center"},
+        { text: 'Active', value: 'is_active' , align: "center"},
+        { text: 'Actions', value: 'actions', sortable: false , align: "center"},
+      ],
+
+      // Form data for creating/modifying a reference station.
+      stationForm: {
+        code: '',
+        name: '',
+        latitude: '',
+        longitude: '',
+        is_active: true,
+        variable_ids: [],
+      },
+
+      // Frontend validation rules.
+      stationRules: {
+        code: [
+          v => !!v || 'Code is required.',
+        ],
+        name: [
+          v => !!v || 'Name is required.',
+        ],
+        latitude: [
+          v => v !== '' && v !== null && v !== undefined || 'Latitude is required.',
+          v => Number(v) >= -90 && Number(v) <= 90 || 'Latitude must be between -90 and 90.',
+        ],
+        longitude: [
+          v => v !== '' && v !== null && v !== undefined || 'Longitude is required.',
+          v => Number(v) >= -180 && Number(v) <= 180 || 'Longitude must be between -180 and 180.',
+        ],
+      },
+
+      // URLs used by fetch requests.
+      urls: {
+        loadReferenceStations: "{% url 'load-reference-stations' %}",
+
+        createReferenceStation: "{% url 'create-reference-station' %}",
+
+        modifyReferenceStationBase: "/wx/quality_control/reference_station/update/",
+
+        toggleReferenceStationBase: "/wx/quality_control/reference_station/toggle-active/",
+
+        deleteReferenceStationBase: "/wx/quality_control/reference_station/delete/",
+
+        loadVariables: "{% url 'load-reference-station-variables' %}",
+
+        loadThresholdsBase: "/wx/quality_control/reference_station/",
+
+        saveThresholdsBase: "/wx/quality_control/reference_station/",
+      },
+
+      // Snackbar message state.
+      snackbar: {
+        show: false,
+        message: '',
+        color: 'success',
+      },
+
+      availableVariables: [],
+      loadingVariables: false,
+      selectAllVariables: false,
+
+        // Threshold dialog state.
+        selectedThresholdVariableId: null,
+        thresholdTypeTab: 0,
+        thresholdDialog: false,
+        thresholdTab: 0,
+        loadingThresholds: false,
+        savingThresholds: false,
+        selectedThresholdStation: null,
+
+        // Threshold variables.
+        thresholdVariables: [],
+        selectedThresholdVariableIds: [],
+        thresholdSelectAllVariables: false,
+
+        // Threshold table data.
+        rangeThresholds: [],
+        stepThresholds: [],
+        persistThresholds: [],
+
+        // Threshold error state.
+        thresholdError: false,
+        thresholdErrorMessage: '',
+
+        // Threshold table headers.
+        rangeThresholdHeaders: [
+        { text: 'Variable', value: 'variable_name' },
+        { text: 'Month', value: 'month_name' },
+        { text: 'Range Min', value: 'range_min' },
+        { text: 'Range Max', value: 'range_max' },
+        ],
+
+        stepThresholdHeaders: [
+        { text: 'Variable', value: 'variable_name' },
+        { text: 'Step Min', value: 'step_min' },
+        { text: 'Step Max', value: 'step_max' },
+        ],
+
+        persistThresholdHeaders: [
+        { text: 'Variable', value: 'variable_name' },
+        { text: 'Minimum Variance', value: 'minimum_variance' },
+        { text: 'Window', value: 'window' },
+        ],
+    },
+
+    methods: {
+      getCookie(name) {
+        /*
+          Get a cookie value by name.
+
+          This is used to get Django's CSRF token so that POST and PUT
+          requests are accepted by Django.
+        */
+
+        let cookieValue = null;
+
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+
+        return cookieValue;
+      },
+
+      showSnackbar(message, color = 'success') {
+        /*
+          Show a snackbar message.
+        */
+
+        this.snackbar.message = message;
+        this.snackbar.color = color;
+        this.snackbar.show = true;
+      },
+
+      resetStationForm() {
+        /*
+          Reset the create/edit form.
+        */
+
+        this.stationForm = {
+          code: '',
+          name: '',
+          latitude: '',
+          longitude: '',
+          is_active: true,
+          variable_ids: [],
+        };
+
+        this.selectAllVariables = false;
+
+        this.selectedStationId = null;
+
+        if (this.$refs.stationFormRef) {
+          this.$refs.stationFormRef.resetValidation();
+        }
+
+        this.clearStationMarker();
+      },
+
+      loadReferenceStations() {
+        /*
+          Load all reference stations from the backend.
+        */
+
+        this.loadingStations = true;
+
+        fetch(this.urls.loadReferenceStations)
+          .then(response => response.json())
+          .then(data => {
+            this.referenceStations = data.reference_stations;
+          })
+          .catch(error => {
+            console.error(error);
+            this.showSnackbar('Failed to load reference stations.', 'error');
+          })
+          .finally(() => {
+            this.loadingStations = false;
+          });
+      },
+
+      openCreateDialog() {
+        /*
+          Open dialog in create mode.
+        */
+
+        this.dialogMode = 'create';
+        this.resetStationForm();
+        this.stationDialog = true;
+
+        this.$nextTick(() => {
+          this.initializeStationMap();
+        });
+      },
+
+      openEditDialog(station) {
+        /*
+          Open dialog in edit mode and populate the form.
+        */
+
+        this.dialogMode = 'edit';
+        this.selectedStationId = station.id;
+
+        this.stationForm = {
+          code: station.code,
+          name: station.name,
+          latitude: station.latitude,
+          longitude: station.longitude,
+          is_active: station.is_active,
+          variable_ids: station.variable_ids || [],
+        };
+
+        this.selectAllVariables = (
+            this.availableVariables.length > 0 &&
+            this.stationForm.variable_ids.length === this.availableVariables.length
+        );
+
+        this.stationDialog = true;
+
+        this.$nextTick(() => {
+          this.initializeStationMap();
+        });
+      },
+
+      closeStationDialog() {
+        /*
+          Close dialog and reset form.
+        */
+
+        this.stationDialog = false;
+        this.resetStationForm();
+      },
+
+      saveStation() {
+        /*
+          Save the reference station.
+
+          Create mode uses POST.
+          Edit mode uses PUT.
+        */
+
+        const formIsValid = this.$refs.stationFormRef.validate();
+
+        if (!formIsValid) {
+          this.showSnackbar('Please fill in the required fields.', 'error');
+          return;
+        }
+
+        this.savingStation = true;
+
+        const csrfToken = this.getCookie('csrftoken');
+
+        let url = this.urls.createReferenceStation;
+        let method = "POST";
+
+        if (this.dialogMode === 'edit') {
+          url = `${this.urls.modifyReferenceStationBase}${this.selectedStationId}/`;
+          method = "PUT";
+        }
+
+        fetch(url, {
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify(this.stationForm),
+        })
+          .then(response => {
+            return response.json().then(data => {
+              if (!response.ok) {
+                throw new Error(data.message || 'Request failed.');
+              }
+
+              return data;
+            });
+          })
+          .then(data => {
+            this.showSnackbar(data.message, 'success');
+            this.closeStationDialog();
+            this.loadReferenceStations();
+          })
+          .catch(error => {
+            console.error(error);
+            this.showSnackbar(error.message || 'Failed to save reference station.', 'error');
+          })
+          .finally(() => {
+            this.savingStation = false;
+          });
+      },
+
+      toggleActive(station) {
+        /*
+          Toggle a reference station active/inactive.
+        */
+
+        const csrfToken = this.getCookie('csrftoken');
+
+        fetch(`${this.urls.toggleReferenceStationBase}${station.id}/`, {
+          method: "PUT",
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+        })
+          .then(response => {
+            return response.json().then(data => {
+              if (!response.ok) {
+                throw new Error(data.message || 'Request failed.');
+              }
+
+              return data;
+            });
+          })
+          .then(data => {
+            station.is_active = data.station.is_active;
+            this.showSnackbar(data.message, 'success');
+          })
+          .catch(error => {
+            console.error(error);
+            this.showSnackbar(error.message || 'Failed to update active status.', 'error');
+          });
+      },
+
+      initializeStationMap() {
+        /*
+          Initialize the Leaflet map.
+
+          Leaflet needs the map div to be visible before it can calculate
+          its size correctly, so this runs after the dialog opens.
+        */
+
+        setTimeout(() => {
+          const tempLat = "{{ MAP_LATITUDE|safe }}";
+          const tempLng = "{{ MAP_LONGITUDE|safe }}";
+          const tempZoom = "{{ MAP_ZOOM|safe }}";
+
+          // If the map already exists, just refresh its size.
+          if (this.map) {
+            this.map.invalidateSize();
+
+            if (this.stationForm.latitude && this.stationForm.longitude) {
+              this.addOrMoveStationMarker(
+                parseFloat(this.stationForm.latitude),
+                parseFloat(this.stationForm.longitude)
+              );
+            }
+
+            return;
+          }
+
+          // Create the map.
+          this.map = L.map('mapid', {
+            zoomControl: true
+          }).setView([tempLat, tempLng], tempZoom);
+
+          const osmUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+          const osmAttrib = 'Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+          const osm = new L.TileLayer(osmUrl, {
+            minZoom: 1,
+            maxZoom: 100,
+            attribution: osmAttrib
+          });
+
+          this.map.zoomControl.setPosition('topleft');
+          this.map.addLayer(osm);
+
+          // Change cursor to crosshair while over the map.
+          document.getElementById('mapid').style.cursor = "crosshair";
+
+          // Set lat/lng when user clicks on the map.
+          this.map.on('click', (e) => {
+            this.stationForm.latitude = e.latlng.lat;
+            this.stationForm.longitude = e.latlng.lng;
+
+            this.addOrMoveStationMarker(e.latlng.lat, e.latlng.lng);
+          });
+
+          // Add resize/fullscreen button.
+          let isFullScreen = false;
+
+          L.Control.resizeMap = L.Control.extend({
+            onAdd: function(map) {
+              const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+              const button = L.DomUtil.create('a', 'leaflet-control-button fullscreen-button-width', container);
+
+              button.innerHTML = '<i class="material-icons resize-map-icon">fullscreen</i>';
+              button.title = 'Resize map';
+
+              L.DomEvent.disableClickPropagation(button);
+
+              L.DomEvent.on(button, 'click', function() {
+                if (isFullScreen === false) {
+                  document.getElementById('mapid').requestFullscreen();
+                  isFullScreen = true;
+                } else {
+                  document.exitFullscreen();
+                  isFullScreen = false;
+                }
+              });
+
+              return container;
+            },
+          });
+
+          L.control.mapResize = function(opts) {
+            return new L.Control.resizeMap(opts);
+          };
+
+          L.control.mapResize({ position: 'topright' }).addTo(this.map);
+
+          // Force Leaflet to recalculate map size.
+          this.map.invalidateSize();
+
+          // If editing, show existing marker.
+          if (this.stationForm.latitude && this.stationForm.longitude) {
+            this.addOrMoveStationMarker(
+              parseFloat(this.stationForm.latitude),
+              parseFloat(this.stationForm.longitude)
+            );
+          }
+
+        }, 300);
+      },
+
+      addOrMoveStationMarker(lat, lng) {
+        /*
+          Add or move the station marker.
+        */
+
+        if (!this.map) {
+          return;
+        }
+
+        if (this.stationMarker) {
+          this.map.removeLayer(this.stationMarker);
+        }
+
+        this.stationMarker = L.marker([lat, lng])
+          .addTo(this.map)
+          .bindPopup('Location of reference station')
+          .openPopup();
+
+        this.map.setView([lat, lng], this.map.getZoom() || 8);
+      },
+
+      clearStationMarker() {
+        /*
+          Remove the marker from the map.
+        */
+
+        if (this.map && this.stationMarker) {
+          this.map.removeLayer(this.stationMarker);
+          this.stationMarker = null;
+        }
+      },
+
+      updateMapFromLatitude() {
+        /*
+          If latitude is typed manually, update marker when longitude
+          is also available.
+        */
+
+        const lat = parseFloat(this.stationForm.latitude);
+        const lng = parseFloat(this.stationForm.longitude);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          this.addOrMoveStationMarker(lat, lng);
+        }
+      },
+
+      updateMapFromLongitude() {
+        /*
+          If longitude is typed manually, update marker when latitude
+          is also available.
+        */
+
+        const lat = parseFloat(this.stationForm.latitude);
+        const lng = parseFloat(this.stationForm.longitude);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          this.addOrMoveStationMarker(lat, lng);
+        }
+      },
+    
+      deleteReferenceStation(station) {
+            /*
+                Delete a reference station after confirming with the user.
+
+                If the station is connected to other records, the backend will return
+                a friendly error message instead of allowing the page to crash.
+            */
+            this.loading = true;
+
+            const csrfToken = this.getCookie('csrftoken');
+
+            fetch(`${this.urls.deleteReferenceStationBase}${station.id}/`, {
+                method: "DELETE",
+                headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+                },
+            })
+            .then(response => {
+                return response.json().then(data => {
+                    if (!response.ok) {
+                    throw new Error(data.message || 'Request failed.');
+                    }
+
+                    this.loading = false;
+
+                    return data;
+            });
+            })
+            .then(data => {
+                this.showSnackbar(data.message, 'success');
+                this.loadReferenceStations();
+
+                this.loading = false;
+            })
+            .catch(error => {
+                console.error(error);
+                this.showSnackbar(error.message || 'Failed to delete reference station.', 'error');
+
+                this.loading = false;
+            });
+
+        },
+    
+      loadVariables() {
+            /*
+                Load variables that can be associated with a reference station.
+            */
+
+            this.loadingVariables = true;
+
+            fetch(this.urls.loadVariables)
+                .then(response => response.json())
+                .then(data => {
+                this.availableVariables = data.variables;
+                })
+                .catch(error => {
+                console.error(error);
+                this.showSnackbar('Failed to load variables.', 'error');
+                })
+                .finally(() => {
+                this.loadingVariables = false;
+                });
+        },
+
+      toggleSelectAllVariables() {
+            /*
+                Select or unselect all variables.
+            */
+
+            if (this.selectAllVariables) {
+                this.stationForm.variable_ids = this.availableVariables.map(variable => variable.id);
+            } else {
+                this.stationForm.variable_ids = [];
+            }
+        },
+
+      updateSelectAllVariablesState() {
+            /*
+                Keep the Select All checkbox in sync with the selected variables.
+            */
+
+            this.selectAllVariables = (
+                this.availableVariables.length > 0 &&
+                this.stationForm.variable_ids.length === this.availableVariables.length
+            );
+        },
+    
+        openThresholdDialog(station) {
+        /*
+            Open the threshold dialog for the selected reference station.
+        */
+
+        this.selectedThresholdStation = station;
+        this.thresholdDialog = true;
+        this.thresholdTab = 0;
+        this.thresholdError = false;
+        this.thresholdErrorMessage = '';
+
+        this.loadThresholds(station);
+        },
+
+        closeThresholdDialog() {
+            /*
+                Close and reset the threshold dialog.
+            */
+
+            this.thresholdDialog = false;
+            this.selectedThresholdStation = null;
+            this.thresholdVariables = [];
+            this.selectedThresholdVariableIds = [];
+            this.selectedThresholdVariableId = null;
+            this.thresholdSelectAllVariables = false;
+            this.rangeThresholds = [];
+            this.stepThresholds = [];
+            this.persistThresholds = [];
+            this.thresholdError = false;
+            this.thresholdErrorMessage = '';
+        },
+
+        loadThresholds(station) {
+        /*
+            Load all Range, Step, and Persist thresholds for the selected reference station.
+        */
+
+        this.loadingThresholds = true;
+
+        fetch(`${this.urls.loadThresholdsBase}${station.id}/thresholds/load/`)
+            .then(response => {
+            return response.json().then(data => {
+                if (!response.ok) {
+                throw new Error(data.message || 'Failed to load thresholds.');
+                }
+
+                return data;
+            });
+            })
+            .then(data => {
+                this.thresholdVariables = data.variables;
+                this.selectedThresholdVariableIds = data.variables.map(variable => variable.id);
+                this.selectedThresholdVariableId = this.selectedThresholdVariableIds.length
+                ? this.selectedThresholdVariableIds[0]
+                : null;
+
+                this.thresholdSelectAllVariables = true;
+
+                this.rangeThresholds = data.thresholds.range;
+                this.stepThresholds = data.thresholds.step;
+                this.persistThresholds = data.thresholds.persist;
+            })
+            .catch(error => {
+            console.error(error);
+            this.thresholdErrorMessage = error.message || 'Failed to load thresholds.';
+            this.thresholdError = true;
+            })
+            .finally(() => {
+            this.loadingThresholds = false;
+            });
+        },
+
+        toggleThresholdSelectAllVariables() {
+            /*
+                Select or unselect all threshold variables.
+            */
+
+            if (this.thresholdSelectAllVariables) {
+                this.selectedThresholdVariableIds = this.thresholdVariables.map(variable => variable.id);
+                this.selectedThresholdVariableId = this.selectedThresholdVariableIds.length
+                ? this.selectedThresholdVariableIds[0]
+                : null;
+            } else {
+                this.selectedThresholdVariableIds = [];
+                this.selectedThresholdVariableId = null;
+            }
+        },
+
+        handleThresholdVariableSelectionChange() {
+            /*
+                Keep the Select all checkbox synced and make sure the active
+                variable tab is still valid after variables are selected/removed.
+            */
+
+            this.thresholdSelectAllVariables = (
+                this.thresholdVariables.length > 0 &&
+                this.selectedThresholdVariableIds.length === this.thresholdVariables.length
+            );
+
+            if (
+                this.selectedThresholdVariableId &&
+                !this.selectedThresholdVariableIds.includes(this.selectedThresholdVariableId)
+            ) {
+                this.selectedThresholdVariableId = this.selectedThresholdVariableIds.length
+                ? this.selectedThresholdVariableIds[0]
+                : null;
+            }
+
+            if (!this.selectedThresholdVariableId && this.selectedThresholdVariableIds.length) {
+                this.selectedThresholdVariableId = this.selectedThresholdVariableIds[0];
+            }
+        },
+
+        saveThresholds() {
+        /*
+            Save Range, Step, and Persist thresholds.
+
+            Only selected variables are sent to the backend.
+        */
+
+        if (!this.selectedThresholdStation) {
+            return;
+        }
+
+        this.savingThresholds = true;
+
+        const csrfToken = this.getCookie('csrftoken');
+
+        const payload = {
+            range: this.rangeThresholds.filter(row =>
+            this.selectedThresholdVariableIds.includes(row.variable_id)
+            ),
+            step: this.stepThresholds.filter(row =>
+            this.selectedThresholdVariableIds.includes(row.variable_id)
+            ),
+            persist: this.persistThresholds.filter(row =>
+            this.selectedThresholdVariableIds.includes(row.variable_id)
+            ),
+        };
+
+        fetch(`${this.urls.saveThresholdsBase}${this.selectedThresholdStation.id}/thresholds/save/`, {
+            method: "POST",
+            headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(payload),
+        })
+            .then(response => {
+            return response.json().then(data => {
+                if (!response.ok) {
+                throw new Error(data.message || 'Failed to save thresholds.');
+                }
+
+                return data;
+            });
+            })
+            .then(data => {
+            this.showSnackbar(data.message, 'success');
+            this.closeThresholdDialog();
+            })
+            .catch(error => {
+            console.error(error);
+            this.thresholdErrorMessage = error.message || 'Failed to save thresholds.';
+            this.thresholdError = true;
+            })
+            .finally(() => {
+            this.savingThresholds = false;
+            });
+        },
+
+
+    },
+
+    computed: {
+
+        selectedThresholdVariables() {
+        /*
+            Variables currently selected in the variable selector.
+        */
+
+        return this.thresholdVariables.filter(variable =>
+            this.selectedThresholdVariableIds.includes(variable.id)
+        );
+        },
+
+        selectedVariableRangeThresholds() {
+        /*
+            Range rows for the currently selected variable tab.
+        */
+
+        return this.rangeThresholds.filter(row =>
+            row.variable_id === this.selectedThresholdVariableId
+        );
+        },
+
+        selectedVariableStepThresholds() {
+        /*
+            Step row for the currently selected variable tab.
+        */
+
+        return this.stepThresholds.filter(row =>
+            row.variable_id === this.selectedThresholdVariableId
+        );
+        },
+
+        selectedVariablePersistThresholds() {
+        /*
+            Persist row for the currently selected variable tab.
+        */
+
+        return this.persistThresholds.filter(row =>
+            row.variable_id === this.selectedThresholdVariableId
+        );
+        },
+
+    },
+
+    mounted() {
+      /*
+        Load table data when page opens.
+      */
+
+      this.loadReferenceStations();
+      this.loadVariables();
+    },
+  });
+</script>
+
+<style>
+    .reference-station-dialog .v-text-field input,
+    .reference-station-dialog .v-text-field input:focus,
+    .reference-station-dialog .v-text-field input[type="text"],
+    .reference-station-dialog .v-text-field input[type="text"]:focus,
+    .reference-station-dialog .v-text-field input[type="number"],
+    .reference-station-dialog .v-text-field input[type="number"]:focus {
+        border: none !important;
+        border-bottom: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        background: transparent !important;
+    }
+
+    .reference-station-dialog .v-text-field--outlined fieldset {
+        border-width: 1px !important;
+    }
+
+    .reference-station-dialog .v-text-field--outlined.v-input--is-focused fieldset {
+        border-color: #1976d2 !important;
+        border-width: 1px !important;
+    }
+
+    .threshold-dialog-title {
+        font-size: 18px;
+        font-weight: 500;
+    }
+
+    .threshold-dialog-subtitle {
+        margin-top: 3px;
+        font-size: 13px;
+        color: #777;
+    }
+</style>
+{% endblock %}
+
+
+{% block localstyles %}
+<style>
+  [v-cloak] {
+    display: none;
+  }
+
+  .srf-container {
+    padding: 20px;
+  }
+
+  .reference-dialog-title {
+    padding: 20px 24px 8px 24px !important;
+  }
+
+  .reference-dialog-text {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-top: 8px !important;
+    padding-bottom: 0 !important;
+  }
+
+  .reference-station-form-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 8px !important;
+    padding-bottom: 0 !important;
+  }
+
+  .reference-dialog-actions {
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+    padding-bottom: 16px !important;
+  }
+
+  .map-title {
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
+  }
+
+  .map-help-text {
+    display: block;
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .map-wrapper {
+    border: 1px solid #bdbdbd;
+    border-radius: 4px;
+    padding: 4px;
+    background: #ffffff;
+  }
+
+  .map-small {
+    height: 300px;
+    width: 100%;
+  }
+
+  .fullscreen-button-width {
+    width: 32px !important;
+    height: 32px !important;
+    line-height: 32px !important;
+    text-align: center !important;
+    padding: 0 !important;
+  }
+
+  .resize-map-icon {
+    font-size: 20px !important;
+    line-height: 32px !important;
+    color: #333;
+  }
+
+  .leaflet-control-button {
+    text-decoration: none !important;
+  }
+
+  @media (max-width: 768px) {
+    .reference-dialog-text {
+      padding-left: 12px !important;
+      padding-right: 12px !important;
+    }
+
+    .map-small {
+      height: 260px;
+    }
+  }
+</style>
+{% endblock %}

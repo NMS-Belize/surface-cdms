@@ -131,3 +131,34 @@ installer/src/surface_cdms/wx_config/productionfiles/
 
 # Generated artifacts
 **/artifacts/*
+
+# SURFACE app runtime data
+surface/data/
+surface/backup_restore_dumps/
+
+# SURFACE environment files
+surface/api/production.env
+surface/.env
+surface/**/*.env
+
+# SURFACE generated/static runtime files
+surface/api/static/admin/
+surface/api/static/colorfield/
+surface/api/static/gis/
+surface/api/static/import_export/
+surface/api/static/material/
+surface/api/static/rest_framework/
+surface/api/static/ckeditor/
+
+# Optional generated data
+surface/api/LrgsClient/
+
+# Runtime database/log/cache files
+surface/**/*.log
+surface/**/db.sqlite3
+surface/**/db.sqlite3-journal
+surface/**/__pycache__/
+surface/**/*.py[cod]
+
+# OS files
+surface/**/.DS_Store

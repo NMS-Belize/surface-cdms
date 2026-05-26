@@ -1,0 +1,949 @@
+{% extends "base.html" %} {% block content %} {% load wx_filters%}
+<div class="srf-container">
+
+  <div id="app" v-cloak>
+
+    <v-app>
+
+      <v-content fluid fill-height style="background: white">
+
+        <v-layout column>
+          <!-- Page title -->
+          <v-flex>
+            <h1 class="display-1 text-uppercase">Data Inventory</h1>
+          </v-flex>
+
+          <!-- page options -->
+          <v-layout column fluid>
+
+            <v-layout mt-3 mb-5>
+              <!-- start year option  -->
+              <v-flex lg2 mr-10 class="d-flex justify-between">
+                <v-text-field
+                    v-model="requestObject.start_year"
+                    label="Start year"
+                    required
+                    hint="*Required"
+                ></v-text-field>
+              </v-flex>
+
+              <!-- end year option -->
+              <v-flex lg2 mr-10 class="d-flex justify-between">
+                <v-text-field
+                    v-model="requestObject.end_year"
+                    label="End date"
+                    required
+                    hint="*Required"
+                ></v-text-field>
+              </v-flex>
+
+              <!-- station type select (is_automatic) -->
+              <v-flex lg1 mr-10 class="d-flex justify-center">
+                <v-switch
+                    label="Automatic"
+                    inset
+                    v-model="requestObject.is_automatic"
+                ></v-switch>
+              </v-flex>
+
+              <!-- submit btn -->
+              <v-flex mt-5 lg2 class="d-flex justify-between">
+                <v-btn
+                    color="success"
+                    @click="getDataInventory"
+                    :disabled="$v.requestObject.$invalid"
+                >
+                  SUBMIT
+                </v-btn
+                >
+              </v-flex>
+
+            </v-layout>
+
+            <!-- alert pop up -->
+            <v-alert v-model="request_error" transition="scale-transition" dismissible border="left" type="error" dense elevation="2">
+              [[ request_error_message ]]
+            </v-alert>
+
+            <!-- warning pop up -->
+            <v-alert v-model="request_warning" transition="scale-transition" dismissible border="left" type="warning" dense elevation="2">
+              [[ request_warning_message ]]
+            </v-alert>
+
+            <!-- loading overlay -->
+            <!-- 
+            <v-overlay :value="loading">
+              <v-progress-circular
+                :size="120"
+                :width="10"
+                :rotate="-90"
+                :value="progress"
+                color="primary"
+              >
+                [[ Math.floor(progress) ]]
+              </v-progress-circular>
+            </v-overlay>
+            -->
+
+            <!-- loading overlay -->
+            <v-overlay :value="loading">
+              <v-progress-circular
+                  indeterminate
+                  size="64"
+              >
+                [[ Math.floor(progress) ]]%
+              </v-progress-circular>
+            </v-overlay> 
+
+            <!-- ------------------------------------------------------------------------------------------------------------------------------ -->
+
+            <!--  -->
+            <v-layout mt-3 :hidden="regionSet == null" column fluid>
+
+              <!-- "search result" title -->
+              <v-layout>
+                <v-flex justify-center>
+                  Search Result
+                  <v-divider style="margin-top: 5px"></v-divider>
+                </v-flex>
+              </v-layout>
+
+              <!-- inventory container -->
+              <v-layout ml-3 mt-3 column>
+
+                <!-- inventory firstLevel -->
+                <template v-if="pageStage == 'firstLevel'">
+
+                  <v-layout mt-3 w-100>
+                    <!-- station output description -->
+                    <v-layout column fluid w-50>
+                      <div> Total Stations: [[stations.length]]</div>
+                      <div> Date: [[ display_start_year ]] to [[ display_end_year ]]</div>
+                    </v-layout>
+                    
+                    <!-- search bar -->
+                    <v-layout pl-5 column fluid align-end w-25>
+                      <v-flex lg2 class="d-flex" w-75>
+                        <v-text-field
+                            v-model="stationNameFilter"
+                            style="padding-top: 0"
+                            label="Station name"
+                            required>
+                          <v-icon slot="append">
+                            mdi-magnify
+                          </v-icon>
+                        </v-text-field>
+                      </v-flex>
+                    </v-layout>
+                  </v-layout>
+
+                  <v-layout mt-3 w-100>
+                    <!-- hold the region pannels which expand to show the station list -->
+                    <v-expansion-panels>
+                      <!-- looping through each region -->
+                      <v-expansion-panel v-for="(stations, regionName) in filteredRegionSet" :key="regionName">
+                        <!-- panel header ex. Belize 2020 2021 2025 -->
+                        <v-expansion-panel-header v-slot="{open}" style="min-height: 0;">
+                          <v-simple-table>
+                            <template>
+                              <thead>
+                              <tr style="border-bottom: 1px solid rgba(0, 0, 0, .3);">
+                                <th class="surface-main-cell">[[regionName]]</th>
+                                <!-- loop through the years and display them as table headers -->
+                                <th class="surface-detail-cell" v-for="(availableYear, index) in availableYears">
+                                  [[availableYear]]
+                                </th>
+                              </tr>
+                              </thead>
+                            </template>
+                          </v-simple-table>
+                        </v-expansion-panel-header>
+
+                        <!-- pannel content. Holding all stations in a given region -->
+                        <v-expansion-panel-content>
+
+                          <!-- pannel content breaks down into an additional level to show station variables -->
+                          <v-expansion-panels>
+
+                            <!-- Holds the headers and the contents for the content pannel -->
+                            <v-expansion-panel v-for="(station, stationIndex) in stations" :key="stationIndex"
+                                               @change="getVariableByStation(station, 5)"
+                                               style="margin-bottom: .4vh;border: none">
+
+                              <!-- header for the content.ex Altun ha etc...-->
+                              <v-expansion-panel-header v-slot="{open}" style="background: #e6e6e6; padding-left: 0">
+                                <div>
+                                  
+                                  <!-- station heaader -->
+                                  <v-simple-table style="background: #e6e6e6;">
+                                    <template>
+                                      <tbody>
+                                      <tr style="border: none;">
+                                        <!-- station name and code -->
+                                        <td class="surface-main-cell" style="color: rgba(0,0,0,.7) !important;">
+                                          [[station.name]] - [[station.code]]
+                                        </td>
+                                        
+                                        <!-- <td class="surface-value-detail-cell" -->
+                                        <td class="surface-detail-cell"
+                                            v-for="(availableYear, index) in availableYears"
+                                            :key="index"
+                                            @click="fetchVariables(availableYear, station, station.yearSet[availableYear])">
+
+                                          <div
+                                              :style="{'background-color': getPercentageColor(station.yearSet[availableYear] || 0)}"
+                                              class="value-cell" style="height: 75%">
+                                            [[ station.yearSet[availableYear] || 0 ]]%
+                                          </div>
+                                        </td>
+                                      </tr>
+                                      </tbody>
+                                    </template>
+                                  </v-simple-table>
+
+                                  <!-- display station metadata -->
+                                  <div v-if="open" class="surface-station-details" style="padding-left: 2vw;">
+                                    <div>Local station ID: [[station.id]]</div>
+                                    <div>Begin date: [[station.begin_date_formatted]]</div>
+                                    <div>Automatic: [[station.is_automatic ? 'True': 'False' ]]</div>
+                                  </div>
+
+                                </div>
+                              </v-expansion-panel-header>
+
+                              <!-- holds station variable content the limit is 5 variables per station this can be increased if needed. More is displayed on the second level-->
+                              <v-expansion-panel-content>
+                        
+                                <template v-if="station.variables">
+                                  <v-simple-table style="margin-right: 24px; padding-left: 1vw">
+                                    <template>
+                                      <tbody>
+                                      <tr style="border: none;" v-for="(variable, variableId) in station.variables"
+                                          :key="variableId">
+                                        <td class="surface-main-cell surface-main-variable-cell">
+                                          [[ variable.name ]]
+                                        </td>
+                                        <!-- variable percentage -->
+                                        <td class="surface-value-detail-cell-wide"
+                                            v-for="(availableYear, index) in availableYears" :key="index">
+                                          <div
+                                              :style="{'background-color': getPercentageColor(variable.yearSet[availableYear] || 0)}"
+                                              class="value-cell">
+                                            [[ variable.yearSet[availableYear] || 0 ]]%
+                                          </div>
+                                        </td>
+                                      </tr>
+                                      </tbody>
+                                    </template>
+                                  </v-simple-table>
+                                </template>
+
+                              </v-expansion-panel-content>
+                            </v-expansion-panel>
+                          </v-expansion-panels>
+                        </v-expansion-panel-content>
+                      </v-expansion-panel>
+                    </v-expansion-panels>
+                  </v-layout>
+                  
+                </template>
+
+                <!-- inventory secondLevel : individual station view  -->
+                <template v-if="pageStage == 'secondLevel'">
+
+                  <!-- second level header information -->
+                  <v-layout mt-3 w-100>
+                    <!-- station metadata, search year -->
+                    <v-layout column fluid w-50>
+                      <div>[[this.currentData.station.name]] - [[this.currentData.station.code]]</div>
+                      <div>Date: [[this.currentData.year]]</div>
+                      <div class="surface-station-details">
+                        <div>Local station ID: [[this.currentData.station.id]]</div>
+                        <div>Station Begin date: [[this.currentData.station.begin_date_formatted]]</div>
+                        <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
+                      </div>
+                    </v-layout>
+
+                    <!-- back button -->
+                    <v-layout pl-5 column fluid align-end w-25>
+                      <v-flex lg2 class="d-flex justify-between">
+                        <v-btn
+                            color="error"
+                            @click="() => pageStage = 'firstLevel'"
+                        >Go Back
+                        </v-btn>
+                      </v-flex>
+                    </v-layout>
+
+                  </v-layout>
+
+                  <!-- second level content -->
+                  <v-simple-table>
+                    <template>
+                      <thead>
+                      <!-- Month headers -->
+                      <tr>
+                        <th></th>
+                        <th class="month-cell" v-for="(month, monthIndex) in availableMonths" :key="monthIndex">
+                          [[month]]
+                        </th>
+                      </tr>
+                      </thead>
+                      
+                      <!-- variable content -->
+                      <tbody>
+                      <tr v-for="(variable, variableId) in variableSet" :key="variableId" style="border: none;">
+                        <td class="month-main-cell">[[ variable.name ]]</td>
+
+                        <td v-for="(availableYear, index) in availableMonths" :key="index"
+                            @click="fetchVariableDetails(index + 1, variable, variable.monthSet[index + 1])"
+                            class="month-cell month-value-detail-cell">
+
+                          <div
+                              :style="{'background-color': getPercentageColor(variable.monthSet[index + 1] || 0)}"
+                              class="value-cell">
+                            [[ variable.monthSet[index + 1] || 0 ]]%
+                          </div>
+                        </td>
+                      </tr>
+                      </tbody>
+                    </template>
+                  </v-simple-table>
+
+                </template>
+
+                <!-- Third level or month view -->
+                <template v-if="pageStage == 'thirdLevel'">
+
+                  <!--  -->
+                  <v-layout mt-3 w-100>
+                    <v-layout column fluid w-50>
+                      <div>[[this.currentData.station.name]] - [[this.currentData.station.code]] - [[this.currentData.variable.name]]</div>
+                      <div>Date: [[ this.availableMonthNames[this.currentData.month - 1] ]] [[this.currentData.year]]</div>
+                      <div class="surface-station-details">
+                        <div>Local station ID: [[this.currentData.station.id]]</div>
+                        <div>Begin date: [[this.currentData.station.begin_date_formatted]]</div>
+                        <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
+                      </div>
+                    </v-layout>
+                    <v-layout pl-5 column fluid align-end w-25>
+                      <v-flex lg2 class="d-flex justify-between">
+                        <v-btn
+                            color="error"
+                            @click="() => pageStage = 'secondLevel'"
+                        >Go Back
+                        </v-btn>
+                      </v-flex>
+                    </v-layout>
+                  </v-layout>
+
+                  <!--  -->
+                  <v-simple-table>
+
+                    <template>
+                      <thead>
+                      <tr>
+                        <th class="month-cell" v-for="(day, dayIndex) in availableDays" :key="dayIndex">
+                          [[day]]
+                        </th>
+                      </tr>
+                      </thead>
+
+                      <tr v-for="week in variableDetails">
+                        <td v-for="dayData in week" style="text-align: center; vertical-align: middle; padding: 0;">
+                          <template v-if="dayData != null">
+                            <div :style="{'background-color': getPercentageColor(dayData.percentage || 0)}" class="calendar-value">
+                              <div style="font: 18px Roboto, sans-serif; padding: 8px 0px 3px 0px"><b>[[ dayData.day ]]</b></div>
+                              <div class="calendar-details">
+                                <div>[[ dayData.percentage ]]% - [[ dayData.record_count ]] of [[dayData.ideal_record_count ]]
+                                </div>
+                                <div>[[ dayData.qc_passed_percentage || 0 ]]% - QC passed</div>
+                                {% if request|has_any_feature_permission:"quality-control:read" %}
+                                <div class="calendar-button" @click="goToDataValidation(dayData.day)">Data Validation</div>
+                                {% endif %}
+                                
+                                {% if request|has_any_feature_permission:"station-report:read" %}
+                                <div class="calendar-button" @click="goToStationReport(dayData.day)">Station Report</div>
+                                {% endif %}
+                              </div>
+                            </div>
+                          </template>
+
+                        </td>
+                      </tr>
+                    </template>
+
+                  </v-simple-table>
+                </template>
+
+              </v-layout>
+
+            </v-layout>
+
+          </v-layout>
+
+        </v-layout>
+
+      </v-content>
+
+      <!--  -->
+      <pre id="csv" style="display: none"></pre>
+
+    </v-app>
+  </div>
+
+  {% endblock %} {% block localjavascript %}
+
+  <script>
+    Vue.use(HighchartsVue.default);
+    Vue.use(window.vuelidate.default);
+
+    const { required, minLength } = window.validators;
+
+    new Vue({
+      el: "#app",
+      vuetify: new Vuetify(),
+      delimiters: ["[[", "]]"],
+      validations: {
+        requestObject: {
+          start_year: { required },
+          end_year: { required }
+        }
+      },
+      
+      data: {
+        timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        request_error:false,
+        request_error_message: '',
+        request_warning:false,
+        request_warning_message: '',
+        loading: false,
+        progress: 0,
+        progressIntervalId: null,
+        searchVariables: '',
+        seriesData: [],
+        variable_list: [
+          {% for variable in variable_list %}
+            {
+              variable: {{ variable.id }},
+              variable_name: "{{ variable.name }}",
+              unit_symbol: "{{ variable.unit.symbol }}"
+            },
+          {% endfor %}
+        ],
+        layout: {
+          yAxis: {
+            title: {
+              text: null
+            },
+          },
+        },
+        stationNameFilter: null,
+        display_start_year: null,
+        display_end_year: null,
+        rawStationData: [],
+        regionSet: null,
+        originalRegionSet: null,
+        variableSet: null,
+        availableYears: [],
+        availableMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        availableMonthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+        availableDays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        currentData: {
+          station: null,
+          variable: null,
+          month: null,
+        },
+        variableDetails: null,
+        pageStage: 'firstLevel',
+        regionRevision: 0,
+        stations: [],
+        requestObject: {
+          start_year: moment().add(-5, 'years').format('YYYY'),
+          end_year: moment().add(1, 'years').format('YYYY'),
+          is_automatic: true,
+        },
+        simpleTextFieldsRules: [
+          v => (v !== undefined && v !== "") || "This field is required"
+        ],
+        drilldowns: {},
+        colorGradient: new Color('#f08080').range(new Color('#90ee90'), { outputSpace: "srgb" })
+      },
+
+      
+      watch: {
+        variables (newSelectedArray, oldSelectedArray) {
+          this.searchVariables = '';
+        }
+      },
+      
+      
+      computed: {
+        filteredRegionSet() {
+          if (this.regionRevision < 0){
+            return;
+          }
+
+          if (!this.stationNameFilter) {
+            return this.originalRegionSet;
+          }
+
+          for(regionName in this.originalRegionSet) {
+            this.regionSet[regionName] = this.originalRegionSet[regionName].filter(station => station.filterName.toLowerCase().includes(this.stationNameFilter.toLowerCase()));
+            if (this.regionSet[regionName].length == 0) {
+              delete this.regionSet[regionName];
+            }
+          }
+
+          return this.regionSet;
+        }
+
+      },
+      
+      watch: {
+        loading(newVal) {
+          if (newVal) {
+            this.startProgress();  // start when loading = true
+          } else {
+            this.resetProgress();  // reset when loading = false
+          }
+        }
+      },
+
+      beforeDestroy() {
+        clearInterval(this.progressIntervalId);
+      },
+
+      methods: {
+        goToStationReport(day) {
+          const initial_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+          const final_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${(day + 1).toString().padStart(2, "0")}`;
+
+          const url = `/wx/products/station_report/?start_date=${initial_datetime}&end_date=${final_datetime}&station_id=${this.currentData.station.id}&measurement_variable=${this.currentData.variable.measurement_variable_name}`;
+          window.open(url, '_blank');
+        },
+        goToDataValidation(day) {
+          const initial_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+          const final_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${(day + 1).toString().padStart(2, "0")}`;
+
+          const url = `/wx/quality_control/validation?start_date=${initial_datetime}&end_date=${final_datetime}&station_id=${this.currentData.station.id}&variable_id=${this.currentData.variable.id}`;
+          window.open(url, '_blank');
+        },
+        getPercentageColor(percentage) {
+          return this.colorGradient(percentage/100).toString();
+        },
+        
+        fetchVariableDetails(month, variable, percentage) {
+          // if (percentage == null) {
+          if (percentage == null || percentage == 0) {
+            this.request_warning = true;
+            this.request_warning_message = "No data to display";
+            return;
+          }
+
+          this.loading = true;
+
+          this.currentData.month = month
+          this.currentData.variable = variable
+
+          axios.get(`/api/station_variable_data_day_inventory/?&year=${this.currentData.year}&month=${this.currentData.month}&station_id=${this.currentData.station.id}&variable_id=${this.currentData.variable.id}`)
+          .then(result => {
+            const taskId = result.data.task_id;
+            this.pollFetchVariableTask(taskId); // poll until done
+
+            // console.log(`This is the task ID: ${taskId}`) // log the task id
+
+          }).catch((error) => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = error.message || 'An unknown error occurred';
+          });
+
+        },
+
+        fetchVariableDetailsLink() {
+          this.loading = true;
+
+          console.log(this.currentData.station.id)
+
+          axios.get(`/api/station_variable_data_day_inventory/?&year=${this.currentData.year}&month=${this.currentData.month}&station_id=${this.currentData.station_id}&variable_id=${this.currentData.variable_id}`)
+          .then(result => {
+            const taskId = result.data.task_id;
+            this.pollFetchVariableTask(taskId); // poll until done
+
+            // console.log(`This is the task ID: ${taskId}`) // log the task id
+
+          }).catch((error) => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = error.message || 'An unknown error occurred';
+          });
+
+        },
+        
+        pollFetchVariableTask(taskId) {
+          // Define pollFetchVariableTask
+          const interval = setInterval(() => {
+            axios.get(`/api/task/${taskId}/`)
+              .then(res => {
+                if (res.data.status === "completed") {
+                  clearInterval(interval);
+
+                  // process result
+                  const rows = [];
+                  for (let i=0; i < 6; i++) {
+                    const columns = [];
+
+                    for (let j=0; j < 7; j++) {
+                      columns[j] = null;
+                    }
+                    rows[i] = columns;
+                  }
+
+                  count = 0
+
+                  res.data.data.forEach(data => {
+                    rows[count][data.dow] = data;
+                    if(data.dow == 6) {
+                      count += 1;
+                    }
+                  });
+
+                  this.variableDetails = rows;
+
+                  // show the month view (third level)
+                  this.pageStage = 'thirdLevel';
+
+                  this.loading = false;
+                  // console.log(res.data.data); // the result
+                } 
+                else if (res.data.status === "failed") {
+                  clearInterval(interval);
+                  this.loading = false;
+                  this.request_error = true;
+                  this.request_error_message = res.data.error;
+                }
+              })
+              .catch(err => {
+                clearInterval(interval);
+                this.loading = false;
+                this.request_error = true;
+                this.request_error_message = err.message || 'Task check failed';
+              });
+          }, 1000); // poll every 1s
+        },
+        
+        fetchVariables(year, station, percentage) {
+          if (percentage == null) {
+            return;
+          }
+
+          this.pageStage = 'secondLevel';
+          this.loading = true;
+          this.currentData = {
+            year: year,
+            station: station,
+          };
+
+          axios.get(`/api/station_variable_data_month_inventory/?&year=${year}&station_id=${station.id}`)
+            .then(result => {
+              variableSet = {}
+              result.data.forEach(record => {
+                  if (variableSet[record.variable.id] == null) {
+                      variableSet[record.variable.id] = record.variable;
+                      record.variable.monthSet = {};
+                  }
+                  variableSet[record.variable.id].monthSet[record.month] = record.percentage;
+              });
+
+              this.variableSet = variableSet;
+              this.loading = false;
+          }).catch((error) => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = `${error}`;
+          });
+
+        },
+        
+        getDataInventory(){
+          // resetting the page stage to null
+          this.pageStage = null;
+
+          // enable loading overlay
+          this.loading = true;
+
+          // get the years
+          axios.get(`/api/data_inventory/?&start_date=${this.requestObject.start_year}&end_date=${this.requestObject.end_year}&is_automatic=${this.requestObject.is_automatic}`)
+          .then(result => {
+            const stationSet = {};
+            const stationArray = [];
+            const regionSet = {};
+            const yearSet = {};
+            let yearArray = [];
+
+            this.rawStationData = result.data;
+
+            this.rawStationData.forEach(record => {
+               this.pageStage = 'firstLevel';
+
+               if (stationSet[record.station.id] == null) {
+                  stationArray.push(record.station);
+                  stationSet[record.station.id] = record.station;
+                  record.station.yearSet = {};
+                  record.station.variables = null;
+                  record.station.filterName = record.station.name + ' ' + record.station.code;
+                  record.station.begin_date_formatted = moment.utc(record.station.begin_date).format('YYYY-MM-DD');
+
+                 const stationRegion = record.station.region || "Others";
+                 if (regionSet[stationRegion] == null) {
+                    regionSet[stationRegion] = [];
+                 }
+                 regionSet[stationRegion].push(record.station);
+
+                 if (yearSet[record.year] == null) {
+                    yearSet[record.year] = true;
+                    yearArray.push(record.year);
+                 }
+              }
+              stationSet[record.station.id].yearSet[record.year] = record.percentage;
+            });
+
+            if (yearArray.length != 0) {
+              yearArray = yearArray.sort()
+            }
+            this.regionSet = Object.assign({}, regionSet);
+            this.originalRegionSet = regionSet;
+            this.availableYears = yearArray;
+            this.stations = stationArray;
+
+            this.display_start_year = this.requestObject.start_year;
+            this.display_end_year = this.requestObject.end_year;
+
+            this.loading = false;
+          }).catch((error) => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = `${error}`;
+          });
+        },
+        
+        getVariableByStation(station, recordLimit) {
+          if (station.variables != null || station.loading) {
+            return;
+          }
+
+          station.loading = true;
+          axios.get(`/api/data_inventory_by_station/?&start_date=${this.requestObject.start_year}&end_date=${this.requestObject.end_year}&station_id=${station.id}&record_limit=${recordLimit}`)
+          .then(result => {
+            variableSet = {}
+            result.data.forEach(record => {
+                if (variableSet[record.variable.id] == null) {
+                    variableSet[record.variable.id] = record.variable;
+                    record.variable.yearSet = {};
+                }
+                variableSet[record.variable.id].yearSet[record.year] = record.percentage;
+            });
+            this.regionRevision++;
+
+            station.variables = variableSet;
+            station.loading = false;
+          });
+        },
+        
+        startProgress() {
+          clearInterval(this.progressIntervalId);
+          this.progress = 0;
+
+          const duration = 5000; // 5 seconds total
+          const target = 98;     // Fake-loading cap
+          const stepTime = 50;   // Update every 50ms for 20fps smoothness
+          
+          // Calculate how much to add per 50ms tick
+          const step = target / (duration / stepTime);
+
+          this.progressIntervalId = setInterval(() => {
+            if (this.progress < target) {
+              // Use a small bit of randomness to make it look "human" or "real"
+              const jitter = Math.random() * 0.1; 
+              this.progress = Math.min(this.progress + step + jitter, target);
+            } else {
+              clearInterval(this.progressIntervalId);
+            }
+          }, stepTime);
+        },
+
+        resetProgress() {
+          clearInterval(this.progressIntervalId);
+          this.progress = 0;
+        },
+
+
+        setParamsAndRunQuery() {
+          const queryString = window.location.search;
+          const urlParams = new URLSearchParams(queryString);
+
+          const station_id = urlParams.get('station_id')
+          const variable_id = urlParams.get('variable_id')
+          const month = urlParams.get('month')
+          const year = urlParams.get('year')
+
+          if(station_id != null && variable_id != null && month != null && year != null ){
+            this.currentData.month = month;
+            this.currentData.year = year;
+            this.currentData.station_id = station_id;
+            this.currentData.variable_id = variable_id;
+
+            this.fetchVariableDetailsLink()
+          }
+        },
+      },
+      
+      mounted() {
+        axios.defaults.xsrfHeaderName = "X-CSRFToken"
+        axios.defaults.xsrfCookieName = 'csrftoken'
+
+        window.addEventListener("load", () => {
+          this.setParamsAndRunQuery();
+        });
+      },
+    });
+  </script>
+
+  <style>
+        .v-expansion-panel-content__wrap {
+          padding: 0;
+        }
+
+        .v-expansion-panel-header {
+          padding: 0;
+        }
+
+        .surface-main-cell {
+          min-width: 10vw;
+          max-width: 10vw;
+          width: 10vw;
+          border: none !important;
+          font: 15px Roboto, sans-serif !important;
+          color: #000000 !important;
+        }
+
+        .surface-main-variable-cell {
+          font: 13px Roboto, sans-serif !important;
+        }
+
+        .surface-detail-cell {
+          min-width: 1vw;
+          max-width: 1vw;
+          border-bottom: none !important;
+          margin-left: 2px !important;
+          width: 1vw;
+          text-align: center !important;
+          vertical-align: middle;
+          font: 15px Roboto, sans-serif !important;
+          color: #000000 !important;
+        }
+
+        .surface-value-detail-cell {
+          min-width: 1vw;
+          max-width: 1vw;
+          border-bottom: none !important;
+          width: 1vw;
+          text-align: center !important;
+          vertical-align: middle !important;
+          font: 15px Roboto, sans-serif !important;
+          color: #000000 !important;
+          padding: 4px 2px 0 0 !important;
+        }
+
+        .surface-value-detail-cell-wide {
+          min-width: 1vw;
+          max-width: 1vw;
+          border-bottom: none !important;
+          width: 1vw;
+          text-align: center !important;
+          vertical-align: middle !important;
+          font: 15px Roboto, sans-serif !important;
+          color: #000000 !important;
+          padding-top: 4px !important;
+        }
+
+        .surface-station-details {
+          font: 13px Roboto, sans-serif !important;
+          color: rgba(0,0,0,.5) !important;
+          padding-bottom: 1vh;
+        }
+
+        .theme--light.v-expansion-panels .v-expansion-panel:not(:first-child)::after {
+          border: none;
+        }
+
+        .value-cell {
+          width: 100%;
+          height: 100%;
+          text-align: center !important;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          border-radius: 5px;
+        }
+
+        .month-main-cell {
+          min-width: 25vw;
+          max-width: 25vw;
+          width: 25vw;
+          border: none !important;
+          font: 14px Roboto, sans-serif !important;
+          color: #000000 !important;
+        }
+
+        .month-cell {
+          min-width: 5vw;
+          max-width: 5vw;
+          width: 5vw;
+          border: none !important;
+          text-align: center !important;
+          vertical-align: middle !important;
+          font: 15px Roboto, sans-serif !important;
+          color: #000000 !important;
+        }
+
+        .month-value-detail-cell {
+          padding: 4px 2px 0 0 !important;
+        }
+
+        .month-value-detail-cell:hover {
+          cursor: pointer !important;
+        }
+
+        tr:hover {
+          background-color: transparent !important;
+        }
+
+        .calendar-value {
+          padding-bottom: 5px;
+        }
+
+        .calendar-details {
+          background-color: rgba(220, 220, 220, .5);
+          margin: 2px 5px 0px 5px;
+          border-radius: 5px;
+          padding-bottom: 4px;
+        }
+
+        .calendar-button {
+          background-color: rgb(120, 120, 120);
+          margin: 2px 10px 2px 10px;
+          padding: 4px 0px 4px 0px;
+          border-radius: 5px;
+          font: 14px Roboto, sans-serif !important;
+          color: rgb(220, 220, 220) !important;
+        }
+
+        .calendar-button:hover {
+          background-color: rgb(140, 140, 140);
+          cursor: pointer;
+        }
+  </style>
+</div>
+{% endblock %}

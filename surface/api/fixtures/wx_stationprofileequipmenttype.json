@@ -1,0 +1,475 @@
+[
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 15,
+        "fields": {
+            "created_at": "2024-10-16T01:36:55.389Z",
+            "updated_at": "2024-10-16T02:02:20.231Z",
+            "equipment_type_order": 13,
+            "equipment_type_id": 18,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 14,
+        "fields": {
+            "created_at": "2024-10-16T01:34:19.096Z",
+            "updated_at": "2024-10-16T02:04:53.369Z",
+            "equipment_type_order": 12,
+            "equipment_type_id": 26,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 13,
+        "fields": {
+            "created_at": "2024-10-16T01:34:01.092Z",
+            "updated_at": "2024-10-16T02:05:07.146Z",
+            "equipment_type_order": 11,
+            "equipment_type_id": 23,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 28,
+        "fields": {
+            "created_at": "2024-10-16T01:56:32.255Z",
+            "updated_at": "2024-10-16T02:06:38.254Z",
+            "equipment_type_order": 13,
+            "equipment_type_id": 18,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 27,
+        "fields": {
+            "created_at": "2024-10-16T01:56:17.922Z",
+            "updated_at": "2024-10-16T02:06:49.326Z",
+            "equipment_type_order": 12,
+            "equipment_type_id": 26,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 26,
+        "fields": {
+            "created_at": "2024-10-16T01:55:53.798Z",
+            "updated_at": "2024-10-16T02:06:59.658Z",
+            "equipment_type_order": 11,
+            "equipment_type_id": 23,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 2,
+        "fields": {
+            "created_at": "2023-08-08T17:22:45.764Z",
+            "updated_at": "2026-02-04T17:20:56.051Z",
+            "equipment_type_order": 1,
+            "equipment_type_id": 3,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 6,
+        "fields": {
+            "created_at": "2024-10-15T19:59:20.303Z",
+            "updated_at": "2026-02-04T17:21:05.030Z",
+            "equipment_type_order": 2,
+            "equipment_type_id": 2,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 9,
+        "fields": {
+            "created_at": "2024-10-15T20:06:53.424Z",
+            "updated_at": "2026-02-04T17:21:33.676Z",
+            "equipment_type_order": 3,
+            "equipment_type_id": 14,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 39,
+        "fields": {
+            "created_at": "2024-10-16T02:06:10.565Z",
+            "updated_at": "2026-02-04T17:21:46.167Z",
+            "equipment_type_order": 4,
+            "equipment_type_id": 53,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 52,
+        "fields": {
+            "created_at": "2026-02-04T17:23:39.278Z",
+            "updated_at": "2026-02-04T17:23:39.278Z",
+            "equipment_type_order": 5,
+            "equipment_type_id": 58,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 53,
+        "fields": {
+            "created_at": "2026-02-04T17:24:14.272Z",
+            "updated_at": "2026-02-04T17:24:14.272Z",
+            "equipment_type_order": 6,
+            "equipment_type_id": 20,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 11,
+        "fields": {
+            "created_at": "2024-10-16T01:32:28.180Z",
+            "updated_at": "2026-02-04T17:25:36.954Z",
+            "equipment_type_order": 7,
+            "equipment_type_id": 24,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 12,
+        "fields": {
+            "created_at": "2024-10-16T01:32:53.156Z",
+            "updated_at": "2026-02-04T17:29:54.224Z",
+            "equipment_type_order": 9,
+            "equipment_type_id": 25,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 42,
+        "fields": {
+            "created_at": "2024-10-16T02:17:23.982Z",
+            "updated_at": "2026-02-04T17:30:46.058Z",
+            "equipment_type_order": 1,
+            "equipment_type_id": 3,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 43,
+        "fields": {
+            "created_at": "2024-10-16T02:17:38.873Z",
+            "updated_at": "2026-02-04T17:30:54.636Z",
+            "equipment_type_order": 2,
+            "equipment_type_id": 2,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 46,
+        "fields": {
+            "created_at": "2024-10-16T02:18:12.966Z",
+            "updated_at": "2026-02-04T17:31:02.758Z",
+            "equipment_type_order": 3,
+            "equipment_type_id": 14,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 47,
+        "fields": {
+            "created_at": "2024-10-16T02:18:24.845Z",
+            "updated_at": "2026-02-04T17:31:33.938Z",
+            "equipment_type_order": 4,
+            "equipment_type_id": 53,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 49,
+        "fields": {
+            "created_at": "2024-10-16T02:18:55.775Z",
+            "updated_at": "2026-02-04T17:33:14.822Z",
+            "equipment_type_order": 7,
+            "equipment_type_id": 24,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 55,
+        "fields": {
+            "created_at": "2026-02-04T17:33:31.671Z",
+            "updated_at": "2026-02-04T17:33:31.671Z",
+            "equipment_type_order": 5,
+            "equipment_type_id": 58,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 56,
+        "fields": {
+            "created_at": "2026-02-04T17:33:53.368Z",
+            "updated_at": "2026-02-04T17:33:53.368Z",
+            "equipment_type_order": 6,
+            "equipment_type_id": 20,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 18,
+        "fields": {
+            "created_at": "2024-10-16T01:45:25.581Z",
+            "updated_at": "2026-02-04T17:35:12.168Z",
+            "equipment_type_order": 1,
+            "equipment_type_id": 3,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 30,
+        "fields": {
+            "created_at": "2024-10-16T01:57:31.784Z",
+            "updated_at": "2026-02-04T17:35:22.885Z",
+            "equipment_type_order": 1,
+            "equipment_type_id": 3,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 19,
+        "fields": {
+            "created_at": "2024-10-16T01:45:48.180Z",
+            "updated_at": "2026-02-04T17:36:10.024Z",
+            "equipment_type_order": 2,
+            "equipment_type_id": 2,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 31,
+        "fields": {
+            "created_at": "2024-10-16T01:57:54.592Z",
+            "updated_at": "2026-02-04T17:36:14.896Z",
+            "equipment_type_order": 2,
+            "equipment_type_id": 2,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 22,
+        "fields": {
+            "created_at": "2024-10-16T01:54:33.300Z",
+            "updated_at": "2026-02-04T17:36:24.898Z",
+            "equipment_type_order": 3,
+            "equipment_type_id": 14,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 34,
+        "fields": {
+            "created_at": "2024-10-16T01:59:23.236Z",
+            "updated_at": "2026-02-04T17:36:29.944Z",
+            "equipment_type_order": 3,
+            "equipment_type_id": 14,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 40,
+        "fields": {
+            "created_at": "2024-10-16T02:08:38.566Z",
+            "updated_at": "2026-02-04T17:36:42.987Z",
+            "equipment_type_order": 4,
+            "equipment_type_id": 53,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 38,
+        "fields": {
+            "created_at": "2024-10-16T02:03:57.684Z",
+            "updated_at": "2026-02-04T17:36:48.998Z",
+            "equipment_type_order": 4,
+            "equipment_type_id": 53,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 58,
+        "fields": {
+            "created_at": "2026-02-04T17:37:10.325Z",
+            "updated_at": "2026-02-04T17:37:10.325Z",
+            "equipment_type_order": 5,
+            "equipment_type_id": 58,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 59,
+        "fields": {
+            "created_at": "2026-02-04T17:37:19.421Z",
+            "updated_at": "2026-02-04T17:37:19.421Z",
+            "equipment_type_order": 5,
+            "equipment_type_id": 58,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 60,
+        "fields": {
+            "created_at": "2026-02-04T17:37:53.083Z",
+            "updated_at": "2026-02-04T17:37:53.083Z",
+            "equipment_type_order": 6,
+            "equipment_type_id": 20,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 61,
+        "fields": {
+            "created_at": "2026-02-04T17:38:03.531Z",
+            "updated_at": "2026-02-04T17:38:03.531Z",
+            "equipment_type_order": 6,
+            "equipment_type_id": 20,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 36,
+        "fields": {
+            "created_at": "2024-10-16T02:00:15.882Z",
+            "updated_at": "2026-02-04T17:39:08.300Z",
+            "equipment_type_order": 7,
+            "equipment_type_id": 24,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 24,
+        "fields": {
+            "created_at": "2024-10-16T01:55:15.410Z",
+            "updated_at": "2026-02-04T17:39:13.950Z",
+            "equipment_type_order": 7,
+            "equipment_type_id": 24,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 25,
+        "fields": {
+            "created_at": "2024-10-16T01:55:22.882Z",
+            "updated_at": "2026-02-04T17:40:39.994Z",
+            "equipment_type_order": 9,
+            "equipment_type_id": 25,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 51,
+        "fields": {
+            "created_at": "2026-02-04T17:10:35.860Z",
+            "updated_at": "2026-02-04T17:41:35.155Z",
+            "equipment_type_order": 15,
+            "equipment_type_id": 27,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 37,
+        "fields": {
+            "created_at": "2024-10-16T02:00:48.991Z",
+            "updated_at": "2026-02-04T17:41:47.615Z",
+            "equipment_type_order": 16,
+            "equipment_type_id": 17,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 57,
+        "fields": {
+            "created_at": "2026-02-04T17:34:14.291Z",
+            "updated_at": "2026-02-04T18:01:20.109Z",
+            "equipment_type_order": 8,
+            "equipment_type_id": 15,
+            "station_profile_id": 1
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 62,
+        "fields": {
+            "created_at": "2026-02-04T17:40:19.737Z",
+            "updated_at": "2026-02-04T18:01:27.576Z",
+            "equipment_type_order": 8,
+            "equipment_type_id": 15,
+            "station_profile_id": 2
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 54,
+        "fields": {
+            "created_at": "2026-02-04T17:29:36.943Z",
+            "updated_at": "2026-02-04T18:01:33.972Z",
+            "equipment_type_order": 8,
+            "equipment_type_id": 15,
+            "station_profile_id": 5
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 50,
+        "fields": {
+            "created_at": "2026-01-06T19:27:40.168Z",
+            "updated_at": "2026-02-04T18:01:44.613Z",
+            "equipment_type_order": 8,
+            "equipment_type_id": 15,
+            "station_profile_id": 6
+        }
+    },
+    {
+        "model": "wx.stationprofileequipmenttype",
+        "pk": 63,
+        "fields": {
+            "created_at": "2026-02-13T20:11:04.051Z",
+            "updated_at": "2026-02-13T20:11:04.051Z",
+            "equipment_type_order": 13,
+            "equipment_type_id": 18,
+            "station_profile_id": 1
+        }
+    }
+]

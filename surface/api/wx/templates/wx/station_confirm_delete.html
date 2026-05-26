@@ -1,0 +1,105 @@
+{% extends "wx/station_base.html" %}
+{% block content %}
+
+<div id="station-delete-app" class="srf-container" v-cloak>
+
+  <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
+    <span class="srf-display-1 text-uppercase">Delete station</span>
+  </div>
+
+  <div class="srf-layout flex-column srf-padding" style="width:100%;">
+
+    {% if delete_error %}
+      <div class="delete-error-box">
+        {{ delete_error }}
+      </div>
+    {% endif %}
+
+    <p>
+      Are you sure you want to
+      <strong class="bold">delete</strong>
+      the station:
+      <strong class="bold">{{ station.name }}</strong>?
+    </p>
+
+    <form action="" method="POST" @submit="handleDeleteSubmit">
+      {% csrf_token %}
+
+      <button
+        class="btn-outline-default btn-small metadata-btn-danger"
+        type="submit"
+        :disabled="isSubmitting"
+        :class="{ 'btn-disabled': isSubmitting }"
+      >
+        [[ isSubmitting ? 'Deleting...' : 'Yes, delete' ]]
+      </button>
+
+      <a href="{% url 'station-detail' station.id %}">
+        <button
+          class="btn-outline-default btn-small metadata-btn-success"
+          type="button"
+          :disabled="isSubmitting"
+        >
+          Cancel
+        </button>
+      </a>
+
+    </form>
+
+  </div>
+</div>
+
+<style>
+.metadata-btn-danger {
+  color: red !important;
+  border-color: red !important;
+}
+
+.metadata-btn-success {
+  color: #4CAF50 !important;
+  border-color: #4CAF50 !important;
+}
+
+.btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-error-box {
+  color: #b00020;
+  border: 1px solid #b00020;
+  background-color: #fff5f5;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+}
+</style>
+
+{% endblock %}
+
+{% block localjavascript %}
+
+<script>
+  (function() {
+    new Vue({
+      el: "#station-delete-app",
+
+      delimiters: ["[[", "]]"],
+
+      data: {
+        // Used to stop users from clicking the delete button multiple times
+        isSubmitting: false
+      },
+
+      methods: {
+        handleDeleteSubmit: function() {
+          // Allow Django's normal DeleteView POST request to continue,
+          // but disable the buttons while the request is submitting.
+          this.isSubmitting = true;
+        }
+      }
+    });
+  })();
+</script>
+
+{% endblock %}

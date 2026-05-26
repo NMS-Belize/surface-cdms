@@ -1,0 +1,120 @@
+{% extends "base.html" %} {% block content %} {% load wx_filters %}
+<!-- <div class="jumbotron w-100" style="position: fixed; z-index: 99999"> -->
+
+{% if is_create %}
+
+  <div class="srf-container" style="margin-bottom: 0px; padding-bottom: 0px;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
+      <span class="srf-display-1 text-uppercase">Create Station</span>
+    </div>
+
+    <h6>Station Management Options</h6>
+
+    {% if request|has_any_feature_permission:"stations-list:read" %}
+    <a href="{% url 'station-metadata' %}" class="btn-outline-default btn-small">Metadata</a>
+    {% endif %}
+
+    {% if request|has_any_feature_permission:"stations-list:read" %}
+    <a href="{% url 'stations-list' %}" class="btn-outline-default btn-small metadata-btn-info">Station List</a>
+    {% endif %}
+
+  </div>
+
+{% elif station %}
+    <div class="srf-container">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
+        <span class="srf-display-1 text-uppercase">{{ station.name }} Metadata</span>
+      </div>
+      <h6>Station Management Options</h6>
+
+      {% if request|has_any_feature_permission:"stations-list:read" %}
+      <a href="{% url 'station-metadata' %}" class="btn-outline-default btn-small">Metadata</a>
+      {% endif %}
+
+      {% url 'station-detail' station.id as metadataView %}
+
+      {% if request.path == metadataView and request|has_any_feature_permission:"stations-list:write"%}
+        <a href="{% url 'station-update' station.id %}" class="btn-outline-default btn-small">Edit</a>
+      {% endif %}
+
+      {% if request|has_any_feature_permission:"stations-list:read" %}
+        <a href="{% url 'stationfiles-list' station.id %}" class="btn-outline-default btn-small">Files</a>
+      {% endif %}
+
+      {% if request|has_any_feature_permission:"stations-list:read" %}
+      <a href="{% url 'stationvariable-list' station.id %}" class="btn-outline-default btn-small">Variables</a>
+      {% endif %}
+
+      {% if request|has_any_feature_permission:"stations-list:delete" %}
+      <a href="{% url 'station-delete' station.id %}" class="btn-outline-default btn-small metadata-btn-danger">Delete</a>
+      {% endif %}
+
+      {% if request|has_any_feature_permission:"stations-list:read" %}
+        <a href="{% url 'stations-list' %}" class="btn-outline-default btn-small metadata-btn-info">Station List</a>
+      {% endif %}
+    
+      {% if not is_update %}
+        <div class="metadata-dropdown-container">
+          <div class="metadata-dropdown" id="metadata-dropdown">
+              <div class="metadata-dropdown-selected" id="metadata-selected-item">
+                {{ station.name }}
+                <i aria-hidden="true" class="v-icon notranslate mdi mdi-menu-down theme--light"></i>
+              </div>
+    
+              <div class="metadata-dropdown-items">
+                {% for station in station_name %}
+                  <a href="{% url 'station-detail' station.pk %}" class="no-style-link" onclick="mainOverlayLoader()">
+                    <div>
+                        {{ station.name }}
+                    </div>
+                  </a>
+                {% endfor %}
+              </div>            
+          </div>
+        </div>
+      {% endif %}
+    
+    </div>
+{% endif %}
+
+<!-- <div class="srf-container custom-space-top"> -->
+<div class="srf-container">
+  {% block station_content %}
+  {% endblock %}
+</div>
+
+<style>
+/* metadata page styles start */
+.metadata-btn-danger {
+  color: red !important;
+  border-color: red !important;
+}
+
+.metadata-btn-success {
+  color: #4CAF50 !important;
+  border-color: #4CAF50 !important;
+}
+
+.metadata-btn-info {
+  color: #1976d2 !important;
+  border-color: #1976d2 !important;
+}
+/* metadata page styles end */
+</style>
+
+  {% endblock %} {% block localjavascript %}
+  <script>
+    $(document).ready(function() {
+      $('#id_station_list').DataTable({
+        scrollX: true,
+        columnDefs: [
+          {
+            targets: [0, 1, 2],
+            className: 'mdl-data-table__cell--non-numeric'
+          }
+        ]
+      });
+    });
+  </script>
+</div>
+{% endblock %}

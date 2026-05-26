@@ -1,0 +1,911 @@
+{% extends "base.html" %}
+{% block content %}
+{% load static %}
+{% load wx_filters%}
+
+<div class="srf-container">
+  <!-- Page title -->
+  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
+    <span class="srf-display-1 text-uppercase">Configuration Settings</span><br /><br />
+  </div>
+
+  <div id="app" class="srf-flex justify-content-between srf-padding" v-cloak>
+
+    <!-- ================================================================================================== -->
+    <!-- ================================================================================================== -->
+
+    <!-- shapefile management -->
+    <header>
+      <h5>Shapefile Mangement</h5>
+      <p style="font-size: 16px;">
+        Manage spatial overlays used throughout the system. View, replace, or remove 
+        shapefiles such as districts, rivers, groundwater, and national waters.
+      </p>
+
+      <p style="color: red;">Size limit: 15.00 MB for each file.</p>
+    </header>
+
+    <!-- Cards grid -->
+    <section class="cards-grid">
+      <article class="doc-card" v-for="(opt, idx) in options" :key="opt.key">
+        <!-- header -->
+        <div class="card-top">
+          <div class="card-title">
+            <div class="title">[[ opt.label ]]</div>
+            <div class="desc">[[ opt.description ]]</div>
+          </div>
+
+          <!-- present or missing pill -->
+          <div class="status-pill" :class="{ present: opt.hasFile, missing: !opt.hasFile }">
+            <!-- tick mark if file is present -->
+            <i v-if="opt.hasFile" class="material-icons-outlined">check_circle</i>
+            <!-- alert indicator if file is missing -->
+            <i v-else class="material-icons-outlined">error</i>
+
+            <span class="status-text" v-if="opt.hasFile">Present</span>
+            <span class="status-text" v-else>Missing</span>
+          </div>
+        </div>
+
+        <!-- body -->
+        <div class="card-body">
+          <div v-if="opt.hasFile" class="file-info">
+            <div class="filename" style="color: rgb(64, 130, 246);">[[ opt.filename ]]</div>
+            <div class="meta">Uploaded on [[ opt.uploadDate || '—' ]]</div>
+          </div>
+
+          <div v-else class="no-file">
+            <div class="placeholder-icon" aria-hidden="true">
+              <svg width="48" height="48" viewBox="0 0 24 24">
+                <path fill="#4b4b4b" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path fill="orange" d="M14 2v6h6"/>
+              </svg>
+            </div>
+            <div class="orange-muted">No file uploaded.</div>
+          </div>
+        </div>
+
+        <!-- actions -->
+        <div class="card-actions">
+          <div class="actions-left">
+            {% if request|has_any_feature_permission:"configuration-settings:write" %}
+            <!-- Upload / Replace Input -->
+            <label :for="'file-' + idx" class="btn btn-upload" :class="{ disabled: isUploading(idx) }">
+              <span v-if="!isUploading(idx)">Upload</span>
+              <span v-else>Uploading…</span>
+            </label>
+            <!-- restrict accepted types to what ALLOWED_EXTENSIONS contains -->
+            <input
+              :id="'file-' + idx"
+              type="file"
+              :accept="opt.key === 'shape' ? '.png' : '.geojson'"
+              :disabled="isUploading(idx)"
+              @change="uploadFile($event, opt, idx)" 
+            />
+            {% endif %}
+
+
+            {% if request|has_any_feature_permission:"configuration-settings:delete" %}
+            <!-- delete btn -->
+            <button class="btn btn-delete" 
+              :disabled="!opt.hasFile || isDeleting(idx)"
+              @click="openDeleteModal(opt, idx)"
+            >
+              <span v-if="!isDeleting(idx)">Delete</span>
+              <span v-else>Deleting…</span>
+            </button>
+            {% endif %}
+
+            {% if request|has_any_feature_permission:"configuration-settings:write" %}
+            <!-- dowload btn -->
+            <a
+              v-if="opt.hasFile"
+              :href="`/wx/settings/spatial/files/download/${opt.key}/`"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-ghost"
+            >
+              Download
+            </a>
+            {% endif %}
+
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- spatial Delete confirmation modal -->
+    <div v-if="deleteModalVisible" class="modal-backdrop" @keydown.esc="cancelDelete" tabindex="-1">
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm delete">
+        <div class="modal-header">
+          <h3>Confirm deletion</h3>
+        </div>
+
+        <div class="modal-body">
+          <p>Are you sure you want to delete <strong>[[ deleteTarget?.label ]]</strong> (<em>[[ deleteTarget?.description ]]</em>)?</p>
+          <p class="muted">This will permanently remove the file.</p>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-ghost" @click="cancelDelete">Cancel</button>
+          <button class="btn btn-delete" @click="confirmDelete" :disabled="isDeleting(deleteTargetIdx)">
+            <span v-if="!isDeleting(deleteTargetIdx)">Delete</span>
+            <span v-else>Deleting…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================================================== -->
+    <!-- ================================================================================================== -->
+
+    <v-divider class="my-6 custom-divider"></v-divider>
+
+    <!-- ================================================================================================== -->
+    <!-- ================================================================================================== -->
+
+    <!-- Organization Logo -->
+    <header>
+      <h5>Organization Logo</h5>
+      <p style="font-size: 16px;">
+        View, replace, or remove organization logo used in reports and displayed throughout SURFACE.
+      </p>
+
+      <p style="color: red;">Size limit: 15.00 MB. PNG only.</p>
+    </header>
+
+    <section class="cards-grid">
+      <article class="doc-card">
+        <!-- header -->
+        <div class="card-top">
+          <div class="card-title">
+            <div class="title">Organization Logo</div>
+            <div class="desc">
+              Upload the organization logo that will be used throughout SURFACE and in generated reports.
+            </div>
+          </div>
+
+          <div class="status-pill" :class="{ present: logo.hasFile, missing: !logo.hasFile }">
+            <i v-if="logo.hasFile" class="material-icons-outlined">check_circle</i>
+            <i v-else class="material-icons-outlined">error</i>
+
+            <span class="status-text" v-if="logo.hasFile">Present</span>
+            <span class="status-text" v-else>Missing</span>
+          </div>
+        </div>
+
+        <!-- body -->
+        <div class="card-body">
+          <div v-if="logo.hasFile" class="file-info">
+            <div class="filename" style="color: rgb(64, 130, 246);">[[ logo.filename ]]</div>
+            <div class="meta">Uploaded on [[ logo.uploadDate || '—' ]]</div>
+
+            <div v-if="logo.previewUrl" style="margin-top: 14px;">
+              <img
+                :src="logo.previewUrl"
+                alt="Organization logo"
+                style="max-width: 220px; max-height: 120px; object-fit: contain; border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fff;"
+              />
+            </div>
+          </div>
+
+          <div v-else class="no-file">
+            <div class="placeholder-icon" aria-hidden="true">
+              <svg width="48" height="48" viewBox="0 0 24 24">
+                <path fill="#4b4b4b" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                <circle fill="orange" cx="8.5" cy="8.5" r="1.5"/>
+                <path fill="orange" d="M21 15l-5-5L5 21h14c1.1 0 2-.9 2-2v-4z"/>
+              </svg>
+            </div>
+            <div class="orange-muted">No logo uploaded.</div>
+          </div>
+        </div>
+
+        <!-- actions -->
+        <div class="card-actions">
+          <div class="actions-left">
+            {% if request|has_any_feature_permission:"configuration-settings:write" %}
+            <label for="organization-logo-file" class="btn btn-upload" :class="{ disabled: logoUploading }">
+              <span v-if="!logoUploading">Upload</span>
+              <span v-else>Uploading…</span>
+            </label>
+
+            <input
+              id="organization-logo-file"
+              type="file"
+              accept=".png"
+              :disabled="logoUploading"
+              @change="uploadLogo"
+            />
+            {% endif %}
+
+            {% if request|has_any_feature_permission:"configuration-settings:delete" %}
+            <button
+              class="btn btn-delete"
+              :disabled="!logo.hasFile || logoDeleting"
+              @click="deleteLogo"
+            >
+              <span v-if="!logoDeleting">Delete</span>
+              <span v-else>Deleting…</span>
+            </button>
+            {% endif %}
+
+            {% if request|has_any_feature_permission:"configuration-settings:write" %}
+            <a
+              v-if="logo.hasFile"
+              :href="`/wx/settings/organization-logo/download/${logo.key}/`"
+              target="_blank"
+              rel="noopener"
+              class="btn btn-ghost"
+            >
+              Download
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- alerts -->
+    <v-alert
+      v-model="alertVisible"
+      :type="alertType"
+      :color="alertColor"
+      dismissible
+      transition="scale-transition"
+      style="
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+      "
+    >
+      [[ alertMessage ]]
+    </v-alert>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+
+  // initial options injected by ConfigurationSettingsView
+  const initialOptions = {{ options_json|safe }};
+  // const initialOptions = "";
+
+  (function() {
+    new Vue({
+      el: '#app',
+      vuetify: new Vuetify(),
+      delimiters: ["[[", "]]"],
+      data() {
+        return {
+          options: initialOptions,
+          uploading: {},
+          deleting: {},
+          uploadUrl: "/wx/settings/spatial/files/",
+          deleteModalVisible: false,
+          deleteTarget: null,
+          deleteTargetIdx: null,
+
+          // Alert 
+          alertVisible: false,
+          alertMessage: "",
+          alertType: "warning",
+          alertTimeout: null,
+          alertColor: "red",
+
+          // Logo control
+          logo: {
+            key: "organization_logo",
+            label: "Organization Logo",
+            description: "Logo used in reports and throughout SURFACE.",
+            hasFile: false,
+            filename: null,
+            uploadDate: null,
+            previewUrl: "",
+          },
+          logoUploading: false,
+          logoDeleting: false,
+          uploadUrl: "/wx/settings/organization-logo/update/",
+
+          // file control
+          MAX_FILE_SIZE: 15 * 1024 * 1024, // 15 MB in bytes
+          EXT_WHITELIST: { shape: ".png", default: ".geojson" },
+        };
+      },
+      mounted() {
+        this.getOrganizationLogoDetails();
+      },
+      methods: {
+        isUploading(idx) { return !!this.uploading[idx]; },
+        isDeleting(idx) { return !!this.deleting[idx]; },
+
+        // retrieving the org logo
+        getOrganizationLogo() {
+          axios.get('/wx/settings/organization-logo/details/')
+            .then((response) => {
+              this.logo = response.data;
+            })
+            .catch((error) => {
+              console.error('Error fetching organization logo details:', error);
+            });
+        },
+
+        // upload the logo method
+        uploadLogo(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const allowedExtensions = ['png', 'jpg', 'jpeg', 'svg'];
+          const fileExtension = file.name.split('.').pop().toLowerCase();
+
+          if (!allowedExtensions.includes(fileExtension)) {
+            alert('Invalid file type. Allowed types: PNG, JPG, JPEG, SVG.');
+            event.target.value = '';
+            return;
+          }
+
+          const maxSizeBytes = 15 * 1024 * 1024;
+          if (file.size > maxSizeBytes) {
+            alert('File size exceeds 15 MB.');
+            event.target.value = '';
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append('file', file);
+
+          this.logoUploading = true;
+
+          axios.post('/wx/settings/organization-logo/upload/', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'X-CSRFToken': csrf_token,
+            }
+          })
+          .then((response) => {
+            this.logo = response.data;
+            event.target.value = '';
+          })
+          .catch((error) => {
+            console.error('Error uploading organization logo:', error);
+            alert(error?.response?.data?.message || 'Failed to upload logo.');
+            event.target.value = '';
+          })
+          .finally(() => {
+            this.logoUploading = false;
+          });
+        },
+
+        // Org Logo controls
+        getOrganizationLogoDetails() {
+          axios.get('/wx/settings/organization-logo/')
+            .then((response) => {
+              this.logo = response.data;
+            })
+            .catch((error) => {
+              console.error('Error fetching organization logo details:', error);
+            });
+        },
+
+        async uploadLogo(evt) {
+          const file = evt.target.files && evt.target.files[0];
+          if (!file) return;
+
+          const maxSize = 15 * 1024 * 1024;
+          if (file.size > maxSize) {
+            this.showAlert("File is too large — maximum allowed size is 15 MB");
+            evt.target.value = "";
+            return;
+          }
+
+          const fileExt = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+          if (fileExt !== ".png") {
+            this.showAlert("Invalid file type. Only .png files are allowed for the organization logo");
+            evt.target.value = "";
+            return;
+          }
+
+          this.logoUploading = true;
+
+          try {
+            const form = new FormData();
+            form.append("action", "upload");
+            form.append("key", "organization_logo");
+            form.append("file", file);
+
+            const res = await wxFetch(this.uploadUrl, {
+              method: "POST",
+              body: form,
+            });
+
+            if (!res.ok) {
+              const txt = await res.text();
+              console.error("Upload failed", res.status, txt);
+              this.showAlert("Upload failed — check console");
+              return;
+            }
+
+            const data = await res.json();
+            if (data.success) {
+              this.logo.hasFile = true;
+              this.logo.filename = data.filename || file.name;
+              this.logo.uploadDate = data.uploadDate || new Date().toLocaleString();
+              this.logo.previewUrl = `/static/images/org_logo.png?ts=${Date.now()}`;
+            } else {
+              this.showAlert(data.message || "Upload failed");
+            }
+          } catch (err) {
+            console.error("Upload error", err);
+            this.showAlert("Upload error — see console");
+          } finally {
+            this.logoUploading = false;
+            evt.target.value = "";
+          }
+        },
+
+        async deleteLogo() {
+          this.logoDeleting = true;
+
+          try {
+            const form = new FormData();
+            form.append("action", "delete");
+            form.append("key", "organization_logo");
+
+            const res = await wxFetch(this.uploadUrl, {
+              method: "POST",
+              body: form,
+            });
+
+            if (!res.ok) {
+              const txt = await res.text();
+              console.error("Delete failed", res.status, txt);
+              this.showAlert("Delete failed");
+              return;
+            }
+
+            const data = await res.json();
+            if (data.success) {
+              this.logo.hasFile = false;
+              this.logo.filename = null;
+              this.logo.uploadDate = null;
+              this.logo.previewUrl = "";
+            } else {
+              this.showAlert(data.message || "Delete failed");
+            }
+          } catch (err) {
+            console.error("Delete error", err);
+            this.showAlert("Delete error");
+          } finally {
+            this.logoDeleting = false;
+          }
+        },
+
+        // Alert popup control
+        showAlert(message, type = "warning") {
+          this.alertMessage = message;
+          this.alertType = type;
+          this.alertVisible = true;
+
+          // set the button color
+          if (type == "error") {
+            this.alertColor = "red";
+          } else if (type == "success") {
+            this.alertColor = "green";
+          } else {
+            this.alertColor = "orange";
+          }
+
+          // Clear any existing timeout if alert is triggered again
+          if (this.alertTimeout) {
+            clearTimeout(this.alertTimeout);
+          }
+
+          // Auto close after 3 seconds
+          this.alertTimeout = setTimeout(() => {
+            this.alertVisible = false;
+          }, 3000);
+        },
+
+        // upload shapefile
+        async uploadFile(evt, opt, idx) {
+          const file = evt.target.files && evt.target.files[0];
+          if (!file) return;
+
+          // Client-side validations
+          const maxSize = this.MAX_FILE_SIZE;
+          if (file.size > maxSize) {
+            const mb = (maxSize / (1024 * 1024)).toFixed(0);
+            // alert(`File is too large — maximum allowed size is ${mb} MB.`);
+            this.showAlert(`File is too large — maximum allowed size is ${mb} MB`);
+            evt.target.value = "";
+            return;
+          }
+
+          // Determine allowed extension for this key
+          const expectedExt = (this.EXT_WHITELIST[opt.key] || this.EXT_WHITELIST.default).toLowerCase();
+          // get lower-case extension from selected file name
+          const fileExt = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+
+          if (fileExt !== expectedExt) {
+            // friendly error message
+            if (opt.key === 'shape') {
+              // alert("Invalid file type. The 'Shape' file must be a .png image.");
+              this.showAlert("Invalid file type. The 'Shape' file must be a .png image");
+            } else {
+              // alert("Invalid file type. Only .geojson files are allowed for this document.");
+              this.showAlert("Invalid file type. Only .geojson files are allowed for this document");
+            }
+            evt.target.value = "";
+            return;
+          }
+
+          // All checks passed — proceed with upload
+          this.$set(this.uploading, idx, true);
+
+          try {
+            const form = new FormData();
+            form.append("action", "upload");
+            form.append("key", opt.key);
+            form.append("file", file);
+
+            const res = await wxFetch(this.uploadUrl, {
+              method: "POST",
+              body: form,
+            });
+
+            if (!res.ok) {
+              const txt = await res.text();
+              console.error("Upload failed", res.status, txt);
+              // alert("Upload failed — check console");
+              this.showAlert("Upload failed — check console");
+              return;
+            }
+
+            const data = await res.json();
+            if (data.success) {
+              opt.hasFile = true;
+              opt.filename = data.filename || file.name;
+              opt.uploadDate = data.uploadDate || new Date().toLocaleString();
+              opt.downloadUrl = `/wx/settings/download/${opt.key}/`;
+            } else {
+              // alert(data.message || "Upload failed");
+              this.showAlert(`${data.message} - Upload failed`);
+            }
+          } catch (err) {
+            console.error("Upload error", err);
+            // alert("Upload error — see console");
+            this.showAlert("Upload error — see console");
+          } finally {
+            this.$set(this.uploading, idx, false);
+            evt.target.value = "";
+          }
+        },
+
+        // delete shapefile
+        async deleteFile(opt, idx) {
+          this.$set(this.deleting, idx, true);
+
+          try {
+            const form = new FormData();
+            form.append("action", "delete");
+            form.append("key", opt.key);
+
+            const res = await wxFetch(this.uploadUrl, {
+              method: "POST",
+              body: form,
+            });
+
+            if (!res.ok) {
+              const txt = await res.text();
+              console.error("Delete failed", res.status, txt);
+              // alert("Delete failed");
+              this.showAlert("Delete failed");
+              return;
+            }
+
+            const data = await res.json();
+            if (data.success) {
+              opt.hasFile = false;
+              opt.filename = null;
+              opt.uploadDate = null;
+            } else {
+              // alert(data.message || "Delete failed");
+              alert(`${data.message} - Delete failed`);
+            }
+          } catch (err) {
+            console.error("Delete error", err);
+            // alert("Delete error");
+            this.showAlert("Delete error");
+          } finally {
+            this.$set(this.deleting, idx, false);
+          }
+        },
+
+        // delete shapefile checks
+        openDeleteModal(opt, idx) {
+          this.deleteModalVisible = true;
+          this.deleteTarget = opt;
+          this.deleteTargetIdx = idx;
+        },
+
+        // delete shapefile checks
+        cancelDelete() {
+          this.deleteModalVisible = false;
+          this.deleteTarget = null;
+          this.deleteTargetIdx = null;
+        },
+
+        // delete shapefile checks
+        confirmDelete() {
+          if (!this.deleteTarget) {
+            this.cancelDelete();
+            return;
+          }
+          // close modal immediately; deleteFile will set isDeleting flag
+          this.deleteModalVisible = false;
+          this.deleteFile(this.deleteTarget, this.deleteTargetIdx);
+          this.deleteTarget = null;
+          this.deleteTargetIdx = null;
+        },
+
+      }
+    });
+  })();
+</script>
+
+<style>
+.custom-divider {
+  border-top-width: 2px;
+  border-radius: 999px;
+  opacity: 1;
+  background-color: transparent;
+
+  border-color: #6f6f6f;
+
+  box-shadow: 0 1px 1px rgba(0,0,0,0.04);
+
+  margin-top: 32px;
+  margin-bottom: 28px;
+}
+
+  /* Cards grid */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 18px;
+  }
+
+  /* Individual card */
+  /* .doc-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 170px;
+    transition: transform .12s ease, box-shadow .12s ease;
+  } */
+
+  .doc-card {
+    background: rgba(200, 225, 294, 0.169);
+    border-radius: 10px;
+    border-color: black;
+    outline: 2px dashed grey;
+    padding: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 170px;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+
+  .doc-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  }
+
+  /* top row: title + status */
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .card-title .title {
+    font-weight: 700;
+    font-size: 15px;
+    color: #0f172a;
+  }
+  .card-title .desc {
+    font-size: 13px;
+    color: #667085;
+    margin-top: 6px;
+  }
+
+  /* status pill */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .status-pill svg { opacity: .95; }
+  .status-pill.present {
+    background: #ecfdf5;
+    color: #065f46;
+    border-style: solid;
+    border-color: #065f46;
+    border-width: 1px;
+  }
+  .status-pill.missing {
+    background: #fffbeb;
+    color: #854d0e;
+    border-style: solid;
+    border-color: #854d0e;
+    border-width: 1px;
+  }
+
+  /* body */
+  .card-body {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .file-info .filename {
+    display: inline-block;
+    background: #f1f5f9;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .file-info .meta {
+    font-size: 13px;
+    color: #475569;
+    margin-top: 6px;
+  }
+
+  /* placeholder */
+  .no-file {
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .placeholder-icon svg { opacity: .85; }
+  .orange-muted { color: orange; font-weight: 700;}
+
+  /* actions */
+  .card-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 14px;
+    gap: 12px;
+  }
+
+  .actions-left { 
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+   }
+
+  /* buttons */
+  .btn {
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 10px;
+    transition: all 0.25s ease;
+  }
+
+  /* Upload = Primary (blue) */
+  .btn-upload {
+    background-color: #1976d2;
+    color: white;
+  }
+  .btn-upload:hover {
+    background-color: #0d47a1;
+    color: #fff;
+  }
+  .btn-upload:focus {
+    background-color: #1976d2;
+    color: white;
+  }
+
+  /* Delete = Red */
+  .btn-delete {
+    background-color: #d32f2f;
+    color: white;
+  }
+  .btn-delete:hover {
+    background-color: #b71c1c;
+    color: #fff;
+  }
+  .btn-delete:focus {
+    background-color: #d32f2f;
+    color: white;
+  }
+
+  /* Download = Neutral */
+  .btn-ghost {
+    background-color: #e0e0e0;
+    color: #333;
+  }
+  .btn-ghost:hover {
+    background-color: #bdbdbd;
+    color: black;
+  }
+  .btn-ghost:focus {
+    background-color: #e0e0e0;
+    color: #333;
+  }
+
+  /* small file inputs */
+  input[type="file"] { display: none; }
+
+  /* responsive tweaks */
+  @media (max-width: 520px) {
+    .cards-grid { grid-template-columns: 1fr; }
+    .doc-card { min-height: 150px; padding: 12px; }
+    .card-top { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .modal-panel { padding: 14px; max-width: 92%; }
+  }
+
+  /* Modal backdrop & panel */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(2,6,23,0.5);
+    z-index: 1200;
+    padding: 20px;
+  }
+
+  .modal-panel {
+    background: #fff;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 18px 50px rgba(2,6,23,0.35);
+    padding: 18px;
+    outline: none;
+  }
+
+  .modal-header h3 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  .modal-body { margin-top: 8px; color: #0f172a; }
+  .modal-body p { margin: 6px 0; }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  /* ensure modal buttons reuse your existing .btn styles */
+  .modal-panel .btn { min-width: 92px; }
+</style>
+{% endblock %}

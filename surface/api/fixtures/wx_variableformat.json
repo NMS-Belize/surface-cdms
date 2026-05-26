@@ -1,0 +1,2103 @@
+[
+    {
+        "model": "wx.variableformat",
+        "pk": 1,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "13,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 2,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "2,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 3,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "2,3",
+            "format": 1,
+            "interval": 6,
+            "variable": 32
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 4,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "2,4",
+            "format": 1,
+            "interval": 6,
+            "variable": 33
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 5,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "2,2",
+            "format": 1,
+            "interval": 6,
+            "variable": 31
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 6,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "9,2",
+            "format": 1,
+            "interval": 6,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 7,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "9,3",
+            "format": 1,
+            "interval": 6,
+            "variable": 52
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 8,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "9,4",
+            "format": 1,
+            "interval": 6,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 9,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "9,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 50
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 10,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "1,2",
+            "format": 1,
+            "interval": 6,
+            "variable": 12
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 11,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "1,3",
+            "format": 1,
+            "interval": 6,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 12,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "1,4",
+            "format": 1,
+            "interval": 6,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 13,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "1,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 14,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "3,2",
+            "format": 1,
+            "interval": 6,
+            "variable": 73
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 15,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "3,3",
+            "format": 1,
+            "interval": 6,
+            "variable": 74
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 16,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "3,4",
+            "format": 1,
+            "interval": 6,
+            "variable": 75
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 17,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "3,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 18,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "4,2",
+            "format": 1,
+            "interval": 6,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 19,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "4,9",
+            "format": 1,
+            "interval": 6,
+            "variable": 58
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 20,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "4,8",
+            "format": 1,
+            "interval": 6,
+            "variable": 57
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 21,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "4,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 55
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 22,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "6,2",
+            "format": 1,
+            "interval": 6,
+            "variable": 80
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 23,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "6,3",
+            "format": 1,
+            "interval": 6,
+            "variable": 81
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 24,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "6,4",
+            "format": 1,
+            "interval": 6,
+            "variable": 82
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 25,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "10,7",
+            "format": 1,
+            "interval": 6,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 26,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "103,7",
+            "format": 1,
+            "interval": 6,
+            "variable": 78
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 27,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "113,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 63
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 28,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "51,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 19
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 29,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-09-04 15:11:56+00",
+            "lookup_key": "108,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 200
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 30,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-09-04 15:11:56+00",
+            "lookup_key": "158,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 201
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 31,
+        "fields": {
+            "created_at": "2015-04-20 00:41:18+00",
+            "updated_at": "2015-04-20 00:41:18+00",
+            "lookup_key": "11,1",
+            "format": 1,
+            "interval": 6,
+            "variable": 71
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 58,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "AirT_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 59,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "AirT_C_Max",
+            "format": 3,
+            "interval": 2,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 60,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "AirT_C_Min",
+            "format": 3,
+            "interval": 2,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 61,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "RH",
+            "format": 3,
+            "interval": 2,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 62,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "Rain_mm_Tot",
+            "format": 3,
+            "interval": 2,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 63,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WS_knot_Avg",
+            "format": 3,
+            "interval": 2,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 64,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WS_knot_Max",
+            "format": 3,
+            "interval": 2,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 65,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WD_Deg_D1_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 66,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WD_Deg_SD1_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 57
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 67,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "BP_mbar",
+            "format": 3,
+            "interval": 2,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 68,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "Slr_Wms",
+            "format": 3,
+            "interval": 2,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 69,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "DwPt_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 19
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 70,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WtBb_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 18
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 71,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "VP_mbar",
+            "format": 3,
+            "interval": 2,
+            "variable": 35
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 72,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WR_km_Tot",
+            "format": 3,
+            "interval": 2,
+            "variable": 103
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 73,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "Slr_MJ_Tot",
+            "format": 3,
+            "interval": 2,
+            "variable": 79
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 74,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "HI_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 27
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 75,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WC_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 28
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 76,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "RH_Max",
+            "format": 3,
+            "interval": 2,
+            "variable": 33
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 77,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "RH_Min",
+            "format": 3,
+            "interval": 2,
+            "variable": 32
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 78,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "Soil1ftT_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 21
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 79,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "Soil4ftT_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 23
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 80,
+        "fields": {
+            "created_at": "2016-06-11 01:32:01+00",
+            "updated_at": "2016-06-11 01:32:01+00",
+            "lookup_key": "Enc_RH",
+            "format": 3,
+            "interval": 2,
+            "variable": 4007
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 81,
+        "fields": {
+            "created_at": "2016-07-07 22:57:06+00",
+            "updated_at": "2016-07-07 22:57:06+00",
+            "lookup_key": "Rain_mm_TOT_5min",
+            "format": 4,
+            "interval": 2,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 82,
+        "fields": {
+            "created_at": "2016-07-07 22:57:06+00",
+            "updated_at": "2016-07-07 22:57:06+00",
+            "lookup_key": "AirT_C_MAX_24hr",
+            "format": 4,
+            "interval": 7,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 83,
+        "fields": {
+            "created_at": "2016-07-07 22:57:06+00",
+            "updated_at": "2016-07-07 22:57:06+00",
+            "lookup_key": "AirT_C_MIN_24hr",
+            "format": 4,
+            "interval": 7,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 85,
+        "fields": {
+            "created_at": "2016-07-08 15:19:15+00",
+            "updated_at": "2016-07-08 15:19:15+00",
+            "lookup_key": "AirT_C_MIN_24h",
+            "format": 4,
+            "interval": 7,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 86,
+        "fields": {
+            "created_at": "2016-07-08 15:20:04+00",
+            "updated_at": "2016-07-08 15:20:04+00",
+            "lookup_key": "AirT_C_MAX_24h",
+            "format": 4,
+            "interval": 7,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 87,
+        "fields": {
+            "created_at": "2016-07-13 22:48:56+00",
+            "updated_at": "2016-07-13 22:48:56+00",
+            "lookup_key": "5_min_rainfall",
+            "format": 4,
+            "interval": 2,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 88,
+        "fields": {
+            "created_at": "2016-09-29 23:22:28+00",
+            "updated_at": "2016-09-29 23:22:28+00",
+            "lookup_key": "Rain_mm_TOT_24hr",
+            "format": 4,
+            "interval": 7,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 89,
+        "fields": {
+            "created_at": "2017-02-09 21:44:20+00",
+            "updated_at": "2017-02-09 21:44:20+00",
+            "lookup_key": "Rainfall",
+            "format": 5,
+            "interval": 7,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 90,
+        "fields": {
+            "created_at": "2017-11-22 01:01:56+00",
+            "updated_at": "2017-11-22 01:01:56+00",
+            "lookup_key": "WD_deg_D1_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 91,
+        "fields": {
+            "created_at": "2017-11-22 01:02:24+00",
+            "updated_at": "2017-11-22 01:02:24+00",
+            "lookup_key": "WD_deg_SD1_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 57
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 92,
+        "fields": {
+            "created_at": "2018-09-26 12:22:51+00",
+            "updated_at": "2018-09-26 12:22:51+00",
+            "lookup_key": "1",
+            "format": 6,
+            "interval": 4,
+            "variable": 200
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 93,
+        "fields": {
+            "created_at": "2018-09-26 12:22:51+00",
+            "updated_at": "2018-09-26 12:22:51+00",
+            "lookup_key": "2",
+            "format": 6,
+            "interval": 4,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 94,
+        "fields": {
+            "created_at": "2018-09-26 12:22:51+00",
+            "updated_at": "2018-09-26 12:22:51+00",
+            "lookup_key": "3",
+            "format": 6,
+            "interval": 4,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 95,
+        "fields": {
+            "created_at": "2018-09-26 12:22:51+00",
+            "updated_at": "2018-09-26 12:22:51+00",
+            "lookup_key": "4",
+            "format": 6,
+            "interval": 4,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 96,
+        "fields": {
+            "created_at": "2018-09-26 12:22:51+00",
+            "updated_at": "2018-09-26 12:22:51+00",
+            "lookup_key": "5",
+            "format": 6,
+            "interval": 4,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 97,
+        "fields": {
+            "created_at": "2018-09-26 12:22:51+00",
+            "updated_at": "2018-09-26 12:22:51+00",
+            "lookup_key": "6",
+            "format": 6,
+            "interval": 4,
+            "variable": 50
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 98,
+        "fields": {
+            "created_at": "2019-06-25 14:28:26.478+00",
+            "updated_at": "2019-06-25 14:28:26.478+00",
+            "lookup_key": "WTLV1",
+            "format": 3,
+            "interval": 2,
+            "variable": 4013
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 99,
+        "fields": {
+            "created_at": "2019-06-25 16:53:20.343+00",
+            "updated_at": "2019-06-25 16:53:20.343+00",
+            "lookup_key": "RH_Max36",
+            "format": 3,
+            "interval": 2,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 100,
+        "fields": {
+            "created_at": "2019-07-24 18:13:04.497+00",
+            "updated_at": "2019-07-24 18:13:04.497+00",
+            "lookup_key": "H20_Lvl",
+            "format": 3,
+            "interval": 2,
+            "variable": 4013
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 101,
+        "fields": {
+            "created_at": "2019-10-22 17:01:38.142+00",
+            "updated_at": "2019-10-22 17:01:38.142+00",
+            "lookup_key": "BattV_Min",
+            "format": 3,
+            "interval": 2,
+            "variable": 200
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 102,
+        "fields": {
+            "created_at": "2020-05-08 21:20:44.342+00",
+            "updated_at": "2020-05-08 21:20:44.342+00",
+            "lookup_key": "Slr",
+            "format": 3,
+            "interval": 2,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 103,
+        "fields": {
+            "created_at": "2020-05-16 00:41:27.855+00",
+            "updated_at": "2020-05-16 00:41:27.855+00",
+            "lookup_key": "7",
+            "format": 6,
+            "interval": 4,
+            "variable": 55
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 104,
+        "fields": {
+            "created_at": "2020-05-16 00:41:33.146+00",
+            "updated_at": "2020-05-16 00:41:33.146+00",
+            "lookup_key": "8",
+            "format": 6,
+            "interval": 4,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 105,
+        "fields": {
+            "created_at": "2020-05-16 00:41:34.909+00",
+            "updated_at": "2020-05-16 00:41:34.909+00",
+            "lookup_key": "9",
+            "format": 6,
+            "interval": 4,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 106,
+        "fields": {
+            "created_at": "2020-05-16 00:41:36.362+00",
+            "updated_at": "2020-05-16 00:41:36.362+00",
+            "lookup_key": "10",
+            "format": 6,
+            "interval": 4,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 109,
+        "fields": {
+            "created_at": "2020-06-25 18:07:59.359+00",
+            "updated_at": "2020-06-25 18:07:59.359+00",
+            "lookup_key": "Stage_M",
+            "format": 3,
+            "interval": 2,
+            "variable": 4013
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 110,
+        "fields": {
+            "created_at": "2020-06-25 18:18:24.143+00",
+            "updated_at": "2020-06-25 18:18:24.143+00",
+            "lookup_key": "Stage_M_Max",
+            "format": 3,
+            "interval": 2,
+            "variable": 4017
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 111,
+        "fields": {
+            "created_at": "2020-06-25 18:18:42.614+00",
+            "updated_at": "2020-06-25 18:18:42.615+00",
+            "lookup_key": "Stage_M_Min",
+            "format": 3,
+            "interval": 2,
+            "variable": 4018
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 112,
+        "fields": {
+            "created_at": "2020-06-27 08:09:43.144+00",
+            "updated_at": "2020-06-27 08:09:43.144+00",
+            "lookup_key": "BP_Mbar",
+            "format": 3,
+            "interval": 2,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 113,
+        "fields": {
+            "created_at": "2021-08-03 21:13:08.704+00",
+            "updated_at": "2021-08-03 21:13:08.704+00",
+            "lookup_key": "AirT2_C",
+            "format": 3,
+            "interval": 2,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 114,
+        "fields": {
+            "created_at": "2021-08-03 21:13:56.818+00",
+            "updated_at": "2021-08-03 21:13:56.818+00",
+            "lookup_key": "AirT2_C_MAX",
+            "format": 3,
+            "interval": 2,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 115,
+        "fields": {
+            "created_at": "2021-08-03 21:14:38.32+00",
+            "updated_at": "2021-08-03 21:14:38.32+00",
+            "lookup_key": "AirT2_C_MIN",
+            "format": 3,
+            "interval": 2,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 116,
+        "fields": {
+            "created_at": "2021-11-06 07:44:49.577+00",
+            "updated_at": "2021-11-06 07:44:49.577+00",
+            "lookup_key": "WS_knot_S_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 117,
+        "fields": {
+            "created_at": "2022-11-09 23:14:42.201743+00",
+            "updated_at": "2022-11-09 23:14:42.201775+00",
+            "lookup_key": "SL",
+            "format": 3,
+            "interval": 10,
+            "variable": 4019
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 118,
+        "fields": {
+            "created_at": "2023-12-07 18:56:59.36761+00",
+            "updated_at": "2023-12-07 18:56:59.367642+00",
+            "lookup_key": "4",
+            "format": 7,
+            "interval": 3,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 119,
+        "fields": {
+            "created_at": "2023-12-07 19:00:55.968902+00",
+            "updated_at": "2023-12-07 19:00:55.968936+00",
+            "lookup_key": "5",
+            "format": 7,
+            "interval": 3,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 120,
+        "fields": {
+            "created_at": "2023-12-07 19:01:14.271413+00",
+            "updated_at": "2023-12-07 19:01:14.271447+00",
+            "lookup_key": "1",
+            "format": 7,
+            "interval": 3,
+            "variable": 200
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 121,
+        "fields": {
+            "created_at": "2023-12-07 19:01:30.014192+00",
+            "updated_at": "2023-12-07 19:01:30.014227+00",
+            "lookup_key": "2",
+            "format": 7,
+            "interval": 3,
+            "variable": 4007
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 122,
+        "fields": {
+            "created_at": "2023-12-07 19:03:35.187866+00",
+            "updated_at": "2023-12-07 19:03:35.187897+00",
+            "lookup_key": "3",
+            "format": 7,
+            "interval": 3,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 123,
+        "fields": {
+            "created_at": "2023-12-07 19:04:18.499013+00",
+            "updated_at": "2023-12-07 19:04:18.499044+00",
+            "lookup_key": "10",
+            "format": 7,
+            "interval": 3,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 124,
+        "fields": {
+            "created_at": "2023-12-07 19:05:06.856004+00",
+            "updated_at": "2023-12-07 19:05:06.85604+00",
+            "lookup_key": "6",
+            "format": 7,
+            "interval": 3,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 125,
+        "fields": {
+            "created_at": "2023-12-07 19:05:39.854511+00",
+            "updated_at": "2023-12-07 19:05:39.85454+00",
+            "lookup_key": "12",
+            "format": 7,
+            "interval": 3,
+            "variable": 21
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 126,
+        "fields": {
+            "created_at": "2023-12-07 19:06:10.804041+00",
+            "updated_at": "2023-12-07 19:06:10.804075+00",
+            "lookup_key": "11",
+            "format": 7,
+            "interval": 3,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 127,
+        "fields": {
+            "created_at": "2023-12-07 19:07:05.9839+00",
+            "updated_at": "2023-12-07 19:07:05.983934+00",
+            "lookup_key": "8",
+            "format": 7,
+            "interval": 3,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 128,
+        "fields": {
+            "created_at": "2023-12-07 19:07:39.980875+00",
+            "updated_at": "2023-12-07 19:07:39.980907+00",
+            "lookup_key": "7",
+            "format": 7,
+            "interval": 3,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat", 
+        "pk": 129, 
+        "fields": {
+            "created_at": "2024-11-05 19:45:48.537077+00", 
+            "updated_at": "2024-11-05 20:13:06.248671+00", 
+            "lookup_key": "AT_C", 
+            "format": 3, 
+            "interval": 2,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 130,
+        "fields": {
+            "created_at": "2023-12-07 19:08:06.739066+00",
+            "updated_at": "2023-12-07 19:08:06.739098+00",
+            "lookup_key": "9",
+            "format": 7,
+            "interval": 3,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 131,
+        "fields": {
+            "created_at": "2024-06-08 04:42:25.816201+00",
+            "updated_at": "2024-06-08 04:42:25.816234+00",
+            "lookup_key": "WS_knt_Avg",
+            "format": 3,
+            "interval": 3,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 132,
+        "fields": {
+            "created_at": "2024-06-08 04:42:51.773844+00",
+            "updated_at": "2024-06-08 04:42:51.773877+00",
+            "lookup_key": "WS_knt_Max",
+            "format": 3,
+            "interval": 3,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 133,
+        "fields": {
+            "created_at": "2024-06-08 04:44:40.559212+00",
+            "updated_at": "2024-06-08 04:44:40.559244+00",
+            "lookup_key": "Rain_Tot",
+            "format": 3,
+            "interval": 3,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 134,
+        "fields": {
+            "created_at": "2024-06-08 04:45:11.054994+00",
+            "updated_at": "2024-06-08 04:45:11.055027+00",
+            "lookup_key": "SlrW",
+            "format": 3,
+            "interval": 3,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 135,
+        "fields": {
+            "created_at": "2024-06-08 04:45:45.996581+00",
+            "updated_at": "2024-06-08 04:45:45.996614+00",
+            "lookup_key": "RH",
+            "format": 3,
+            "interval": 3,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 136,
+        "fields": {
+            "created_at": "2024-06-08 04:46:14.488946+00",
+            "updated_at": "2024-06-08 04:46:14.488977+00",
+            "lookup_key": "WD_avg",
+            "format": 3,
+            "interval": 3,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 137,
+        "fields": {
+            "created_at": "2024-06-12 22:45:43.891593+00",
+            "updated_at": "2024-06-12 22:45:43.891626+00",
+            "lookup_key": "AT_C",
+            "format": 3,
+            "interval": 3,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 138,
+        "fields": {
+            "created_at": "2024-06-12 22:46:07.287976+00",
+            "updated_at": "2024-06-12 22:46:07.288006+00",
+            "lookup_key": "AT_C_MAX",
+            "format": 3,
+            "interval": 3,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 139,
+        "fields": {
+            "created_at": "2024-06-12 22:46:20.555135+00",
+            "updated_at": "2024-06-12 22:46:20.555171+00",
+            "lookup_key": "AT_C_MIN",
+            "format": 3,
+            "interval": 3,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 140,
+        "fields": {
+            "created_at": "2024-06-12 22:46:36.26615+00",
+            "updated_at": "2024-06-12 22:46:36.266181+00",
+            "lookup_key": "AT_C_AVG",
+            "format": 3,
+            "interval": 3,
+            "variable": 12
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 141,
+        "fields": {
+            "created_at": "2024-06-12 22:46:55.535649+00",
+            "updated_at": "2024-06-12 22:46:55.535681+00",
+            "lookup_key": "RAIN_MM_TOT",
+            "format": 3,
+            "interval": 3,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 142,
+        "fields": {
+            "created_at": "2024-06-12 22:50:35.680919+00",
+            "updated_at": "2024-06-12 22:50:35.680952+00",
+            "lookup_key": "WS_KNOT_AVG",
+            "format": 3,
+            "interval": 3,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 143,
+        "fields": {
+            "created_at": "2024-06-12 22:51:25.05299+00",
+            "updated_at": "2024-06-12 22:51:25.053022+00",
+            "lookup_key": "WD_DEG_AVG",
+            "format": 3,
+            "interval": 3,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 144,
+        "fields": {
+            "created_at": "2024-06-12 22:51:56.704755+00",
+            "updated_at": "2024-06-12 22:51:56.704788+00",
+            "lookup_key": "SR_WMS",
+            "format": 3,
+            "interval": 3,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 145,
+        "fields": {
+            "created_at": "2024-06-12 22:54:36.862667+00",
+            "updated_at": "2024-06-12 22:54:36.862699+00",
+            "lookup_key": "WB_C",
+            "format": 3,
+            "interval": 3,
+            "variable": 18
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 146,
+        "fields": {
+            "created_at": "2024-06-12 22:55:23.667387+00",
+            "updated_at": "2024-06-12 22:55:23.667419+00",
+            "lookup_key": "DP_C",
+            "format": 3,
+            "interval": 3,
+            "variable": 19
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 147,
+        "fields": {
+            "created_at": "2024-06-12 22:55:58.151334+00",
+            "updated_at": "2024-06-12 22:55:58.151368+00",
+            "lookup_key": "WC_C",
+            "format": 3,
+            "interval": 3,
+            "variable": 28
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 148,
+        "fields": {
+            "created_at": "2024-06-12 22:59:00.092395+00",
+            "updated_at": "2024-06-12 22:59:00.092429+00",
+            "lookup_key": "WD_DEG_D1_WVT",
+            "format": 3,
+            "interval": 3,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 149,
+        "fields": {
+            "created_at": "2024-06-12 23:00:05.118638+00",
+            "updated_at": "2024-06-12 23:00:05.118671+00",
+            "lookup_key": "WS_KNOT_MAX",
+            "format": 3,
+            "interval": 3,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 150,
+        "fields": {
+            "created_at": "2024-06-12 23:00:55.536524+00",
+            "updated_at": "2024-06-12 23:00:55.536558+00",
+            "lookup_key": "RH_PER",
+            "format": 3,
+            "interval": 3,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 151,
+        "fields": {
+            "created_at": "2024-06-12 23:01:11.776639+00",
+            "updated_at": "2024-06-12 23:01:11.776681+00",
+            "lookup_key": "RH_PER_MAX",
+            "format": 3,
+            "interval": 3,
+            "variable": 33
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 152,
+        "fields": {
+            "created_at": "2024-06-12 23:01:27.636804+00",
+            "updated_at": "2024-06-12 23:01:27.636837+00",
+            "lookup_key": "RH_PER_MIN",
+            "format": 3,
+            "interval": 3,
+            "variable": 32
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 153,
+        "fields": {
+            "created_at": "2024-06-17 17:44:09.545445+00",
+            "updated_at": "2024-06-17 17:44:09.545479+00",
+            "lookup_key": "AirTC_Avg",
+            "format": 3,
+            "interval": 3,
+            "variable": 12
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 154,
+        "fields": {
+            "created_at": "2024-06-21 17:49:57.040238+00",
+            "updated_at": "2024-06-21 17:49:57.040271+00",
+            "lookup_key": "AirTemp",
+            "format": 3,
+            "interval": 3,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 155,
+        "fields": {
+            "created_at": "2024-06-24 15:13:18.398692+00",
+            "updated_at": "2024-06-24 15:13:18.398725+00",
+            "lookup_key": "AirTemp_Avg",
+            "format": 3,
+            "interval": 3,
+            "variable": 12
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 156,
+        "fields": {
+            "created_at": "2024-06-24 15:25:17.497453+00",
+            "updated_at": "2024-06-24 15:25:17.497487+00",
+            "lookup_key": "BP",
+            "format": 3,
+            "interval": 3,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 157,
+        "fields": {
+            "created_at": "2024-06-24 15:51:31.019389+00",
+            "updated_at": "2024-06-24 15:51:31.019422+00",
+            "lookup_key": "WD_StdDev",
+            "format": 3,
+            "interval": 3,
+            "variable": 57
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 158,
+        "fields": {
+            "created_at": "2024-06-24 16:08:22.623756+00",
+            "updated_at": "2024-06-24 16:08:22.62379+00",
+            "lookup_key": "Rain_Intnsty10",
+            "format": 3,
+            "interval": 3,
+            "variable": 3
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 159,
+        "fields": {
+            "created_at": "2024-06-24 16:09:31.19624+00",
+            "updated_at": "2024-06-24 16:09:31.19627+00",
+            "lookup_key": "Rain_Intnsty15",
+            "format": 3,
+            "interval": 3,
+            "variable": 4
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 160,
+        "fields": {
+            "created_at": "2024-06-24 16:14:02.638433+00",
+            "updated_at": "2024-06-24 16:14:02.638466+00",
+            "lookup_key": "Rain_Intnsty30",
+            "format": 3,
+            "interval": 3,
+            "variable": 5
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 161,
+        "fields": {
+            "created_at": "2024-06-24 16:14:50.566151+00",
+            "updated_at": "2024-06-24 16:14:50.566184+00",
+            "lookup_key": "Rain_Intnsty1hr",
+            "format": 3,
+            "interval": 3,
+            "variable": 6
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 162,
+        "fields": {
+            "created_at": "2024-06-24 16:15:47.476619+00",
+            "updated_at": "2024-06-24 16:15:47.47665+00",
+            "lookup_key": "Rain_Intnsty2hr",
+            "format": 3,
+            "interval": 3,
+            "variable": 7
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 163,
+        "fields": {
+            "created_at": "2024-06-24 16:16:28.958664+00",
+            "updated_at": "2024-06-24 16:16:28.958698+00",
+            "lookup_key": "Rain_Intnsty6hr",
+            "format": 3,
+            "interval": 3,
+            "variable": 8
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 164,
+        "fields": {
+            "created_at": "2024-06-24 16:17:37.935738+00",
+            "updated_at": "2024-06-24 16:17:37.935777+00",
+            "lookup_key": "Rain_Intnsty12hr",
+            "format": 3,
+            "interval": 3,
+            "variable": 9
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 165,
+        "fields": {
+            "created_at": "2024-06-24 16:22:41.224658+00",
+            "updated_at": "2024-06-24 16:22:41.22469+00",
+            "lookup_key": "BP_mb",
+            "format": 3,
+            "interval": 3,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 166,
+        "fields": {
+            "created_at": "2024-06-24 16:28:35.886524+00",
+            "updated_at": "2024-06-24 16:28:35.886558+00",
+            "lookup_key": "WS_kts_S_WVT",
+            "format": 3,
+            "interval": 3,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 167,
+        "fields": {
+            "created_at": "2024-06-24 16:29:34.496022+00",
+            "updated_at": "2024-06-24 16:29:34.496058+00",
+            "lookup_key": "WindDir_D1_WVT",
+            "format": 3,
+            "interval": 3,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 168,
+        "fields": {
+            "created_at": "2024-06-24 16:30:33.176189+00",
+            "updated_at": "2024-06-24 16:30:33.176233+00",
+            "lookup_key": "WindDir_SD1_WVT",
+            "format": 3,
+            "interval": 3,
+            "variable": 57
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 169,
+        "fields": {
+            "created_at": "2024-06-24 16:47:12.931212+00",
+            "updated_at": "2024-06-24 16:47:12.931244+00",
+            "lookup_key": "T108_C",
+            "format": 3,
+            "interval": 3,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 170,
+        "fields": {
+            "created_at": "2024-06-24 16:48:23.611942+00",
+            "updated_at": "2024-06-24 16:48:23.611974+00",
+            "lookup_key": "AirTC",
+            "format": 3,
+            "interval": 3,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 171,
+        "fields": {
+            "created_at": "2024-06-24 16:52:09.749304+00",
+            "updated_at": "2024-06-24 16:52:09.749337+00",
+            "lookup_key": "SlrkW_Avg",
+            "format": 3,
+            "interval": 3,
+            "variable": 73
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 172,
+        "fields": {
+            "created_at": "2024-06-24 16:53:34.372472+00",
+            "updated_at": "2024-06-24 16:53:34.372506+00",
+            "lookup_key": "SlrMJ_Tot",
+            "format": 3,
+            "interval": 3,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 173,
+        "fields": {
+            "created_at": "2024-06-24 16:55:14.890033+00",
+            "updated_at": "2024-06-24 16:55:14.890071+00",
+            "lookup_key": "Rain_mm_Tot",
+            "format": 3,
+            "interval": 3,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 174,
+        "fields": {
+            "created_at": "2024-06-24 16:56:21.372899+00",
+            "updated_at": "2024-06-24 16:56:21.372941+00",
+            "lookup_key": "Enc_RH",
+            "format": 3,
+            "interval": 3,
+            "variable": 4007
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 175,
+        "fields": {
+            "created_at": "2024-06-24 17:20:19.473564+00",
+            "updated_at": "2024-06-24 17:20:19.473596+00",
+            "lookup_key": "T107_C",
+            "format": 3,
+            "interval": 3,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 176,
+        "fields": {
+            "created_at": "2024-06-24 17:35:02.224619+00",
+            "updated_at": "2024-06-24 17:35:02.224654+00",
+            "lookup_key": "TwC",
+            "format": 3,
+            "interval": 3,
+            "variable": 18
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 177,
+        "fields": {
+            "created_at": "2024-06-24 18:01:15.349377+00",
+            "updated_at": "2024-06-24 18:01:15.349417+00",
+            "lookup_key": "TdC",
+            "format": 3,
+            "interval": 3,
+            "variable": 19
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 178,
+        "fields": {
+            "created_at": "2024-06-24 18:01:52.302608+00",
+            "updated_at": "2024-06-24 18:01:52.302641+00",
+            "lookup_key": "BattV",
+            "format": 3,
+            "interval": 3,
+            "variable": 200
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 179,
+        "fields": {
+            "created_at": "2024-06-24 18:07:34.740721+00",
+            "updated_at": "2024-06-24 18:07:34.740755+00",
+            "lookup_key": "Rain_Tot",
+            "format": 3,
+            "interval": 3,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 180,
+        "fields": {
+            "created_at": "2024-06-12 22:46:55.535649+00",
+            "updated_at": "2024-06-12 22:46:55.535681+00",
+            "lookup_key": "RAIN_MM_Tot",
+            "format": 3,
+            "interval": 3,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 181,
+        "fields": {
+            "created_at": "2024-06-12 22:46:55.535649+00",
+            "updated_at": "2024-06-12 22:46:55.535681+00",
+            "lookup_key": "WS_KNOT_S_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 182,
+        "fields": {
+            "created_at": "2024-06-12 22:46:55.535649+00",
+            "updated_at": "2024-06-12 22:46:55.535681+00",
+            "lookup_key": "WD_DEG_D1_WVT",
+            "format": 3,
+            "interval": 2,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 183,
+        "fields": {
+            "created_at": "2024-06-12 22:46:55.535649+00",
+            "updated_at": "2024-06-12 22:46:55.535681+00",
+            "lookup_key": "BP_MB",
+            "format": 3,
+            "interval": 2,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 184,
+        "fields": {
+            "created_at": "2024-06-24 16:29:34.496022+00",
+            "updated_at": "2024-06-24 16:29:34.496058+00",
+            "lookup_key": "Dir_of_Max",
+            "format": 3,
+            "interval": 3,
+            "variable": 4063
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 185,
+        "fields": {
+            "created_at": "2024-06-24 16:29:34.496022+00",
+            "updated_at": "2024-06-24 16:29:34.496058+00",
+            "lookup_key": "WD_DEG_DOM",
+            "format": 3,
+            "interval": 3,
+            "variable": 4063
+        }
+    },
+    {
+        "model": "wx.variableformat",
+        "pk": 186,
+        "fields": {
+            "created_at": "2016-03-04 01:26:18+00",
+            "updated_at": "2016-03-04 01:26:18+00",
+            "lookup_key": "WS_KNOT_Max",
+            "format": 3,
+            "interval": 2,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.variableformat", 
+        "pk": 187, 
+        "fields": {
+            "created_at": "2022-11-01T14:37:32.297Z", 
+            "updated_at": "2022-11-01T14:39:23.242Z", 
+            "lookup_key": "Wd_Deg", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 56
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 188, 
+        "fields": {
+            "created_at": "2023-02-23T20:43:22.614Z", 
+            "updated_at": "2024-08-27T16:38:35.881Z", 
+            "lookup_key": "AT2_C", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4044
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 189, 
+        "fields": {
+            "created_at": "2023-02-23T20:48:43.843Z", 
+            "updated_at": "2024-08-27T16:42:05.576Z", 
+            "lookup_key": "AT2_C_MAX", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4045
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 190, 
+        "fields": {
+            "created_at": "2023-02-23T20:48:48.427Z", 
+            "updated_at": "2024-08-27T16:42:47.425Z", 
+            "lookup_key": "AT2_C_MIN", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4046
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 191, 
+        "fields": {
+            "created_at": "2023-02-23T20:51:28.708Z", 
+            "updated_at": "2023-02-23T20:51:28.708Z", 
+            "lookup_key": "ENC_RH", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4007
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 192, 
+        "fields": {
+            "created_at": "2023-02-23T21:04:18.668Z", 
+            "updated_at": "2023-02-23T21:04:18.668Z", 
+            "lookup_key": "WR_KM", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 103
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 193, 
+        "fields": {
+            "created_at": "2023-03-02T15:09:20.170Z", 
+            "updated_at": "2023-03-02T15:09:20.170Z", 
+            "lookup_key": "AT_C_Max", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 16
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 194, 
+        "fields": {
+            "created_at": "2023-03-02T16:02:07.370Z", 
+            "updated_at": "2023-03-02T16:02:07.370Z", 
+            "lookup_key": "ENC_RH_MAX", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4007
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 195, 
+        "fields": {
+            "created_at": "2023-03-02T16:02:25.279Z", 
+            "updated_at": "2023-03-02T16:02:25.279Z", 
+            "lookup_key": "ENC_RH_Max", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4007
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 196, 
+        "fields": {
+            "created_at": "2023-03-02T16:03:47.305Z", 
+            "updated_at": "2023-03-02T16:03:47.305Z", 
+            "lookup_key": "WR_Km_Tot", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 103
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 197, 
+        "fields": {
+            "created_at": "2023-03-02T16:04:04.882Z", 
+            "updated_at": "2023-03-02T16:04:04.882Z", 
+            "lookup_key": "WR_KM_TOT", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 103
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 198, 
+        "fields": {
+            "created_at": "2023-03-02T16:04:38.604Z", 
+            "updated_at": "2023-03-02T16:04:38.604Z", 
+            "lookup_key": "STAGE_M", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4013
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 199, 
+        "fields": {
+            "created_at": "2023-03-27T20:56:34.952Z", 
+            "updated_at": "2023-03-27T20:56:34.952Z", 
+            "lookup_key": "AT_C_Min", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 14
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 200, 
+        "fields": {
+            "created_at": "2023-10-28T16:36:52.437Z", 
+            "updated_at": "2023-10-28T16:36:52.437Z", 
+            "lookup_key": "ST1FT_C", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 21
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 201, 
+        "fields": {
+            "created_at": "2024-08-27T18:45:16.562Z", 
+            "updated_at": "2024-08-27T18:45:16.562Z", 
+            "lookup_key": "AT2_C_Max", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4045
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 202, 
+        "fields": {
+            "created_at": "2024-08-27T18:45:42.055Z", 
+            "updated_at": "2024-08-27T18:45:42.055Z", 
+            "lookup_key": "AT2_C_Min", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4046
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 203, 
+        "fields": {
+            "created_at": "2025-02-21T15:15:53.106Z", 
+            "updated_at": "2025-02-21T15:15:53.106Z", 
+            "lookup_key": "VWC", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4047
+        }
+    }, 
+    {
+        "model": "wx.variableformat", 
+        "pk": 204, 
+        "fields": {
+            "created_at": "2025-02-21T15:33:32.438Z", 
+            "updated_at": "2025-02-21T15:33:32.438Z", 
+            "lookup_key": "VWC4FT", 
+            "format": 3, 
+            "interval": 2, 
+            "variable": 4048
+        }
+    }
+]
+

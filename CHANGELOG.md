@@ -5,6 +5,26 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.2.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added the initial SURFACE application source under the top-level `surface/` directory.
+- Added SURFACE Docker Compose, API, nginx, documentation, fixtures, and configuration files to the unified repository.
+- Added SURFACE app-specific ignore rules for runtime data, generated files, and environment files.
+
+### Changed
+
+- Started the `0.2.0-alpha` release line for installer plus SURFACE application integration.
+- Kept a single shared version for the installer package and SURFACE application.
+
+### Notes
+
+- This release focuses on bringing the SURFACE application source into the unified `surface-cdms` repository.
+- The installer GUI flow is still being preserved.
+- Update, backup, restore, and install directory management are intentionally deferred to a later release.
+
+
 ## [0.1.0-alpha.6] - 2026-05-25
 
 ### Changed
@@ -19,6 +39,7 @@ This project follows Semantic Versioning.
 
 - This release focuses on documentation and usability for the installer package.
 - The full SURFACE application has not yet been added as a top-level `surface/` folder.
+
 
 ## [0.1.0-alpha.5] - 2026-05-25
 
@@ -46,6 +67,7 @@ This project follows Semantic Versioning.
 - This release focuses on validating the recommended CLI installation method.
 - The full SURFACE application has not yet been added as a top-level `surface/` folder.
 
+
 ## [0.1.0-alpha.4] - 2026-05-25
 
 ### Changed
@@ -70,6 +92,7 @@ This project follows Semantic Versioning.
 - This release still focuses only on the installer package.
 - The full SURFACE application has not yet been added as a top-level `surface/` folder.
 
+
 ## [0.1.0-alpha.3] - 2026-05-25
 
 ### Added
@@ -86,6 +109,7 @@ This project follows Semantic Versioning.
 ### Notes
 
 - This release focuses on making the installer easier to inspect and debug.
+
 
 ## [0.1.0-alpha.2] - 2026-05-25
 
@@ -107,6 +131,7 @@ This project follows Semantic Versioning.
 ### Notes
 
 - This release migrated the existing installer into the new `surface-cdms` package structure.
+
 
 ## [0.1.0-alpha.1] - 2026-05-25
 

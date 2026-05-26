@@ -1,0 +1,1179 @@
+{% extends "base.html" %} {% block content %}
+<div class="srf-container">
+  <div id="app" v-cloak>
+    <v-app>
+      <v-main fluid fill-height style="background: white">
+        <v-layout column>
+          
+          <!-- main heading -->
+          <div
+            class="
+              srf-flex
+              flex-row
+              align-items-center
+              justify-content-between
+              srf-padding
+            "
+          >
+            <span class="srf-display-1 text-uppercase">Data Validation</span
+            ><br /><br />
+          </div>
+
+          <!-- main body -->
+          <v-layout column fluid>
+
+            <v-layout column fluid>
+
+              <h6>Station Filters</h6>
+
+              <!-- Station filters -->
+              <v-layout dense justify="start" class="mb-3">
+                <!-- district -->
+                <v-flex lg2 class="text-center">
+                  <v-autocomplete
+                    item-text="name"
+                    item-value="name"
+                    v-model="filter.stationDistrict"
+                    :items="stationDistrictList"
+                    label="District"
+                    autocomplete="off"
+                    clearable
+                  ></v-autocomplete>
+                </v-flex>
+
+                <!-- watershed -->
+                <v-flex lg2 ml-3>
+                  <v-autocomplete
+                    item-text="name"
+                    item-value="name"
+                    v-model="filter.stationWatershed"
+                    :items="stationWatershedList"
+                    label="Watershed"
+                    autocomplete="off"
+                    clearable
+                  ></v-autocomplete>
+                </v-flex>
+
+                <!-- profile -->
+                <v-flex lg2 ml-3 mr-5>
+                  <v-autocomplete
+                    item-text="name"
+                    item-value="id"
+                    v-model="filter.stationProfile"
+                    :items="stationProfileList"
+                    label="Profile"
+                    autocomplete="off"
+                    clearable
+                  ></v-autocomplete>
+                </v-flex>
+
+                <!-- active toggle -->
+                <v-flex lg1 ml-5>
+                  <v-switch
+                    v-model="filter.isActive"
+                    inset
+                    @change="invertValue(filter.isActive)"
+                    label="Active"
+                  ></v-switch>
+                </v-flex>
+
+                <!-- automatic toggle -->
+                <v-flex lg1 ml-5>
+                  <v-switch
+                    v-model="filter.isAutomatic"
+                    inset
+                    @change="invertValue(filter.isAutomatic)"
+                    label="Automatic"
+                  ></v-switch>
+                </v-flex>
+
+              </v-layout>
+
+              <!-- Loading overlay -->
+              <v-overlay :value="loading">
+                <v-progress-circular
+                  indeterminate
+                  size="64"
+                ></v-progress-circular>
+              </v-overlay>
+
+            </v-layout>
+
+            <!-- Main filters -->
+            <v-layout mt-3>
+              <!-- station select -->
+              <v-flex lg5>
+                <v-autocomplete
+                  :items="stationList"
+                  item-text="label"
+                  item-value="id"
+                  v-model="currentSelection.stationId"
+                  label="Station"
+                  required
+                  hint="*Required"
+                  persistent-hint
+                  @change="getStationVariables(currentSelection.stationId)"
+                  :rules="simpleTextFieldsRules"
+                  autocomplete="off"
+                ></v-autocomplete>
+              </v-flex>
+
+              <!-- variable -->
+              <v-flex pl-5 lg5>
+                <v-autocomplete
+                  :items="variables"
+                  item-text="variable_name"
+                  item-value="variable"
+                  v-model="currentSelection.variableId"
+                  label="Select variable"
+                  required
+                  hint="*Required"
+                  persistent-hint
+                  :disabled="!currentSelection.stationId"
+                  :rules="simpleTextFieldsRules"
+                  autocomplete="off"
+                ></v-autocomplete>
+              </v-flex>
+            </v-layout>
+
+            <v-layout mt-3>
+              <!-- start date -->
+              <v-flex lg5 class="d-flex justify-between">
+                <v-menu
+                  :close-on-content-click="false"
+                  v-model="menu1"
+                  :nudge-right="40"
+                  transition="scale-transition"
+                  offset-y
+                  class="max-50"
+                >
+                  <template v-slot:activator="{ on }">
+                    <v-text-field
+                      v-model="currentSelection.startDate"
+                      label="Start date"
+                      prepend-icon="event"
+                      v-on="on"
+                      required
+                      hint="*Required"
+                      persistent-hint
+                      :rules="simpleTextFieldsRules"
+                    ></v-text-field>
+                  </template>
+                  <v-date-picker
+                    name="startDate"
+                    v-model="currentSelection.startDate"
+                    @input="menu1 = false"
+                  ></v-date-picker>
+                </v-menu>
+
+                <v-menu
+                  :close-on-content-click="false"
+                  v-model="menu3"
+                  :nudge-right="40"
+                  transition="scale-transition"
+                  offset-y
+                  class="max-50"
+                >
+                  <template v-slot:activator="{ on }">
+                    <v-text-field
+                      v-model="currentSelection.startTime"
+                      label="Start time"
+                      prepend-icon="access_time"
+                      v-on="on"
+                    ></v-text-field>
+                  </template>
+                  <v-time-picker
+                    v-if="menu3"
+                    v-model="currentSelection.startTime"
+                    class="max-50"
+                    @click:minute="$refs.menu.save(currentSelection.startTime)"
+                  ></v-time-picker>
+                </v-menu>
+              </v-flex>
+
+              <!-- end date -->
+              <v-flex pl-5 lg5 class="d-flex justify-between">
+                <v-menu
+                  :close-on-content-click="false"
+                  v-model="menu2"
+                  :nudge-right="40"
+                  transition="scale-transition"
+                  offset-y
+                  class="max-50"
+                >
+                  <template v-slot:activator="{ on }">
+                    <v-text-field
+                      v-model="currentSelection.endDate"
+                      label="End date"
+                      prepend-icon="event"
+                      v-on="on"
+                      required
+                      hint="*Required"
+                      persistent-hint
+                      :rules="simpleTextFieldsRules"
+                    ></v-text-field>
+                  </template>
+                  <v-date-picker
+                    name="endDate"
+                    v-model="currentSelection.endDate"
+                    @input="menu2 = false"
+                  ></v-date-picker>
+                </v-menu>
+
+                <v-menu
+                  :close-on-content-click="false"
+                  v-model="menu4"
+                  :nudge-right="40"
+                  transition="scale-transition"
+                  offset-y
+                  class="max-50"
+                >
+                  <template v-slot:activator="{ on }">
+                    <v-text-field
+                      v-model="currentSelection.endTime"
+                      label="End time"
+                      prepend-icon="access_time"
+                      v-on="on"
+                    ></v-text-field>
+                  </template>
+                  <v-time-picker
+                    v-if="menu4"
+                    v-model="currentSelection.endTime"
+                    class="max-50"
+                    @click:minute="$refs.menu.save(currentSelection.endTime)"
+                  ></v-time-picker>
+                </v-menu>
+              </v-flex>
+
+              <!-- search button -->
+              <v-flex pl-5 mt-5 lg2 class="d-flex justify-between">
+                <v-btn
+                  outlined
+                  justify-end
+                  color="primary"
+                  @click="doSearch"
+                  :disabled="$v.currentSelection.$invalid"
+                  >
+                    SEARCH
+                  </v-btn
+                >
+              </v-flex>
+            </v-layout>
+
+
+            <!-- Error messages section -->
+            <v-layout column fluid mt-5>
+              <v-alert v-model="request_error" dismissible type="error">
+                [[ request_error_message ]]
+              </v-alert>
+            </v-layout>
+
+            <v-layout>
+              <v-flex>
+                <v-btn
+                  v-if="selectedRows.length > 1"
+                  class="mt-5"
+                  outlined
+                  raised
+                  color="success"
+                  @click="openBulkSave"
+                >
+                  Bulk Update
+                  <v-icon right dark>mdi-square-edit-outline</v-icon>
+                </v-btn>
+              </v-flex>
+            </v-layout>
+
+            <!-- Dialog for bulk save -->
+            <v-dialog v-model="bulkDialog" max-width="520" persistent>
+              <v-card class="rounded-lg">
+
+                <v-card-title class="headline">
+                  Bulk Update Selected Rows
+                </v-card-title>
+
+                <v-card-text class="px-6 py-5">
+                  <v-alert
+                    v-if="selectedRows.length === 0"
+                    type="warning"
+                    dense
+                    text
+                    class="mb-4"
+                  >
+                    Select at least one row to enable bulk update.
+                  </v-alert>
+
+                  <v-select
+                    v-model="bulkForm.manual_flag"
+                    :items="qualityFlags"
+                    item-text="name"
+                    item-value="id"
+                    label="Manual flag"
+                    outlined
+                    clearable
+                    class="mb-4"
+                    :disabled="selectedRows.length === 0 || savingBulk"
+                  ></v-select>
+
+                  <v-textarea
+                    v-model="bulkForm.remarks"
+                    label="Remarks"
+                    outlined
+                    auto-grow
+                    no-resize
+                    rows="4"
+                  ></v-textarea>
+
+                  <div class="d-flex justify-end mt-5">
+                    <v-btn  
+                      @click="closeBulkSave" 
+                      :disabled="savingBulk"
+                      class="ml-2"
+                      color="error"
+                      depressed  
+                    >
+                      Cancel
+                    </v-btn>
+
+                    <v-btn
+                      class="ml-2"
+                      color="success"
+                      depressed
+                      :loading="savingBulk"
+                      :disabled="selectedRows.length === 0 || savingBulk"
+                      @click="saveBulk"
+                    >
+                      Save changes
+                    </v-btn>
+                  </div>
+                </v-card-text>
+
+              </v-card>
+            </v-dialog>
+
+            <!-- Dialog for AQC details -->
+            <v-dialog v-model="aqcDetails" width="800" persistent>
+              <v-card class="rounded-lg">
+                <v-card-title class="headline">
+                  AQC Details
+                </v-card-title>
+
+                <v-card-text> 
+
+                  <!-- Metadata container -->
+                  <div class="metadata-container mb-5">
+                    <div>
+                      <span class="label-text">Date/Hour:</span>
+                      [[ aqcDetailsMetadata.datetime ]]
+                    </div>
+
+                    <div>
+                      <span class="label-text">Measured:</span>
+                      [[ aqcDetailsMetadata.measured ]]
+                    </div>
+
+                    <div>
+                      <span class="label-text">Final/Overall Quality Flag:</span>
+                      <v-chip 
+                        :color="paintFlag(aqcDetailsMetadata.final_flag)" 
+                        style="color: white;"
+                      >
+                        [[ qualityFlagsDict[aqcDetailsMetadata.final_flag]?.name ]]
+                      </v-chip>
+                    </div>
+                    
+                    <div class="mt-2">
+                      [[ aqcDetailsMetadata.description ]]
+                    </div>
+                  </div>
+
+                  <!-- Threshold table -->
+                  <v-data-table
+                    :headers="aqcDetailsHeaders"
+                    :items="aqcDetailsItems"
+                    hide-default-footer
+                  >
+                    <!-- flag -->
+                    <template v-slot:item.quality_flag="{ item }">
+                      <v-chip 
+                        :color="paintFlag(item.quality_flag)" 
+                        style="color: white;"
+                      >
+                        [[ qualityFlagsDict[item.quality_flag]?.name ]]
+                      </v-chip>
+                    </template>
+                  </v-data-table>
+
+                  <!-- close btn -->
+                  <div class="d-flex justify-end mt-5">
+                    <v-btn  
+                      @click="aqcDetails = false" 
+                      class="ml-2"
+                      color="error"
+                      depressed  
+                    >
+                      Close
+                    </v-btn>
+                  </div>
+                </v-card-text> 
+
+              </v-card>
+            </v-dialog>
+
+            <!-- OUTPUT TABLE -->
+            <v-layout column fluid fill-height>
+              <v-flex sm12 md12 lg12 mt-5>
+
+                <v-btn
+                    class="ml-2"
+                    outlined
+                    color="purple"
+                    style="margin-bottom: 10px;"
+                >
+                    Time: Local
+                    <v-icon right dark>mdi-clock-outline</v-icon>
+                </v-btn>
+
+                <v-data-table
+                  mt-5
+                  :headers="headers"
+                  :items="rawDataList"
+                  :items-per-page="rowsPerPage"
+                  v-model="selectedRows"
+                  item-key="formated_datetime"
+                  show-select
+                >
+                  <!-- automatic flag -->
+                  <template v-slot:item.automatic_flag="{ item }">
+                    <v-chip 
+                      :color="paintFlag(item.automatic_flag)" 
+                      style="color: white;"
+                      @click="openAqcDetails(item)"
+                      clickable
+                    >
+                      [[ qualityFlagsDict[item.automatic_flag]?.name ]]
+                    </v-chip>
+                  </template>
+
+                  <!-- manual flag -->
+                  <template v-slot:item.manual_flag="{ item }">
+                    <v-chip :color="paintFlag(item.manual_flag)">
+                      <v-autocomplete
+                        class="qc-manual-flag"
+                        item-text="name"
+                        item-value="id"
+                        :items="qualityFlags"
+                        v-model="item.manual_flag"
+                        autocomplete="off"
+                      ></v-autocomplete>
+                    </v-chip>
+                  </template>
+
+                  <!-- consisted value -->
+                  <template v-slot:item.consisted="{ item }">
+                    <v-text-field
+                      class="qc-consisted"
+                      single-line
+                      v-model="item.consisted"
+                    ></v-text-field>
+                  </template>
+
+                  <!-- remarks -->
+                  <template v-slot:item.remarks="{ item }">
+                    <v-text-field
+                      class="qc-remarks"
+                      single-line
+                      maxlength="120"
+                      v-model="item.remarks"
+                    ></v-text-field>
+                  </template>
+
+                  <!-- action btns (currently only save) -->
+                  <template v-slot:item.action="{ item }">
+                    <v-tooltip bottom>
+                      <template v-slot:activator="{ on }">
+                        <v-icon
+                          v-on="on"
+                          @click="handleUpdate(item)"
+                          :hidden="!isUpdated(item)"
+                          >save</v-icon
+                        >
+                      </template>
+                      <span>Update record</span>
+                    </v-tooltip>
+                  </template>
+
+                </v-data-table>
+
+              </v-flex>
+            </v-layout>
+
+          </v-layout>
+
+        </v-layout>
+      </v-main>
+    </v-app>
+  </div>
+
+  {% endblock %} {% block localjavascript %}
+
+  <script>
+    Vue.use(window.vuelidate.default);
+
+    const { required, minLength } = window.validators;
+    new Vue({
+      el: "#app",
+      vuetify: new Vuetify(),
+      delimiters: ["[[", "]]"],
+      validations: {
+        currentSelection: {
+          stationId: { required },
+          variableId: { required },
+          startDate: { required },
+          startTime: { required },
+          endDate: { required },
+          endTime: { required },
+        },
+      },
+      data: {
+        timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        variables: [],
+
+        // Rows selected in v-data-table
+        selectedRows: [],
+
+        // Controls bluk dialog visibility
+        bulkDialog: false,
+
+        // Controls aqc dialog visibility
+        aqcDetails: false,
+
+        // True while bulk save is running
+        savingBulk: false,
+
+        // Form fields inside bulk dialog
+        bulkForm: {
+          manual_flag: null,  // good / bad / suspicious (IDs)
+          remarks: "",
+        },
+
+        // Individual AQC details information
+        // item qc headers for the table
+        aqcDetailsHeaders: [
+          {
+            text: "Checks",
+            align: "left",
+            sortable: false,
+            value: "threshold",
+          },
+          {
+            text: "Quality Flag",
+            align: "left",
+            sortable: false,
+            value: "quality_flag",
+          },
+          {
+            text: "Remarks / Description",
+            align: "left",
+            sortable: false,
+            value: "description",
+          }
+        ],
+
+        // item qc details for the table
+        aqcDetailsItems: [],
+
+        // item qc metadata details for the table
+        aqcDetailsMetadata: {},
+
+        updatingItem: null, // the item which is currently being updated
+
+        qualityFlags: [],
+        qualityFlagsDict: {},
+        menu1: false,
+        menu2: false,
+        menu3: false,
+        menu4: false,
+        request_error: false,
+        request_error_message: "",
+        simpleTextFieldsRules: [
+          (v) => (v !== undefined && v !== "") || "This field is required",
+        ],
+        currentSelection: {
+          stationId: null,
+          variableId: null,
+          startDate: new Date(new Date().setDate(new Date().getDate() - 1))
+            .toISOString()
+            .substr(0, 10),
+          startTime: "00:00",
+          endDate: new Date().toISOString().substr(0, 10),
+          endTime: "00:00",
+        },
+        rowsPerPage: 10,
+        loading: false,
+        rawDataList: [],
+        headers: [
+          {
+            text: "Date/Hour",
+            align: "left",
+            sortable: true,
+            value: "formated_datetime",
+          },
+          {
+            text: "Measured",
+            align: "left",
+            sortable: true,
+            value: "measured",
+          },
+          {
+            text: "AQC Flag",
+            align: "left",
+            sortable: true,
+            value: "automatic_flag",
+          },
+          {
+            text: "Manual Flag",
+            align: "left",
+            sortable: false,
+            value: "manual_flag",
+          },
+          {
+            text: "Consisted",
+            align: "left",
+            sortable: false,
+            value: "consisted",
+          },
+          {
+            text: "Remarks",
+            align: "left",
+            sortable: false,
+            value: "remarks",
+          },
+          {
+            text: "Action",
+            align: "left",
+            sortable: false,
+            value: "action",
+          },
+        ],
+        filter: {
+          isActive: true,
+          isAutomatic: true
+        },
+        stations: [
+          {% for station in station_list %}
+          { id: {{ station.id }},
+            label: "{{ station.name | safe }} - {{ station.code  | safe }}",
+            region: "{{ station.region | safe }}",
+            watershed: "{{ station.watershed | safe }}",
+            profile: "{{ station.profile.id | safe }}",
+            is_automatic: {{ station.is_automatic | lower }},
+            is_active: {{ station.is_active | lower }},
+          },
+          {% endfor %}
+        ],
+        stationProfileList: [
+          {% for station_profile in station_profile_list %}
+          {id: {{ station_profile.id }}, name: "{{ station_profile.name }}" },
+          {% endfor %}
+        ],
+        stationWatershedList: [
+          {% for station_watershed in station_watershed_list %}
+          {id: {{ station_watershed.id }}, name: "{{ station_watershed.watershed }}" },
+          {% endfor %}
+        ],
+        stationDistrictList: [
+          {% for station_district in station_district_list %}
+          {id: {{ station_district.id }}, name: "{{ station_district.name }}" },
+          {% endfor %}
+        ],
+
+        searchAction: true, // control for when searching
+        taskId: null,
+        pollingInterval: null,
+        pollingDelay: 1000,
+      },
+      computed: {
+        baseURL() {
+          return "/";
+        },
+
+        stationList () {
+          let filteredStations = this.stations;
+
+          if(this.filter.stationDistrict)
+            filteredStations = filteredStations.filter(station => station.region == this.filter.stationDistrict);
+
+          if(this.filter.stationWatershed)
+            filteredStations = filteredStations.filter(station => station.watershed == this.filter.stationWatershed);
+
+          if(this.filter.stationProfile)
+            filteredStations = filteredStations.filter(station => station.profile == this.filter.stationProfile);
+
+          filteredStations = filteredStations.filter(station => this.filter.isAutomatic == station.is_automatic);
+
+          filteredStations = filteredStations.filter(station => this.filter.isActive == station.is_active);
+
+          this.currentSelection.stationId = null;
+
+          return filteredStations;
+        }
+      },
+      methods: {
+        getQualityFlags() {
+          this.getAll(`api/quality_flags`).then((data) => {
+            this.qualityFlags = data;
+            data.forEach((qualityFlag) => {
+              this.qualityFlagsDict[qualityFlag.id] = {
+                name: qualityFlag.name,
+                color: qualityFlag.color,
+              };
+            });
+          });
+        },
+
+
+        getStationVariables(stationId) {
+          this.getAll(`api/stations_variables/?station_id=${stationId}`).then(
+            (data) => (this.variables = data)
+          );
+        },
+
+        
+        parsePatchParameters(item) {
+          let params = "?station_id=" + item.station_id;
+          params += "&variable_id=" + item.variable_id;
+          params += "&datetime=" + item.datetime;
+
+          return params;
+        },
+
+
+        paintFlag(result) {
+          if (result == null) return;
+          return this.qualityFlagsDict[result]?.color;
+        },
+
+
+        isUpdated(item) {
+          return (
+            item.consisted != item.old.consisted ||
+            item.manual_flag != item.old.manual_flag ||
+            item.remarks != item.old.remarks
+          );
+        },
+
+
+        parseParameters() {
+          let params = "?station_id=" + this.currentSelection.stationId;
+          params += "&variable_id=" + this.currentSelection.variableId;
+
+          params +=
+          "&start_date=" +
+          this.formatDatetimeForRequest(
+            moment(
+              `${this.currentSelection.startDate} ${this.currentSelection.startTime}`
+            ).tz(this.timezone, true)
+          );
+
+          params +=
+          "&end_date=" +
+          this.formatDatetimeForRequest(
+            `${this.currentSelection.endDate} ${this.currentSelection.endTime}`
+          );
+
+          params += "&is_automatic=" + this.filter.isAutomatic;
+
+          return params;
+        },
+
+
+        getAll(path, url, oldData = []) {
+          return fetch(`${this.baseURL}${path}`)
+            .then((res) => {
+              if (!res.body) {
+                return { next: null, results: [] };
+              }
+
+              return res.json();
+            })
+            .then(async (data) => {
+              const values = [...oldData, ...data.results];
+              if (!!data.next) {
+                return await getAll(
+                  context,
+                  path,
+                  `${this.baseURL}/${path}/${data.next.substr(
+                    data.next.indexOf(`/${path}`)
+                  )}`,
+                  values
+                );
+              }
+              return values;
+            });
+        },
+
+
+        doSearch() {
+          this.searchAction = true;
+          this.loading = true;
+          this.rawDataList = [];
+
+          axios.get(`/api/quality_control/${this.parseParameters()}`)
+            .then(res => {
+              this.taskId = res.data.task_id;
+              this.startPolling();
+            })
+            .catch(err => {
+              this.loading = false;
+              this.request_error = true;
+              this.request_error_message = err?.response?.data?.message || "Request failed";
+            });
+        },
+
+
+        formatDatetimeForRequest(datetime) {
+          return moment(datetime)
+            .tz(this.timezone, true)
+            .utc()
+            .format("YYYY-MM-DDTHH:mm:ss[Z]");
+        },
+
+
+        formatDatetimeForDataTable(datetime) {
+          return moment
+            .utc(datetime)
+            .tz(this.timezone)
+            .format("YYYY-MM-DD HH:mm");
+        },
+
+
+        handleUpdate(item) {
+          this.loading = true;
+
+          this.searchAction = false; // not a search action
+
+          this.savingBulk = false; // not a bulk save action
+
+          this.updatingItem = item;
+
+          axios.patch(`/api/quality_control/${this.parsePatchParameters(item)}`, {
+            manual_flag: item.manual_flag,
+            consisted: item.consisted,
+            remarks: item.remarks,
+          })
+          .then(res => {
+            this.taskId = res.data.task_id;
+            this.startPolling();
+          })
+          .catch(err => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = err?.response?.data?.message || "Request failed";
+          });
+        },
+
+
+        // Open dialog when aqc chip is clicked
+        openAqcDetails(item) {
+
+          // start loading
+          this.loading = true;
+        
+          // reset the aqc details
+          this.aqcDetailsItems = [];
+
+          //set metadata
+          this.aqcDetailsMetadata = {
+            datetime: item.formated_datetime,
+            measured: item.measured,
+            final_flag: item.automatic_flag,
+            description: `
+                          The Final/Overall Quality Flag follows a worst-case priority: Bad overrides Suspicious, 
+                          which overrides Good. Data is only flagged as 'Good' if all threshold 
+                          checks pass.
+                          `,
+          }
+
+          axios.get("/api/quality_control/description/", {
+            params: {
+              station_id: this.currentSelection.stationId,
+              variable_id: this.currentSelection.variableId,
+              datetime: this.formatDatetimeForRequest(item.formated_datetime), // UTC aware string. The time must already be in UTC when sent back, as the time displayed is in the local timezone
+            }
+          })
+          .then(res => {
+            //console.log(res.data)
+
+            // set aqc details
+            // fall back on 1 which is the quality flag for "Not Checked"
+            this.aqcDetailsItems.push(
+              {
+                threshold: "Range Check",
+                quality_flag: item.qc_range_quality_flag || 1,
+                description: res.data.qc_range_description
+              },
+              {
+                threshold: "Step Check",
+                quality_flag: item.qc_step_quality_flag || 1,
+                description: res.data.qc_step_description
+              },
+              {
+                threshold: "Persist Check",
+                quality_flag: item.qc_persist_quality_flag || 1,
+                description: res.data.qc_persist_description
+              },
+            );
+
+            // Show dialog
+            this.aqcDetails = true;
+            // set loading to false
+            this.loading = false;
+          })
+          .catch(err => {
+            this.request_error = true;
+            this.request_error_message =
+              err?.response?.data?.message || "Request failed";
+          });
+
+          // set loading to false
+          this.loading = false;
+        },
+
+
+        startPolling() {
+          if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+          }
+
+          this.pollingStatus();
+
+          this.pollingInterval = setInterval(() => {
+            this.pollingStatus();
+          }, this.pollingDelay);
+        },
+
+
+        stopPolling() {
+          if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+          }
+        },
+
+
+        pollingStatus() {
+          axios.get(`/api/task/${this.taskId}/`)
+            .then(res => {
+              const status = res.data.status;
+
+              var itemCount = 0;
+              
+              if (status === "completed") {
+                this.stopPolling();
+
+                // if polling was for a search action
+                if (this.searchAction) {
+                  this.rawDataList = res.data.data.results.map((record) => {
+                    record["old"] = {
+                      consisted: record.consisted,
+                      manual_flag: record.manual_flag,
+                      remarks: record.remarks,
+                    };
+                    record["formated_datetime"] = this.formatDatetimeForDataTable(
+                      record.datetime
+                    );
+                    return record;
+                  });
+
+                  itemCount = this.rawDataList.length;
+                }
+                else if (this.savingBulk) {
+                  this.savingBulk = false; // reset bulk save
+                  this.doSearch(); // reload search
+                }
+                // for regular single update operations
+                else if(this.updatingItem) {
+                  this.updatingItem["old"] = {
+                    consisted: this.updatingItem.consisted,
+                    manual_flag: this.updatingItem.manual_flag,
+                    remarks: this.updatingItem.remarks,
+                  };
+                }
+
+                this.request_error = false;
+                this.updatingItem = null;
+                this.selectedRows = []; // reset selected rows
+                this.loading = false;
+
+                // if item count is 0 let the user know no rowws were retrieved and we are searching
+                if(itemCount == 0 && this.searchAction) {
+                  this.request_error = true;
+                  this.request_error_message = "No data available!";
+                };
+              }
+
+              if (status === "failed") {
+                this.stopPolling();
+                this.loading = false;
+                this.searchAction = false;
+                this.request_error = true;
+                this.request_error_message = res.data.message || "An error Occured, please see logs.";
+                this.updatingItem = null;
+                this.savingBulk = false;
+              }
+            })
+            .catch(err => {
+              this.stopPolling();
+              this.loading = false;
+              this.searchAction = false;
+              this.request_error = true;
+              this.request_error_message = "An error occurred while checking task status.";
+              this.updatingItem = null;
+              this.savingBulk = false;
+
+              console.warn("This is the error!");
+              console.error(err);
+            });
+        },
+
+
+        invertValue(bool){
+          bool = !bool;
+        },
+
+
+        setParamsAndRunQuery() {
+          const queryString = window.location.search;
+          const urlParams = new URLSearchParams(queryString);
+
+          const stationId = urlParams.get('station_id')
+          const variableId = urlParams.get('variable_id')
+          const startDate = urlParams.get('start_date')
+          const endDate = urlParams.get('end_date')
+
+          if(stationId != null && variableId != null && startDate != null && endDate != null ){
+            this.currentSelection.startDate = moment.utc(startDate).format('YYYY-MM-DD');
+            this.currentSelection.endDate = moment.utc(endDate).format('YYYY-MM-DD');
+            this.currentSelection.variableId = Number(variableId);
+            this.currentSelection.stationId = Number(stationId);
+
+            this.getStationVariables(this.currentSelection.stationId);
+            this.doSearch();
+          }
+        },
+
+  
+        // Open dialog when Bulk Save is clicked
+        openBulkSave() {
+          // Prevent opening if nothing selected
+          if (this.selectedRows.length === 0) {
+            this.request_error = true;
+            this.request_error_message = "Select at least one row first.";
+            return;
+          }
+
+          // Reset dialog fields each time
+          this.bulkForm.manual_flag = null;
+          this.bulkForm.remarks = "";
+
+          // Show dialog
+          this.bulkDialog = true;
+        },
+
+        // Close dialog without saving
+        closeBulkSave() {
+          this.bulkDialog = false;
+        },
+
+
+        // Perform bulk save
+        saveBulk() {
+          this.savingBulk = true;
+          this.searchAction = false; // reset the search action
+          this.loading = true;
+          this.bulkDialog = false;
+
+          // collect selected datetimes (send the exact timestamp string)
+          const datetime_list = this.selectedRows.map(r => r.datetime);
+
+          axios.patch(
+            `/api/quality_control/bulksave/?station_id=${this.currentSelection.stationId}&variable_id=${this.currentSelection.variableId}`,
+            {
+              manual_flag: this.bulkForm.manual_flag,
+              remarks: this.bulkForm.remarks,
+              datetime_list, // array of ISO strings
+            }
+          )
+          .then(res => {
+            this.taskId = res.data.task_id;
+            this.startPolling();
+          })
+          .catch(err => {
+            this.loading = false;
+            this.savingBulk = false;
+            this.request_error = true;
+            this.request_error_message = err?.response?.data?.message || "Bulk save request failed.";
+          });
+        },
+      },
+      mounted() {
+        this.getQualityFlags();
+        axios.defaults.xsrfHeaderName = "X-CSRFToken";
+        axios.defaults.xsrfCookieName = "csrftoken";
+
+        window.addEventListener("load", () => {
+          this.setParamsAndRunQuery();
+        });
+      },
+      beforeDestroy() {
+        this.stopPolling();
+      }
+    });
+  </script>
+</div>
+
+<style>
+  .qc-manual-flag {
+    cursor: pointer;
+    padding-top: 20px;
+    padding-left: 5px;
+    width: 125px;
+  }
+  .qc-manual-flag input {
+    color: white !important;
+    caret-color: transparent;   /* hides blinking cursor */
+    pointer-events: none;       /* prevents typing but keeps dropdown */
+  }
+
+  .qc-manual-flag .v-select__selection {
+    cursor: pointer;
+    color: white !important;
+  }
+
+  /* dropdown arrow */
+  .qc-manual-flag .v-icon {
+    cursor: pointer;
+    color: white !important;
+  }
+
+  .qc-consisted {
+    width: 75px;
+  }
+
+  .qc-remarks {
+    width: 200px;
+  }
+
+  .v-textarea textarea {
+    background-color: transparent !important;
+  }
+
+  .label-text {
+    font-weight: 450;
+    font-size: 1rem; /* "larger" is roughly 1.1rem to 1.2rem */
+    margin-right: 8px; /* Adds a tiny gap before the value */
+  }
+
+</style>
+{% endblock %}

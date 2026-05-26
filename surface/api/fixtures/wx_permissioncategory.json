@@ -1,0 +1,101 @@
+[
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 1,
+        "fields": {
+            "created_at" : "2026-03-05T15:02:28.040Z",
+            "updated_at" : "2026-03-05T15:05:03.455Z",
+            "name" : "MAP",
+            "description" : "Displays a geographic overview of all monitoring stations and related assets. Users can visually explore station locations, statuses, and spatial data across the region.",
+            "sort_order" : 0
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 2,
+        "fields": {
+            "created_at" : "2026-03-05T15:02:48.384Z",
+            "updated_at" : "2026-03-05T15:02:48.384Z",
+            "name" : "STATIONS",
+            "description" : "Manage and view detailed information about monitoring stations, including metadata, configuration, location, and operational status.",
+            "sort_order" : 1
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 3,
+        "fields": {
+            "created_at" : "2026-03-05T15:03:07.539Z",
+            "updated_at" : "2026-03-05T15:03:07.539Z",
+            "name" : "MAINTENANCE",
+            "description" : "Track and manage maintenance activities for stations and equipment, including service records, repairs, inspections, and scheduled upkeep.",
+            "sort_order" : 2
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 4,
+        "fields": {
+            "created_at" : "2026-03-05T15:03:27.546Z",
+            "updated_at" : "2026-03-05T15:03:27.546Z",
+            "name" : "DATA",
+            "description" : "Access, view, and manage collected observational data from stations, including measurements, timestamps, and data history.",
+            "sort_order" : 3
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 5,
+        "fields": {
+            "created_at" : "2026-03-05T15:03:45.571Z",
+            "updated_at" : "2026-03-05T15:03:45.571Z",
+            "name" : "WIS2 DASHBOARD",
+            "description" : "Provides monitoring and management tools for WIS2 (WMO Information System 2.0) data exchange, including system status, message flow, and operational metrics.",
+            "sort_order" : 4
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 6,
+        "fields": {
+            "created_at" : "2026-03-05T15:03:59.060Z",
+            "updated_at" : "2026-03-05T15:03:59.060Z",
+            "name" : "QUALITY CONTROL",
+            "description" : "Review and manage automated and manual quality control checks applied to observational data to ensure accuracy, reliability, and compliance with standards.",
+            "sort_order" : 5
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 7,
+        "fields": {
+            "created_at" : "2026-03-05T15:04:10.834Z",
+            "updated_at" : "2026-03-05T15:04:10.834Z",
+            "name" : "PRODUCTS",
+            "description" : "Generate, export, and manage derived data products such as reports, datasets, summaries, and formatted outputs for external use.",
+            "sort_order" : 6
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 8,
+        "fields": {
+            "created_at" : "2026-03-05T15:04:28.064Z",
+            "updated_at" : "2026-03-05T15:04:28.064Z",
+            "name" : "AGROMETEOROLOGY",
+            "description" : "Access tools and data related to agricultural meteorology, including environmental conditions, crop-related indicators, and climate impacts on agriculture.",
+            "sort_order" : 7
+        }
+	},
+	{
+        "model": "wx.wxpermissioncategory",
+		"pk" : 9,
+        "fields": {
+            "created_at" : "2026-03-05T15:04:47.487Z",
+            "updated_at" : "2026-03-05T15:04:47.487Z",
+            "name" : "SETTINGS",
+            "description" : "Configure system preferences, application settings, user options, and platform behavior.",
+            "sort_order" : 8
+        }
+	}
+]

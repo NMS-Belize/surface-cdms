@@ -1,0 +1,949 @@
+{% extends "base.html" %} {% block content %} {% load static %}
+
+<div id="app">
+  <v-app v-cloak>
+
+    <!-- Chart Dialog -->
+    <v-dialog v-model="dialog_chart" max-width="1000" style="z-index:9999;">
+      <v-card>
+        <v-card-title>History Chart</v-card-title>
+        <v-card-text>
+          <v-layout v-if="loading_chart" class="align-center justify-center" column> 
+            <span class="headline font-weight-thin" v-if="loading_chart">Loading Chart...</span><br>
+            <v-progress-circular indeterminate ></v-progress-circular>
+          </v-layout>
+          <highcharts v-if="!loading_chart" :options="chartOptions"></highcharts>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn color="primary" @click="dialog_chart = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Inmation dialog -->
+    <v-dialog v-model="dialog_info" max-width="600" style="z-index:9999;">
+      <v-card>
+        <v-card-title>Information</v-card-title>
+        <v-card-text> Information will apear here...</v-card-text>
+        <v-card-actions>
+          <v-btn color="primary" @click="dialog_info = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>   
+
+    <!-- page container -->
+    <v-layout column class="page-container">
+      <v-layout class="monitoring-layout"> 
+        <v-flex md7 class="align-center map-panel">
+            <v-layout v-if="loading_map" class="align-center justify-center" column>
+              <span class="headline font-weight-thin" v-if="loading_map">Loading Map...</span><br>
+              <v-progress-circular indeterminate ></v-progress-circular>
+            </v-layout>
+            <l-map v-if="!loading_map" ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom = "false">
+              <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
+              <l-control position="bottomleft">
+                  <v-text-field
+                    v-model="input_search"
+                    label="Search station by name"
+                    single-line
+                    solo
+                    append-icon="search"
+                  ></v-text-field>
+              </l-control>               
+              <l-control position="bottomright">
+                <template>
+                  <v-card>
+                    <v-card-title class="px-2 pt-1 pb-1" style="font-size: 12px; line-height: 1.2; color: #444;">
+                      <v-btn class="mr-1" x-small icon @click="dialog_info=true" :disabled=true>
+                          <v-icon>mdi-information</v-icon>
+                      </v-btn>
+                      <span v-if="['Communication', 'Quality Control'].includes(data_type)" class="mr-2 "> Observations from <br/>the pass 24 hours </span>
+                      <span v-if="data_type=='Visits'" class="mr-2"> Next visit </span>
+                      <span v-if="data_type=='Equipment'" class="mr-2"> Equipment classification </span>
+
+                    </v-card-title>
+                    <v-card-text class="px-2 pb-2">
+                      <hr class="my-0 mb-1">
+                      <div class="legend-item" style="display: flex; justify-content: space-between;">
+                        <span style="display: flex; align-items: center;">
+                        <span
+                          class="legend-color circle-lg"
+                          :style="{ 'background-color': flags.good, 'border-color': flags.good }">
+                        </span>
+                        <span> [[legend_data.flags.good]] </span>
+                        </span>
+                        <span style="padding-left: 10px"> [[getPercentageColor(flags.good)]]% </span>
+                      </div>
+                      <div class="legend-item" style="display: flex; justify-content: space-between;">
+                        <span style="display: flex; align-items: center;">
+                        <span
+                          class="legend-color circle-lg"
+                          :style="{ 'background-color': flags.suspicious, 'border-color': flags.suspicious }">
+                        </span>
+                        <span> [[legend_data.flags.suspicious]] </span>
+                        </span>
+                        <span style="padding-left: 10px"> [[getPercentageColor(flags.suspicious)]]% </span>
+                      </div>
+                      <div class="legend-item" style="display: flex; justify-content: space-between;">
+                        <span style="display: flex; align-items: center;">
+                        <span
+                          class="legend-color circle-lg"
+                          :style="{ 'background-color': flags.bad, 'border-color': flags.bad }">
+                        </span>
+                        <span> [[legend_data.flags.bad]]</span>
+                        </span>
+                        <span style="padding-left: 10px"> [[getPercentageColor(flags.bad)]]%</span>
+                      </div>
+                      <div class="legend-item" style="display: flex; justify-content: space-between;">
+                        <span style="display: flex; align-items: center;">
+                        <span
+                          class="legend-color circle-lg"
+                          :style="{ 'background-color': flags.not_checked, 'border-color': flags.not_checked }">
+                        </span>
+                        <span> [[legend_data.flags.not_checked]] </span>
+                        </span>
+                        <span style="padding-left: 10px"> [[getPercentageColor(flags.not_checked)]]% </span>
+                      </div>                                                    
+                    </v-card-text>
+                  </v-card>
+                </template>
+              </l-control>            
+              <l-control-zoom position="topleft"></l-control-zoom>
+
+              <l-control position="topright">
+
+                <div class="data-type-box">
+
+                  <template>
+
+                    <v-layout column>
+                      <v-btn class="data-type-btn" color="white" @click="reveal = !reveal">
+                        <div class="d-flex flex-column">
+                          <v-icon right class="arrow-icon" v-if="!reveal">keyboard_arrow_down</v-icon>
+                          <v-icon right class="arrow-icon" v-if="reveal">keyboard_arrow_up</v-icon>
+                          <strong class="pb-1 truncate-text-230">
+                            <span>
+                              [[ data_type ]]
+                            </span>
+                          </strong>
+                          <small class="d-flex justify-center">
+                            <span v-if="time_type==='Last 24h'"> [[time_type]]</span>
+                            <span v-if="time_type==='Pick a day'"> [[date]]</span>
+                          </small>
+                        </div>
+                      </v-btn>
+
+                      <v-expand-transition v-if="reveal">
+
+                        <v-card>
+
+                          <div  class="d-flex justify-center align-center">
+                            <v-btn-toggle v-if="!isMaintenance(data_type)" mandatory v-model="time_type" @change="changeTimeType()">
+                              <v-btn class="px-6 mt-2" small value="Last 24h">Last 24h</v-btn>
+                              <v-btn class="px-6 mt-2" small value="Pick a day">Pick a day</v-btn>
+                            </v-btn-toggle>
+                          </div>
+
+                          <v-card-actions class="pa-0 ">
+
+                            <v-layout class="mt-2 ml-5 mr-6" column>
+
+                              <v-menu
+                                v-if="time_type === 'Pick a day'"
+                                v-model="date_menu"
+                                :close-on-content-click="false"
+                                :nudge-right="40"
+                                transition="scale-transition"
+                                offset-y
+                                min-width="290px"
+                                style="z-index: 999;"
+                              >
+                                <template class="mb-0" v-slot:activator="{ on }">
+
+                                  <v-text-field
+                                    v-model="date"
+                                    label="Select date"
+                                    prepend-icon="event"
+                                    readonly
+                                    v-on="on"
+                                  ></v-text-field>
+
+                                </template>
+
+                                <v-date-picker
+                                  class="mb-0"
+                                  v-model="date"
+                                  @input="date_menu = false"
+                                  @change="changeTimeType()"
+                                ></v-date-picker>
+
+                              </v-menu>
+
+                              <v-radio-group class="mt-0" v-model="data_type" @change="changeRadio()">
+
+                                <v-radio label="Communication" value="Communication"></v-radio>
+                                <v-radio label="Quality Control" value="Quality Control"></v-radio>
+                                <span class="mb-1"> Maintenance </span>
+                                <v-radio class="ml-5" label="Visits" value="Visits"></v-radio>
+                                <v-radio class="ml-5" label="Equipment" value="Equipment"></v-radio>
+                                
+                              </v-radio-group>
+
+                            </v-layout>
+
+                          </v-card-actions>
+
+                        </v-card> 
+
+                      </v-expand-transition>   
+
+                    </v-layout>   
+
+                  </template>
+
+                </div>  
+
+              </l-control>    
+
+              <l-circle-marker
+                v-for="station in filteredStations"
+                :key = "station.id"
+                :lat-lng="station.position"
+                :radius="7"
+                color="white"
+                :fill-color="station.color"
+                :fill-opacity="1"
+                :weight="2.5"
+                @click="selectStation(station)"               
+              > 
+                <l-tooltip> [[station.name]] </l-tooltip>
+              </l-circle-marker>             
+            </l-map>
+        </v-flex>
+        
+        <!-- Side bar container -->
+        <v-flex md5 class="sidebar-panel d-flex flex-column">
+          <!-- heading -->
+          <div class="sidebar-heading">
+            <h4>STATIONS MONITORING</h4>
+          </div>
+
+          <v-layout v-if="loading_station" class="align-center justify-center flex-grow-1" column>
+            <span class="headline font-weight-thin" v-if="loading_station">Loading...</span><br>
+            <v-progress-circular indeterminate ></v-progress-circular>
+          </v-layout>
+
+          <div v-if="!loading_station" class="station-content"> 
+
+            <!-- communication tab -->
+            <v-tabs
+              v-if="data_type=='Communication'"
+              v-model="selectedTab"
+              fixed-tabs
+              class="sidebar-tabs"
+            >
+              <v-tab>
+                Data Delays
+              </v-tab>
+              <v-tab>
+                Latest Values
+              </v-tab>
+
+              <v-tab-item class="tab-item-fill">
+                <v-layout column class="ma-2 fill-height">
+
+                  <v-layout class="ma-2" shrink>
+                    <span v-if="selected.station.lastupdate">
+                      <h5>
+                        [[selected.station.name]] Station
+                      </h5>
+                      <b>Last update date:</b> [[selected.station.lastupdate]]
+                    </span>
+
+                    <!-- <v-btn icon @click="goTo()">
+                      <v-icon color="blue">
+                        mdi-open-in-new
+                      </v-icon>
+                    </v-btn>   -->
+                  </v-layout>
+
+                  <v-layout class="ma-2 table-area">
+                    <v-data-table
+                      style="width: 100%;"
+                      height="100%"
+                      fixed-header
+                      :headers="headers()"
+                      :items="selected.data"
+                      item-key="name"
+                      :items-per-page="-1"
+                      class="elevation-1"
+                    >
+                      <template v-slot:item.amount="{ item }">
+                        <v-chip @click="goTo()" class="px-5" style="color: white;" :color="item.color">
+                          [[item.amount]]
+                        </v-chip>
+                      </template>                               
+                      <template v-slot:item.chart="{ item }">
+                        <v-tooltip bottom>
+                          <template v-slot:activator="{ on }">
+                            <v-btn @click="dialog_chart = true; getChartData(selected.station, item);" icon>
+                              <v-icon color="blue"> mdi-chart-bar </v-icon>  
+                            </v-btn>                  
+                          </template>
+                          <span>Open bar chart</span>
+                        </v-tooltip>
+                      </template>
+                    </v-data-table>
+                  </v-layout>
+                  
+                </v-layout>
+              </v-tab-item>
+
+              <v-tab-item class="tab-item-fill">                
+                <v-layout column class="ma-2 fill-height">
+
+                  <v-layout class="ma-2" shrink>              
+                    <span v-if="selected.station.lastupdate">
+                      <h5>
+                        [[selected.station.name]] Station
+                      </h5>
+                      <b>Last update date:</b> [[selected.station.lastupdate]]
+                    </span>
+                  </v-layout>  
+
+                  <v-layout class="ma-2 table-area">                
+                    <v-data-table
+                      style="width: 100%;"
+                      height="100%"
+                      fixed-header
+                      :headers="headers()"
+                      :items="selected.data"
+                      item-key="name"
+                      :items-per-page="-1"
+                      class="elevation-1"
+                    >
+                      <template v-slot:item.amount="{ item }">
+                        <v-chip style="color: white;" class="px-5" :color="item.color">
+                          [[item.amount]]
+                        </v-chip>
+                      </template>                               
+                      <template v-slot:item.chart="{ item }">
+                        <v-tooltip bottom>
+                          <template v-slot:activator="{ on }">
+                            <v-btn @click="dialog_chart = true" icon>
+                              <v-icon color="blue"> mdi-chart-bar </v-icon>  
+                            </v-btn>                  
+                          </template>
+                          <span>Open bar chart</span>
+                        </v-tooltip>
+                      </template>
+                    </v-data-table>
+                  </v-layout>
+
+                </v-layout>
+              </v-tab-item>
+            </v-tabs>
+
+            <!-- quality control tab -->
+            <v-tabs
+              v-if="data_type=='Quality Control'"
+              fixed-tabs
+              class="sidebar-tabs"
+            >
+              <v-tab>
+                Flag Amount
+              </v-tab>
+
+              <v-tab-item class="tab-item-fill">
+                <v-layout column class="ma-2 fill-height">
+                  <v-layout class="ma-2" shrink>
+                    <span v-if="selected.station.lastupdate">
+                      <h5>
+                        [[selected.station.name]] Station
+                      </h5>
+                      <b>Last update date:</b> [[selected.station.lastupdate]]
+                    </span>
+                  </v-layout>
+
+                  <v-layout class="ma-2 table-area">
+                    <v-data-table
+                      style="width: 100%;"
+                      height="100%"
+                      fixed-header
+                      :headers="headers()"
+                      :items="selected.data"
+                      item-key="name"
+                      :items-per-page="-1"
+                      class="elevation-1"
+                    >
+                      <template v-slot:item.amount="{ item }">
+                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.good}}">
+                          [[item.good]]
+                        </v-chip>
+                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.suspicious}}">
+                          [[item.suspicious]]
+                        </v-chip>
+                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.bad}}">
+                          [[item.bad]]
+                        </v-chip>
+                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.not_checked}}">
+                          [[item.not_checked]]
+                        </v-chip>                                                                        
+                      </template>                               
+                      <template v-slot:item.chart="{ item }">
+                        <v-tooltip bottom>
+                          <template v-slot:activator="{ on }">
+                            <v-btn @click="dialog_chart = true; getChartData(selected.station, item)" icon>
+                              <v-icon color="blue"> mdi-chart-bar </v-icon>  
+                            </v-btn>                  
+                          </template>
+                          <span>Open bar chart</span>
+                        </v-tooltip>
+                      </template>
+                    </v-data-table>
+                  
+                  </v-layout>
+                </v-layout>
+              </v-tab-item>
+            </v-tabs>
+            
+            <!-- vists tab -->
+            <v-tabs
+              v-if="data_type=='Visits'"
+              fixed-tabs
+              class="sidebar-tabs"
+            >
+              <v-tab>
+                Latest Maintenance Report Information
+              </v-tab>
+
+              <v-tab-item class="tab-item-fill">
+                <v-layout column class="ma-2 fill-height">
+                  <v-card class="text-center" v-if="selected.station.name">
+                    <v-card-title class="justify-center">
+                      <div v-if="Object.keys(selected.data).length > 0">
+                        Maintenance Report [[ selected.data['Maintenance Report ID'] ]]
+                      </div>
+                      <div v-else>
+                          Station does not have any approved maintenance report
+                      </div>
+                    </v-card-title>
+                    <v-row v-for="(item, key) in selected.data" :key="key">
+                        <template v-if="key !== 'Maintenance Report ID'">
+                            <v-col cols="6" class="text-center">[[key]]</v-col>
+                            <v-col cols="6" class="text-center">
+                                <v-chip style="color: white;" v-if="key === 'Next Visit Date'" label :color="selected.color">
+                                    [[item]]
+                                </v-chip>
+                                <div v-else>[[item]]</div>
+                            </v-col>
+                        </template>
+                    </v-row>
+                  </v-card>
+                </v-layout>
+              </v-tab-item>
+            </v-tabs>
+
+            <!-- equipments tab -->
+            <v-tabs
+              v-if="data_type=='Equipment'"
+              fixed-tabs
+              class="sidebar-tabs"
+            >
+              <v-tab>
+                Station Equipment
+              </v-tab>
+
+              <v-tab-item class="tab-item-fill">
+                <v-layout column class="ma-2 fill-height">
+                  <v-layout class="ma-2 table-area">
+                    <v-data-table
+                      style="width: 100%;"
+                      height="100%"
+                      fixed-header
+                      :headers="headers()"
+                      :items="selected.data"
+                      item-key="name"
+                      :items-per-page="-1"
+                      class="elevation-1"
+                    >
+                      <template v-slot:item.classification="{ item }">
+                        <v-chip style="color: white;" :color="item.color">
+                          [[item.classification]]
+                        </v-chip>  
+                      </template>
+                    </v-data-table>
+
+                  </v-layout>
+                </v-layout>
+              </v-tab-item>
+            </v-tabs>               
+          </div>  
+
+        </v-flex> 
+
+      </v-layout>
+    </v-layout>
+  </v-app>
+</div>
+
+{% endblock %} {% block localjavascript %}
+<script>
+  Vue.use(HighchartsVue.default);
+  Vue.use(window.vuelidate.default);
+
+  const { required, minLength } = window.validators;
+
+  var {
+    LMap,
+    LTileLayer,
+    LCircleMarker,
+    LControlZoom,
+    LMarker,
+    LTooltip,
+    LControlLayers,
+    LPopup,
+    LGeoJson,
+    LIcon,
+    LControl
+  } = Vue2Leaflet;
+
+  new Vue({
+    el: "#app",
+    vuetify: new Vuetify(),
+    delimiters: ["[[", "]]"],
+    components: {
+      LMap,
+      LTileLayer,
+      LCircleMarker,
+      LControlLayers, // Use this instead of LControl
+      LControlZoom,
+      LMarker,
+      LTooltip,
+      LPopup,
+      LGeoJson,
+      LIcon,
+      LControl
+    },
+    data () {
+      return{
+        input_search: "",
+        loading_chart: false,
+        loading_station: false,
+        loading_map: false,
+        chartOptions: {
+          chart: {
+            type: 'column'
+          },
+          title: {
+            text: 'My Chart'
+          },
+          xAxis: {
+            categories: ['Category 1', 'Category 2', 'Category 3']
+          },
+          yAxis: {
+            title: {
+              text: 'Y-Axis Label'
+            }
+          },
+          series: [{
+            name: 'Series 1',
+            data: [1, 2, 3]
+          }, {
+            name: 'Series 2',
+            data: [4, 5, 6]
+          }]
+        },        
+        date: moment().format('YYYY-MM-DD'),
+        date_menu: false,
+        data_type: 'Communication',
+        time_type: "Last 24h",
+        selectedTab: 0,
+        reveal: false,
+        dialog_chart: false,
+        dialog_info: false,
+        selected: {
+          station: {name: null, lastupdate: null, color: null},
+          data: [],
+        },
+        station_list: [],
+        timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        zoom: {{ MAP_ZOOM|safe }},
+        center: L.latLng("{{ MAP_LATITUDE|safe }}", "{{ MAP_LONGITUDE|safe }}"),
+        url: "https://{s}.tile.osm.org/{z}/{x}/{y}.png",
+        attribution: '&copy, <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+        options: { zoomControl: false, doubleClickZoom: false },      
+        flags: {{flags | safe}},
+        legend_data: {
+          flags: {
+            good: '20 or more',
+            suspicious: '8 - 19',
+            bad: '1 - 7',
+            not_checked: 'None',
+          },
+          information: 'Information of communication',
+        },
+      };
+    },
+    mounted(){
+        axios.defaults.xsrfHeaderName = "X-CSRFToken";
+        axios.defaults.xsrfCookieName = "csrftoken";      
+
+        this.getGlobalData();
+    },
+    computed: {
+      filteredStations() {
+        return this.station_list.filter(station =>
+          this.input_search === "" || station.name.toUpperCase().includes(this.input_search.toUpperCase())
+        )
+      },    
+    },
+    methods: {
+      goTo(selected_station_id = null, item_var_id = null){
+        if (this.data_type=="Communication"){
+          this.goToDataInventory();
+        }
+        else if (this.data_type=="Quality Control"){
+          this.goToDataValidation(selected_station_id, item_var_id);
+        }
+        else if (this.data_type=="Visits"){
+          this.goToMaintenanceReports();
+        }
+        else if (this.data_type=="Equipment"){
+          this.goToEquipmentInventory();
+        }                
+      },
+      goToDataValidation(selected_station_id = null, item_var_id = null) {
+        const [year, month, day] = this.date.split('-');
+
+        const initial_datetime = `${year.padStart(2, "0")}-${month.padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
+        const final_datetime = `${year.padStart(2, "0")}-${month.padStart(2, "0")}-${(String(Number(day) + 1)).padStart(2, "0")}`;
+
+        const url = `/wx/quality_control/validation?start_date=${initial_datetime}&end_date=${final_datetime}&station_id=${selected_station_id}&variable_id=${item_var_id}`;
+        
+        window.open(url, '_blank');
+      },      
+      goToDataInventory(){
+        const url = `/wx/data/inventory`;
+        window.open(url, '_blank');
+      },
+      goToEquipmentInventory(){
+        const url = `/wx/maintenance_reports/equipment_inventory/`;
+        window.open(url, '_blank');
+      },
+      goToMaintenanceReports(){
+        const url = `/wx/maintenance_report/`;
+        window.open(url, '_blank');
+      },          
+      changeTimeType(){
+        this.getGlobalData()
+      },
+      updateLegendData(){
+        if (this.data_type === 'Communication'){
+          this.legend_data.information = 'Information of communication'
+          this.legend_data.flags = {
+            good: '20 or more',
+            suspicious: '8 - 19',
+            bad: '1 - 7',
+            not_checked: 'None',
+          }
+        }
+        else if (this.data_type === 'Quality Control'){
+          this.legend_data.information = 'Information of quality control'
+          this.legend_data.flags = {
+            good: 'Good',
+            suspicious: 'Suspicious',
+            bad: 'Bad',
+            not_checked: 'Not Checked',
+          }
+        }        
+        else if (this.data_type === 'Visits'){
+          this.legend_data.information = 'Information of visits'
+          this.legend_data.flags = {
+            good: 'Days over due: 0',
+            suspicious: 'Days over due: 1-30',
+            bad: 'Days over due: > 30',
+            not_checked: 'No date / No report',
+          }
+        } 
+        else if (this.data_type === 'Equipment'){
+          this.legend_data.information = 'Information of equipment'
+          this.legend_data.flags = {
+            good: 'Funcional',
+            suspicious: 'Partial',
+            bad: 'Not Funcional',
+            not_checked: 'No equipment / No report',
+          }
+        } 
+      },
+      headers(){
+        if (this.isMaintenance(this.data_type)){
+          return [
+            { text: 'Equipment Type', align: 'center', sortable: false, value: 'equipment_type'},
+            { text: 'Classification', align: 'center', sortable: false, value: 'classification'},
+            { text: 'Model', align: 'center', sortable: false, value: 'model'},
+            { text: 'Serial Number', align: 'center', sortable: false, value: 'serial_number'},
+          ]             
+        }
+        else{
+          if (this.selectedTab==1){
+            return [
+              { text: 'Variable', align: 'start', sortable: false, value: 'name'},
+              { text: 'Value', align: 'center', sortable: false, value: 'latestvalue'},
+            ]           
+          }
+          else{
+            return [
+              { text: 'Variable', align: 'start', sortable: false, value: 'name'},
+              { text: 'Amout', align: 'center', sortable: false, value: 'amount'},
+              { text: 'Chart', align: 'center', sortable: false, value: 'chart'}
+            ]  
+          }
+        }
+      },
+      getPercentageColor(color){
+        if (this.station_list.length == 0){
+          return 0
+        }
+
+        let d = this.station_list.length;
+        let n = this.station_list.filter(station => station.color==color).length;
+        let p = 100*n/d
+
+        return p.toFixed(2)
+      },
+      getGlobalData(){
+        this.loading_map = true
+        axios({
+          method: 'get',
+          url: '/wx/stations/stations_monitoring/get/',
+          params: {
+            'data_type': this.data_type,
+            'time_type': this.time_type,
+            'date_picked': this.date
+          },
+        }) 
+        .then(response => {
+          this.loading_map = false;
+          this.station_list = response.data['stations'];
+        })
+        .catch(error => {
+          console.log(error);
+        });        
+      },
+      getStationData(station){
+        this.loading_station = true        
+        axios({
+          method: 'get',
+          url: `/wx/stations/stations_monitoring/get/${station.id}/`,
+          params: {
+            'data_type': this.data_type,
+            'time_type': this.time_type,
+            'date_picked': this.date            
+          },
+        }) 
+        .then(response => {
+          this.loading_station = false;          
+          this.selected.station.lastupdate = response.data['lastupdate'];
+          this.selected.data = response.data['station_data'];
+          this.selected.color = station.color
+        })
+        .catch(error => {
+          console.log(error);
+        });           
+      },
+      getChartData(station, variable){
+        this.loading_chart = true;
+        axios({
+          method: 'get',
+          url: `/wx/stations/stations_monitoring/get/${station.id}/${variable.id}/`,
+          params: {
+            'data_type': this.data_type,
+            'time_type': this.time_type,
+            'date_picked': this.date            
+          },
+        }) 
+        .then(response => {
+          this.loading_chart = false;          
+          this.chartOptions = response.data['chartOptions']
+          // this.chartOptions.chart = response.data['chartOptions']['chart']
+          // this.chartOptions.title = response.data['chartOptions']['title']
+          // this.chartOptions.xAxis = response.data['chartOptions']['xAxis']
+          // this.chartOptions.yAxis = response.data['chartOptions']['yAxis']
+          // this.chartOptions.title = response.data['chartOptions']['title']
+          // this.chartOptions.series = response.data['chartOptions']['series']
+        })
+        .catch(error => {
+          console.log(error);
+        });           
+      },      
+      isMaintenance(data_type){
+        return ['Visits', 'Equipment'].includes(data_type)
+      },
+      changeRadio(){
+        console.log('Debug:', this.legend_data)
+        if (this.isMaintenance(this.data_type)){
+          this.time_type = 'Last 24h';
+        }
+        this.updateLegendData();
+        this.getGlobalData();
+        if (this.selected.station.name !== null){
+          this.getStationData(this.selected.station);
+        }
+      },
+      selectStation(station){
+        this.selected.station = station;
+        this.getStationData(station);
+      },
+    },
+  });
+</script>
+
+<style>
+  html,
+  body,
+  #app,
+  #app .v-application,
+  #app .v-application--wrap {
+    height: 100%;
+  }
+
+  .page-container {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .monitoring-layout {
+    height: calc(100vh - 120px);
+    min-height: 0;
+  }
+
+  .map-panel {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .sidebar-panel {
+    height: 100%;
+    min-height: 0;
+    border-left: 2px solid #BBB;
+  }
+
+  .sidebar-heading {
+    background-color: #CCC;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .station-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-tabs {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-tabs > .v-tabs-bar {
+    flex: 0 0 auto;
+  }
+
+  .sidebar-tabs > .v-window,
+  .sidebar-tabs > .v-tabs-items,
+  .sidebar-tabs .v-window__container,
+  .sidebar-tabs .v-window-item {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .tab-item-fill {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .tab-item-fill > .layout {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .table-area {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .table-area .v-data-table {
+    height: 100%;
+  }
+
+  .table-area .v-data-table__wrapper {
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  .search-content {
+    position: absolute;
+    bottom: 16px;
+    left: 14px;
+    display: flex;
+    width: 100%;
+    max-width: 300px;
+    z-index: 995;
+  }
+
+  .v-data-table .v-data-table-header tr th {
+    font-size: 16px !important;
+  }
+
+  .data-type-box {
+    width: 100%;
+    width: 250px;
+    z-index: 995;
+  }
+
+  .data-type-btn {
+    padding: 8px 16px !important;
+    height: auto !important;
+  }
+
+  .data-type-btn .arrow-icon {
+    position: absolute;
+    right: 0px;
+    top: 30%;
+  }
+
+  .current-date-list {
+    min-height: auto;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1px;
+  }
+
+  .legend-color {
+    display: inline-block;
+    width: 20px;
+    height: 10px;
+    margin-right: 5px;
+  }
+
+  .circle-lg {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    margin-right: 5px;
+    border: 2px solid white;
+  }
+</style>
+
+{% endblock %}

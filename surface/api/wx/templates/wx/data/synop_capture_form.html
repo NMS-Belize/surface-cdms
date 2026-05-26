@@ -1,0 +1,2331 @@
+{% extends "base.html" %} {% block content %} {% load static %} {% load material_form %} {% load wx_filters%}
+
+<div class="srf-container">
+    <!-- Heading -->
+    <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
+        <span class="srf-display-1 text-uppercase">Data Capture</span><br /><br />
+        <span class="srf-display-2 text-uppercase">Synop Capture</span>
+    </div>
+
+    <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
+        <v-app>
+            <!-- station and date picker -->
+            <form enctype="multipart/form-data" method="POST" class="mb-10">
+                {% csrf_token %}
+                <div class="fieldWrapper">
+                    <v-row>
+                        <!-- station selector -->
+                        <v-flex sm1 md3  lg3 class="d-flex justify-between mr-5">
+                            <v-autocomplete
+                                label="Synoptic Station"
+                                :items="stationList"
+                                item-value="id"
+                                item-text="name"
+                                v-model="requestData.stationId"
+                                :disabled="draft"
+                                required
+                                hint="*Required"
+                                persistent-hint
+                            >
+                            </v-autocomplete> 
+                        </v-flex>    
+
+                        <!-- date picker -->
+                        <v-flex sm1 md3 lg3 class="d-flex justify-between">                
+                            <v-menu
+                                :close-on-content-click="false"
+                                :disabled="draft"
+                                v-model="datepicker_menu"
+                                :nudge-right="40"
+                                transition="scale-transition"
+                                offset-y
+                                class="max-50"
+                            >
+                                <template v-slot:activator="{ on }">
+                                    <v-text-field
+                                        :disabled="draft"
+                                        v-model="requestData.date"
+                                        label="Date"
+                                        prepend-icon="event"
+                                        v-on="on"
+                                        required
+                                        hint="*Required"
+                                        persistent-hint
+                                        :rules="textFieldsRules"
+                                    >
+                                    </v-text-field>
+                                </template>
+
+                                <v-date-picker
+                                    name="date"
+                                    v-model="requestData.date"
+                                    @input="datepicker_menu = false"
+                                    :allowed-dates="allowedDates"
+                                >
+                                </v-date-picker>
+                            </v-menu>
+                        </v-flex>
+                    </v-row>
+
+                    <v-row class="mt-5">
+                        <v-btn class="ml-2" :disabled="draft" outlined @click="fetchData()" class="btn-outline-default" color="blue"> Load </v-btn>
+                        <v-btn class="ml-2" :disabled="!draft" outlined @click="fetchData()" class="btn-outline-default" color="red"> Cancel </v-btn>
+                    </v-row>
+                </div>
+            </form>
+
+            <!-- The buttons -->
+            <div class="mt-5">
+                <!-- utc change button -->
+                <v-btn
+                    v-show="!hideTable && !isBack"
+                    class="ml-2"
+                    outlined
+                    color="info"
+                    @click="toggleTimeMode"
+                    style="margin-bottom: 10px;"
+                >
+                    Time: [[ useUTC ? 'UTC' : 'Local' ]]
+                    <v-icon right dark>mdi-clock-outline</v-icon>
+                </v-btn>
+
+                <!-- push to wis2box button -->
+                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                <v-btn 
+                    v-show="!hideTable && !isBack"
+                    class="ml-2" 
+                    :disabled="!wis2PublishControl.publishing" 
+                    @click="handlePushClick()" 
+                    class="" 
+                    color="success"
+                    style="margin-bottom: 10px;"
+                > 
+                    Push to WIS2
+                    <v-icon right dark>send</v-icon>
+                </v-btn>
+                {% endif %}
+
+                <!-- save button -->
+                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                <v-btn 
+                    v-show="!hideTable && !isBack"
+                    class="ml-2" 
+                    :disabled="!(draft && valid)" 
+                    outlined @click="updateData()" 
+                    class="btn-outline-default" 
+                    color="green"
+                    style="margin-bottom: 10px;"
+                > 
+                    Save 
+                    <v-icon right dark>save</v-icon>
+                </v-btn>
+                {% endif %}
+
+                <!-- delete rows btn -->
+                {% if request|has_any_feature_permission:"synop-capture-form:delete" %}
+                <v-btn
+                    v-show="!hideTable && !isBack"
+                    class="ml-2" 
+                    :disabled="!hasSelection || loading"
+                    outlined 
+                    @click="deleteSelectedRows" 
+                    class="btn-outline-default"
+                    color="red"
+                    style="margin-bottom: 10px;"
+                >
+                    Delete Selected
+                    <v-icon right dark>mdi-delete</v-icon>
+                </v-btn>
+                {% endif %}
+
+                <!-- theme switch button -->
+                <v-btn
+                    v-show="!hideTable && !isBack"
+                    class="ml-2"
+                    outlined
+                    @click="toggleTheme"
+                    color="purple"
+                    style="margin-bottom: 10px;"
+                >
+                    Table Style
+                    <v-icon right dark>sync</v-icon>
+                </v-btn>
+
+                <!-- show graph button -->
+                <!--
+                <v-btn 
+                    v-show="!hideTable && !isBack"
+                    class="ml-2" 
+                    outlined 
+                    @click="nextSlide"
+                    class="btn-outline-default" 
+                    color="black"
+                    style="margin-bottom: 10px;"
+                > 
+                    Show Graph
+
+                    <v-icon
+                        right
+                        dark
+                    >
+                        timeline
+                    </v-icon>
+                </v-btn>
+                -->
+
+                <!-- export csv button -->
+                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                <v-btn 
+                    v-show="!hideTable && !isBack"
+                    class="ml-2" 
+                    outlined 
+                    @click="exportToCSV()"
+                    class="btn-outline-default" 
+                    color="black"
+                    style="margin-bottom: 10px;"
+                > 
+                    Export CSV
+
+                    <v-icon
+                        right
+                        dark
+                    >
+                        mdi-download
+                    </v-icon>
+                </v-btn>
+                {% endif %}
+
+                <!-- show graph back button -->
+                <v-btn 
+                    v-show="isBack"
+                    class="ml-2" 
+                    outlined 
+                    @click="nextSlide"
+                    class="btn-outline-default" 
+                    color="black"
+                    style="margin-bottom: 10px;"
+                > 
+                    <v-icon
+                        left
+                        dark
+                    >
+                        arrow_back
+                    </v-icon>
+
+                    Back
+                </v-btn>
+
+            </div>
+
+            <!-- push now settings Dialog -->
+            <v-dialog v-model="dialogPushNow" max-width="750" persistent>
+                <v-card>
+                    <v-card-title>Push to WIS2BOX</v-card-title>
+
+                    <!-- logs lenght of time notice -->
+                    <v-scroll-x-transition>
+                        <v-alert 
+                            type="warning" 
+                            icon="warning"
+                            dense
+                            class="mt-2"
+                            rounded="0"
+                            dismissible
+                        >
+                            Go to the WIS2 Dashboard to see the Logs
+                        </v-alert>
+                    </v-scroll-x-transition>
+
+
+                    <div style="min-height: 4px;" class="ml-3 mr-3 mb-5 mt-5">
+                        <v-progress-linear
+                            v-model="progressLinear"
+                            :active="progressLinearShow"
+                            :indeterminate="progressLinearQuery"
+                            :query="true"
+                            height="25"
+                            stripped
+                            style="border-radius: 20px !important;"
+                        >
+                            <strong style="color: white;">[[ progressLinear ]]% Pushing to WIS2 </strong>
+                        </v-progress-linear>
+                    </div>
+
+                    <v-card-actions>
+                        <v-btn color="red" dark @click="closePushNowDialog" class="mr-3">Close</v-btn>
+                    </v-card-actions>
+                </v-card>
+            </v-dialog>  
+
+            <!-- deletion confirmation dialog -->
+            <v-dialog
+                v-model="confirmDeleteDialog"
+                max-width="400"
+            >
+                <v-card>
+                    <v-card-title class="headline"> Confirm Deletion </v-card-title>
+                    
+                    <v-card-text>
+                        Are you sure you want to delete data?
+                        <!-- <strong>[[ pendingDeleteHours.join(', ') ]]</strong>? -->
+                    </v-card-text>
+
+                    <v-card-actions>
+                        <v-spacer></v-spacer>
+
+                        <v-btn text color="grey" @click="confirmDeleteDialog = false">
+                            Cancel
+                        </v-btn>
+
+                        <v-btn text color="red" @click="confirmDelete">
+                            Delete
+                        </v-btn>
+                    </v-card-actions>
+                </v-card>
+            </v-dialog>
+
+            <!-- in production dialog -->
+            <v-dialog
+                v-model="inProduction"
+                max-width="400"
+            >
+                <v-card>
+                    <v-card-title class="headline"> Alert! </v-card-title>
+                    
+                    <v-card-text style="color: red;">
+                        This feature is in production...
+                    </v-card-text>
+
+                    <v-card-actions>
+                        <v-spacer></v-spacer>
+
+                        <v-btn text color="grey" @click="inProduction = false">
+                            Cancel
+                        </v-btn>
+                    </v-card-actions>
+                </v-card>
+            </v-dialog>
+
+
+            <v-carousel 
+                v-model="currentSlide" 
+                hide-delimiters
+                :show-arrows="false"
+                height="100%" 
+            >
+                <!-- ag grid -->
+                <v-carousel-item>
+
+                    <!-- Synop table grid container -->
+                    <!-- Non Sticky header -->
+                    <ag-grid-vue
+                        v-show="!hideTable"
+                        :row-data="rowData"
+                        :column-defs="colDefs"
+                        :default-col-def="defaultColDef"
+                        :grid-options="gridOptions"
+                        style="width: 100%;"
+                        :class="tableTheme"
+                        @grid-ready="onGridReady"
+                        @cell-editing-started="onCellEditingStarted"
+                        @cell-editing-stopped="onCellEditingStopped"
+                        dom-layout="autoHeight"
+                    >
+                    </ag-grid-vue>
+
+                    <!-- Sticky header -->
+                    <!-- <ag-grid-vue
+                        v-show="!hideTable"
+                        :row-data="rowData"
+                        :column-defs="colDefs"
+                        :default-col-def="defaultColDef"
+                        :grid-options="gridOptions"
+                        style="height: 100%;"
+                        :class="tableTheme"
+                        @grid-ready="onGridReady"
+                        @cell-editing-started="onCellEditingStarted"
+                        @cell-editing-stopped="onCellEditingStopped"
+                    >
+                    </ag-grid-vue> -->
+
+
+                </v-carousel-item>
+
+                <!-- graph -->
+                <v-carousel-item>
+                    <!-- Overlay with Spinner -->
+                    <v-overlay v-show="" absolute opacity="0.3" style="border-radius: 4px;">
+                        <v-progress-circular indeterminate size="70"></v-progress-circular>
+                    </v-overlay>
+
+                    <!-- tab header titles -->
+                    <v-tabs 
+                        v-model="activeTab"
+                        show-arrows
+                        centered
+                        center-active
+                    >
+                        {% for item in ag_grid_config %}
+                            {% if item.var_type == 'numeric' %}
+                                <v-tab key="{{ item.id }}">
+                                    {{ item.name }}
+                                </v-tab>
+                            {% endif %}
+                        {% endfor %}
+                    </v-tabs>
+
+
+                    <!-- tab items -->
+                    <v-tabs-items 
+                        v-model="activeTab" 
+                        continuous
+                    >
+                        {% for item in ag_grid_config %}
+                            {% if item.var_type == 'numeric' %}
+                                <v-tab-item 
+                                    key="{{ item.id }}" 
+                                    class="mt-7"
+                                    eager
+                                    :transition="false"
+                                    :reverse-transition="false"
+                                >
+                                    <!-- graph heading -->
+                                    <div class="text-center">
+                                        <span class="srf-display-2 text-uppercase">{{ item.name }} Graph</span>
+                                    </div>
+
+                                    <!-- the graph -->
+                                    <div>
+                                        <highcharts :options="chartOptions"></highcharts>
+                                    </div>
+                                </v-tab-item>
+                            {% endif %}
+                        {% endfor %}
+                    </v-tabs-items>
+
+                </v-carousel-item>
+            </v-carousel>
+
+        </v-app>
+
+
+        <!-- Loading overlay -->
+        <v-overlay absolute :value="loading">
+            <span>LOADING</span>
+            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+        </v-overlay>
+
+
+        <!-- snack bar status -->
+        <v-snackbar v-model="snackbar.show" :timeout="5000" :color="snackbar.color">
+            [[ snackbar.message ]]
+        </v-snackbar>
+    </div>
+</div>
+
+
+{% endblock %} 
+{% block localjavascript %}
+
+<style>
+    .ag-header-group-text {
+        white-space: normal !important;
+        line-height: 1.2;
+        text-align: center !important;
+        word-break: break-word;
+    }
+
+    .ag-grid-header-center {
+        display: flex;
+        justify-content: center !important; /* centers horizontally */
+        align-items: center !important;     /* centers vertically */
+        text-align: center !important;      /* fallback text align */
+    }
+
+    .misc-cols-group, .wind-cols-group, .temp-cols-group, 
+    .pressure-cols-group, .precip-cols-group, .sky-cols-group,
+    .cloud-cols-group {
+        justify-content: center !important;
+        text-align: center !important;      /* fallback text align */
+    }
+
+    .obs-cols-group {color: red;}
+
+    /* minimizing the padding from the header cells */
+    .ag-header-cell {
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+    }
+
+    .ag-header-group-cell-with-group {padding: 3px !important;}
+    .ag-header-group-cell {padding: 3px !important;}
+
+</style>
+
+<script>
+
+    // highchart for use with graph
+    Vue.use(HighchartsVue.default);
+
+    // parse the offset string
+    function parseOffsetToMinutes(offsetStr) {
+        const match = offsetStr.match(/(-?\d+) day[s]?,\s*(\d{2}):(\d{2}):(\d{2})/);
+
+        if (!match) return 0;
+
+        const days = parseInt(match[1], 10);
+        const hours = parseInt(match[2], 10);
+        const minutes = parseInt(match[3], 10);
+
+        return (days * 24 * 60) + (hours * 60) + minutes;
+    }
+
+    // initialize the timezone details
+    const timezoneDetails = {
+        offsetMinutes: parseOffsetToMinutes("{{ timezone_offset }}"), 
+        offsetStr: "{{ timezone_offset }}"
+    }
+
+    var timezoneChange = false
+
+    // formatting time to 12 hr format
+    function formatHour(hour) {
+        if (['SUM', 'AVG', 'MAX', 'MIN', 'STDDEV', 'COUNT'].includes(hour)) {
+            return hour;
+        }
+        
+        if(timezoneChange == false)
+        {
+            const hr = parseInt(hour);
+            const suffix = hr >= 12 ? 'PM' : 'AM';
+            const displayHour = hr % 12 === 0 ? 12 : hr % 12;
+
+            return `${displayHour}:00 ${suffix}`;
+        }
+
+        // Convert hour string to integer
+        const localHour = parseInt(hour);
+        
+        // Parse the timezoneDetails.offsetStr: e.g. "-1 day, 18:00:00"
+        const offsetMatch = timezoneDetails.offsetStr.match(/(-?\d+)\sday[s]?,\s(\d+):(\d+):(\d+)/);
+
+        if (!offsetMatch) {
+            console.error("Invalid timezone offset format:", timezoneDetails.offsetStr);
+            return hour; // fallback
+        }
+
+        // Extract the components
+        const dayOffset = parseInt(offsetMatch[1]);
+        const hourOffset = parseInt(offsetMatch[2]);
+        const minuteOffset = parseInt(offsetMatch[3]);
+        const secondOffset = parseInt(offsetMatch[4]);
+
+        // Convert everything to milliseconds
+        const totalOffsetMs =
+            ((dayOffset * 24 + hourOffset) * 60 * 60 +
+            minuteOffset * 60 +
+            secondOffset) * 1000;
+
+        // Create a date for today with the given hour (no minutes or seconds)
+        const localDate = new Date();
+        localDate.setUTCHours(localHour, 0, 0, 0);
+
+        // Subtract the offset to get UTC time
+        const utcDate = new Date(localDate.getTime() - totalOffsetMs);
+
+        // Format to 24hr string, padded if needed
+        const utcHour = utcDate.getUTCHours().toString().padStart(2, '0');
+        return `${utcHour}:00 UTC`;
+    };
+
+
+    // AG Grid Contants
+    // holds column definition
+    const columnDefinitions = [
+        // Pinned select column
+        {
+            headerName: '',
+            headerClass: "misc-cols-group",
+            colId: 'select',
+            width: 50,
+            pinned: 'left',
+            // show a checkbox in each row
+            checkboxSelection: params => params.node.rowPinned !== 'bottom',
+            headerCheckboxSelection: false,
+            lockPosition: true,
+            sortable: false,
+            filter: false
+        },
+
+        // Pinned "Time Column"
+        {
+            width: 100,
+            headerName: "Time Stamp",
+            cellClass: "time-col",
+            headerClass: "misc-cols-group",
+            field: "time", 
+            resizable: true,
+            // show the dates in 12 hour format
+            valueFormatter: params => formatHour(params.value),
+            colId: "tz", // explicitly setting the column id
+            pinned: "left",
+            editable: false,
+            wrapHeaderText: true, // Wrap Text
+        },
+
+        // Dynamically generated weather columns
+        {% for item in ag_grid_config %}
+        
+            {% if item.synoptic_code %}
+                {
+                    headerName: "{{item.name | safe}}",
+                    headerClass: "{{item.col_class | safe}}",
+                    children: [
+                        {% if item.calc_action %}
+                            {
+                                headerName: "Action",
+                                colId: "{{ item.id | safe}}_action",
+                                width: 120, // just big enough for the button
+                                sortable: false,
+                                filter: false,
+                                // no text-editing or selection
+                                editable: false,
+                                singleClickEdit: true,
+                                suppressNavigable: true, // prevent keyboard focus/tab into this cell
+                                // Replace cellRenderer + params with selector:
+                                cellRendererSelector: params => {
+                                    // pinned bottom rows have rowPinned==='bottom'
+                                    if (params.node.rowPinned === 'bottom') {
+                                        return undefined;
+                                    }
+                                    return {
+                                        component: 'calc-action-cell',
+                                        params: { writeField: '{{ item.id | safe }}' }
+                                    };
+                                } 
+                            },
+                        {% endif %}
+                        {
+                            headerName: "{{item.synoptic_code | safe}}", 
+                            wrapHeaderText: true, // Wrap Text
+                            autoHeaderHeight: true, // Adjust Cell Height to Fit Wrapped Text
+                            resizable: true,
+                            field: "{{item.id | safe}}",
+                            colId: "{{ item.id | safe}}", // explicityly setting the column id
+                            width: {{item.col_width}},
+
+                            {% if item.var_type == "code" %}
+                                cellEditor: 'agSelectCellEditor',
+                                cellEditorParams: {
+                                    values: {{ item.dropdown_codes | safe}},
+                                    valueListMaxHeight: 240,
+                                }
+                            {% endif %}
+                        },
+                    ]
+                },
+            {% else %}
+
+                {% if item.id == "observer" %}
+
+                    // setting the observer column to uneditable
+                    {
+                        headerName: "{{item.id | safe}}",
+                        wrapHeaderText: true, // Wrap Text
+                        resizable: true,
+                        editable: false, // no text-editing or selection
+                        headerClass: "{{item.col_class | safe}}",
+                        cellClass: "obs-cols-group",
+                        field: "{{item.id | safe}}",
+                        colId: "{{ item.id | safe}}", // explicityly setting the column id
+                        width: {{item.col_width}},
+                    },
+
+                {% else %}
+
+                    // if no synoptic code is found use the following
+                    {
+                        headerName: "{{item.name | safe}}",
+                        wrapHeaderText: true, // Wrap Text
+                        resizable: true,
+                        headerClass: "{{item.col_class | safe}}",
+                        field: "{{item.id | safe}}",
+                        colId: "{{ item.id | safe}}", // explicityly setting the column id
+                        width: {{item.col_width}},
+
+                        {% if item.var_type == "code" %}
+                            cellEditor: 'agSelectCellEditor',
+                            cellEditorParams: {
+                                values: {{ item.dropdown_codes | safe}},
+                                valueListMaxHeight: 240,
+                            }
+                        {% endif %}
+                    },
+
+                {% endif %}
+
+            {% endif %}
+
+        {% endfor %}
+
+    ];
+
+
+    // holds all station information (synoptic & manual stations only)
+    const stationArr = [
+        {% for station in station_list %}
+            {id: {{station.id}}, name: "{{station.name | safe }} - {{station.code}}"},
+        {% endfor %}
+    ]; 
+
+
+    // custom 'smart' tooltip
+    // 1) Register a single Vue component that AG-Grid will mount for every cell tooltip
+    Vue.component('custom-tooltip', {
+        // declare a reactive place to store AG-Grid’s params
+        data() {
+            return {
+            params: null
+            };
+        },
+        // AG-Grid will call init() with the tooltip params object
+        init(params) {
+            this.params = params;
+        },
+        computed: {
+            // Decide if this is an error or just “info”
+            isError() {
+                const errs = this.params.data.__errors || {};
+                return !!errs[this.params.colDef.colId];
+            },
+
+            // Pick icon
+            iconClass() {
+                return this.isError
+                    ? 'fas fa-exclamation-triangle'
+                    : 'fas fa-info-circle';
+            },
+
+            // Build the actual text to display
+            message() {
+                const errs = this.params.data.__errors || {};
+                if (this.isError) {
+                    return errs[this.params.colDef.colId];
+                }
+                // fallback to any “info” stored on rowData.info[colId]
+                return (this.params.data.info || {})[this.params.colDef.colId] || '';
+            }
+        },
+        template: 
+        `
+            <div :class="[ isError ? 'error-tooltip' : 'info-tooltip' ]"
+                style="display:flex; align-items:center;">
+            <i :class="iconClass" style="margin-right:6px;"></i>
+            <span v-text="message"></span>
+            </div>
+        `
+    });
+
+
+    // custom 'cell button component'
+    // Globally register button-as-cell component
+    Vue.component('calc-action-cell', {
+        // Reactive state for the component; we'll store the AG-Grid params here
+        data() {
+            return {
+                params: null,
+            };
+        },
+
+        // AG-Grid will call this once when initializing the cell renderer,
+        // passing in the cell-specific params (rowNode, colDef, api, etc.)
+        init(params) {
+            this.params = params;
+        },
+
+        computed: {
+            // Determine which field/column this button should write into.
+            // We read it from the colDef.cellRendererParams.writeField
+            writeField() {
+            return this.params.writeField;
+            }
+        },
+
+        methods: {
+            // Handler for when the user clicks the “Calculate” button
+            buttonClicked() {
+                // 1) Grab the full row’s data object
+                const rowData = this.params.node.data;
+                const selectedDate = this.params.context.selectedStationData.date;
+                const selectedId = this.params.context.selectedStationData.stationId;
+                const hourOnly = Number(rowData.time.split(':')[0]);
+                const requestedDateHour = moment(selectedDate).set('hour', hourOnly) // note that if you ever need a timezone aware value, properly calc the offset as moment uses the server location time
+                const rowDatetime = requestedDateHour.format('YYYY-MM-DD HH:mm');
+
+                // Compute your new value based on the column which sent the request.
+                switch (Number(this.writeField)) {
+                    // if the column which initiated the request is the 24 hr barometric column
+                    case 4057:
+                        const calc_pres_url = `/wx/reports/synop/calc-pressure/?station_id=${selectedId}`
+
+                        if (Number(rowData['61'])) {
+                            // send a request back to the server to retrieve the 24-hour difference
+                            axios.post(calc_pres_url, {
+                                date: rowDatetime,
+                                pressure_value: rowData['61']
+                            })
+                            .then(response => {
+                                if (typeof(response.data.dataset) === 'number'){
+                                    // update and refresh the cell
+                                    this.updateRefresh(response.data.dataset);
+                                }
+                                else {
+                                    // set and refresh the cell
+                                    this.updateRefresh('');
+
+                                    console.warn("Barometric change calculation failed: Missing sea level pressure data from 24 hours ago"); // Log warning
+                                    this.params.context.snackbar("Barometric change calculation failed: Missing sea level pressure data from 24 hours ago", false); // show the snack bar
+                                }
+
+                            })
+                            .catch(error => {
+                                // set and refresh the cell
+                                this.updateRefresh('');
+
+                                console.warn("Error occurred updating the 24 Hr barometric change column:", error); // Log any errors
+                                this.params.context.snackbar("Error occurred updating the 24 Hr barometric change column.", true); // show the snack bar
+                            });
+
+                        }
+                        else {
+                            // set and refresh the cell
+                            this.updateRefresh('');
+
+                            console.warn("Ensure the value in 'Pressue at Sea Level' column is a number"); // Log warning
+                            this.params.context.snackbar("Ensure the value in 'Pressue at Sea Level' column is a number", true); // show the snack bar
+                        }
+
+                        break;
+
+
+                    // if the column which initiated the request is the 24 precipitation column
+                    case 4055:
+                        const calc_precip_url = `/wx/reports/synop/calc-precip/?station_id=${selectedId}`
+
+                        if (!Number.isNaN(Number(rowData['0']))) {
+                            // send a request back to the server to retrieve the 24-hour difference
+                            axios.post(calc_precip_url, {
+                                date: rowDatetime,
+                                // in the past the current precip value was also sent back to the view to include in the total sum
+                                // this has now been stopped. the code below is the legacy implementation of that:
+                                // precipitation_value: rowData['0']
+                            })
+                            .then(response => {
+                                if (typeof(response.data.dataset) === 'number'){
+                                    // update and refresh the cell
+                                    this.updateRefresh(response.data.dataset);
+                                }
+                                else {
+                                    // set and refresh the cell
+                                    this.updateRefresh('');
+
+                                    console.warn("24hr Precipitation calculation failed: Missing precipitation data"); // Log warning
+                                    this.params.context.snackbar("24hr Precipitation calculation failed: Missing precipitation data", false); // show the snack bar
+                                }
+
+                            })
+                            .catch(error => {
+                                // set and refresh the cell
+                                this.updateRefresh('');
+
+                                console.warn("Error occurred updating the 24hr Precipitation column:", error); // Log any errors
+                                this.params.context.snackbar("Error occurred updating the 24hr Precipitation column.", true); // show the snack bar
+                            });
+
+                        }
+                        else {
+                            // set and refresh the cell
+                            this.updateRefresh('');
+
+                            console.warn("Ensure the value in 'Precipitation (mm.)' column is a number"); // Log warning
+                            this.params.context.snackbar("Ensure the value in 'Precipitation (mm.)' column is a number", true); // show the snack bar
+                        }
+
+                        break;
+
+                    
+                    // default case
+                    default:
+                        console.log(Number(this.writeField));
+                        console.log(this.writeField);
+                        console.warn("No case for the required id");
+                }
+                
+            },
+        
+        
+            // update the cell and refresh the cell
+            updateRefresh(new_value) {
+                this.params.node.setDataValue(this.writeField, new_value.toString()); // Update the corresponding cell
+
+                // Refresh only that one cell so the new value is displayed immediately
+                this.params.api.refreshCells({
+                    rowNodes: [this.params.node],
+                    columns: [this.writeField]
+                });
+
+                // Set draft = true in the parent Vue instance
+                this.params.context.markAsDraft();
+            }
+        },
+
+        // The template renders a centered button with a calculator icon and label
+        template: `
+            <div
+            style="display:flex; align-items:center; height:100%; justify-content:center;"
+            >
+            <button
+                @click.stop="buttonClicked"
+                title="Calculate"
+                style="
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: background 0.2s;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                "
+                @mouseover="($event.target.style.background='#0056b3')"
+                @mouseleave="($event.target.style.background='#007bff')"
+            >
+                <i class="fas fa-calculator" style="margin-right:6px;"></i>
+                Calculate
+            </button>
+            </div>
+        `
+    });
+
+
+    // main vue component
+    Vue.component('ag-grid-vue', window['ag-grid-vue'].AgGridVue);
+    Vue.use(window.vuelidate.default);
+    const { required, minLength } = window.validators;
+
+
+    (function() {
+        new Vue({
+            el: "#app",
+            vuetify: new Vuetify(),
+            delimiters: ["[[", "]]"],
+            validations: {
+                requestData: {
+                    date: { required },
+                }
+            },
+            data() {
+                return {
+                    statistics: null,
+                    activeTab: 0,
+                    isBack: false, // control for the carousel
+                    currentSlide: 0,
+                    snackbar: { show: false, message: '', color: '' },
+                    hideTable: true,
+                    colDefs: columnDefinitions,
+                    stationList: stationArr, 
+                    requestData: {
+                        date: "{{date|safe}}",
+                        stationId: {{ station_id }},
+                        interval: 3600
+                    }, 
+                    draft: false,
+                    valid: false,
+                    datepicker_menu: false,
+                    textFieldsRules: [v => (v !== undefined && v !== "") || "This field is required"],
+                    now: moment.utc().add(timezoneDetails.offsetMinutes, 'minutes').format('YYYY-MM-DD'),
+                    loading: false,
+                    requestedData: {},
+                    // AG GRID DATA
+                    // Possible themes: (**can append '-dark' to any option) [ag-theme-quartz, ag-theme-balham, ag-theme-material]
+                    tableTheme: "ag-theme-balham",
+                    // grid settings as a whole
+                    gridOptions: {
+                        suppressMenuHide: true,       // keeps menu icon always visible
+                        groupHeaderHeight: 60, // Increase col height specifically for group headers
+                        rowHeight: 30, // custom row height
+                        rowClassRules: { // tag last 6 rows (statistics) with the CSS class 'grey-row'
+                        'grey-row': params => params.node.rowPinned === 'bottom'
+                        }, 
+                        onCellValueChanged: this.onCellValueChanged, // execute on cell value change
+                        enableBrowserTooltips: false,   // turn OFF title-based tooltips
+                        tooltipShowDelay: 0,    // show tooltip immediately
+                        tooltipHideDelay: 20000, // hide tooltip after 20 seconds
+                        // singleClickEdit: true, // clicking once on a cell opens edit
+                        context: {
+                            selectedStationData: null,
+                            snackbar: this.setSnackbar.bind(this),
+                            markAsDraft: this.markAsDraft.bind(this),
+                        },
+                        // wire up the editing hook:
+                        onCellEditingStopped: this.onCellEditingStopped,
+                        rowSelection:"multiple",
+                        // tell us whenever selection changes
+                        onSelectionChanged: this.onSelectionChanged,
+
+                        // modifyin the default arrow navigation to skip the first two columns.
+                        navigateToNextCell: (params) => {
+                            const { nextCellPosition, previousCellPosition, key, api } = params;
+                            const visibleCols = api.getAllDisplayedColumns();
+                            const displayedRowCount = api.getDisplayedRowCount();
+                            let { rowIndex, column } = previousCellPosition;
+
+                            const colIndex = visibleCols.findIndex(c => c.getColId() === column.getColId());
+                            if (colIndex === -1) return nextCellPosition; // fallback
+
+                            // --- LEFT/RIGHT handling with skip rules ---
+                            if (key === 'ArrowRight') {
+                            if (colIndex < visibleCols.length - 1) {
+                                column = visibleCols[colIndex + 1];
+                            } else {
+                                // wrap to next row, skip columns before index 2
+                                rowIndex++;
+                                if (rowIndex >= displayedRowCount) rowIndex = 0;
+                                column = visibleCols[2]; // skip first two columns
+                            }
+                            } else if (key === 'ArrowLeft') {
+                            if (colIndex > 2) {
+                                column = visibleCols[colIndex - 1];
+                            } else {
+                                // wrap to previous row's last column
+                                rowIndex--;
+                                if (rowIndex < 0) rowIndex = displayedRowCount - 1;
+                                column = visibleCols[visibleCols.length - 1];
+                            }
+                            } else {
+                            return nextCellPosition; // other keys -> default behavior
+                            }
+
+                            // ensure target is in bounds
+                            if (rowIndex < 0 || rowIndex >= displayedRowCount) return nextCellPosition;
+
+                            return { rowIndex, column };
+                        },
+                    },                
+                    // default cell settings
+                    defaultColDef: {
+                        sortable: true,
+                        filter: true,
+                        resizable: false,
+                        suppressSizeToFit: true, // Allows overflow
+                        cellClassRules: {
+                            'invalid-cell': (params) => {
+                            const errs = params.data.__errors || {};
+                            return !!errs[params.colDef.colId];
+                            },
+
+                            // grey out any cell in a pinned-bottom row
+                            'ag-grey': params => params.node.rowPinned === 'bottom'
+                        },
+
+                        // pick up error/info text
+                        tooltipValueGetter: params => {
+                            const errs = params.data.__errors || {};
+
+                            if (errs[params.colDef.colId]) {
+                                return errs[params.colDef.colId];
+                            }
+
+                            return (params.data.info || {})[params.colDef.colId] || '';
+                        },
+
+                        // only allow edits on non-pinned rows (non statistic rows):
+	                    editable: params => params.node.rowPinned !== 'bottom',
+
+                        // tell AG-Grid to use custom component
+                        tooltipComponent: 'custom-tooltip',
+
+                        valueFormatter: (params) => {
+                            const value = params.value;
+                            
+                            if (value === null || value === undefined) return "";
+
+                            if (typeof value === 'object') {
+                                // If it's an empty object, return empty string
+                                if (Object.keys(value).length === 0) return "";
+                                return JSON.stringify(value);
+                            }
+
+                            return value;
+                        },
+                    },
+                    rowData: [],
+                    gridData: Array.from({ length: 24 }, () => ({})), // initialized with 24 empty rows
+                    gridApi: null,
+                    gridColumnApi: null,
+                    colIdsNumType: {{ num_validate_ids | safe }}, // stores the id of all columns which only require numerical data
+                    variableIds: {{ variable_ids | safe }}, // stores all the variable ids
+                    MISSING_VALUE: null, // stores temp missing value
+                    updatedHours: new Set(), // holds all the hours that were updated
+          
+                    // for use in the chart
+			        rawReadings: [],
+
+			        // chartOptions
+                    chartOptions: {
+                        chart: {
+                            type: 'line',
+                            zoomType: 'x'
+                        },
+                        title: {
+                            text: ''
+                        },
+                        xAxis: {
+                            categories: [],           // ← empty to start
+                            tickInterval: 1,
+                            title: {
+                                text: 'Time (hourly)'
+                            }
+                        },
+                        yAxis: {
+                            title: {
+                                text: 'Measured Values'
+                            }
+                        },
+                        tooltip: {
+                            headerFormat: 'Time: <b>{point.key}</b><br/>',
+                            pointFormat: '{series.name}: <b>{point.y}</b>',
+                            shared: false,
+                            crosshairs: true
+                        },
+                        series: [
+                            {
+                                name: 'Reading',
+                                data: [],           // ← empty to start
+                                marker: {
+                                    enabled: true
+                                },
+                                lineWidth: 2
+                            }
+                        ]
+                    },
+                    
+                    selectedCount: 0,
+                    confirmDeleteDialog: false,
+                    pendingDeleteHours: [],
+                    inProduction: false,
+                    useUTC: false,
+
+                    editorListeners: new Map(), // Map to track active editor listeners (keyed by "rowIndex-colId")
+                    
+                    columnRanges: {},
+
+                    wis2PublishControl: {},
+
+                    progressLinear: 0,
+                    progressLinearQuery: false,
+                    progressLinearShow: false,
+                    progressLinearInterval: 0,
+                    dialogPushNow: false,
+                    
+                    // next var....
+                };
+            },
+            methods: {
+
+                // control for the push now btn in the table
+                handlePushClick() {
+                    this.openPushNowDialog();
+                    this.pushToWis2Box(this.wis2PublishControl.id);
+                },
+
+
+                // opens the dialog for push now
+                openPushNowDialog() {
+                    this.dialogPushNow = true;
+                },
+
+
+                // Closes the dialog and resets confirmation state.
+                closePushNowDialog() {
+                    this.dialogPushNow = false;
+                },
+
+
+                // Function to trigger the push to WIS2BOX
+                async pushToWis2Box(stationId) {
+
+                    try {
+                        // Start the progress bar (show user that work is in progress)
+                        this.progressLinearControl();
+
+                        // Initiate the push task on the server
+                        const response = await axios.post("/wx/reports/synop/push_to_wis2box/", { stationId });
+                        if (response.status !== 200) throw new Error("Failed to initiate push");
+
+                        console.log("Success: Station push initiated.");
+                        const task_id = response.data.celery_task_id;
+
+                        // Notify the user that the push has started
+                        this.snackbar = { 
+                            show: true, 
+                            message: 'Station push initiated. See Logs on WIS2 Dashboard page for more information', 
+                            color: 'blue' 
+                        }
+
+                        // Set up polling variables
+                        let attempts = 0;
+                        const maxAttempts = 60; // Maximum number of polls (~5 minutes if interval = 5s)
+
+                        // Recursive function to poll the task status
+                        const pollTask = async () => {
+                            try {
+                                const res = await axios.get(`/api/task/${task_id}/`);
+
+                                if (res.data.status === "completed") {
+                                    // Task completed successfully
+                                    console.log("Success: Station push completed.");
+                                    this.snackbar = { 
+                                        show: true, 
+                                        message: 'Station push completed! See Logs on WIS2 Dashboard page for more information', 
+                                        color: 'green' 
+                                    }
+
+                                    // Mark progress bar as complete
+                                    clearInterval(this.progressLinearInterval); // stop incrementing
+                                    this.progressLinear = 100; // now it can hit 100%
+                                    this.progressLinearShow = false; // optionally hide the bar
+
+                                    this.closePushNowDialog() // close the push now dialog
+
+                                } else if (res.data.status === "failed") {
+                                    // Task failed on the server
+                                    console.error("Failed to push station! Push now celery task failed.");
+                                    this.snackbar = { show: true, message: 'Failed to push station', color: 'red' }
+                                    
+                                    // stop the progres bar
+                                    clearInterval(this.progressLinearInterval); // stop incrementing
+                                    this.progressLinearShow = false; // hide the bar
+
+                                    this.closePushNowDialog() // close the push now dialog
+
+                                } else {
+                                    // Task still running
+                                    attempts++;
+                                    if (attempts >= maxAttempts) {
+                                        // Maximum polling attempts reached, assume something went wrong
+                                        console.warn("Push task is taking too long.");
+                                        this.snackbar = { show: true, message: 'Task taking too long', color: 'orange' }
+                                        // stop the progres bar
+                                        clearInterval(this.progressLinearInterval); // stop incrementing
+                                        this.progressLinearShow = false; // hide the bar
+                                    } else {
+                                        // Poll again after 5 seconds
+                                        setTimeout(pollTask, 5000);
+                                    }
+                                }
+
+                            } catch (err) {
+                                // Error when checking task status (network/server error)
+                                console.error("Error polling task:", err.response?.status || err.message);
+                                this.snackbar = { show: true, message: 'Failed to push station', color: 'red' }
+                                
+                                // stop the progres bar
+                                clearInterval(this.progressLinearInterval); // stop incrementing
+                                this.progressLinearShow = false; // hide the bar
+
+                                this.closePushNowDialog() // close the push now dialog
+                            }
+                        };
+
+                        // Start polling
+                        pollTask();
+
+                    } catch (error) {
+                        // Error initiating the push task
+                        console.error("Failed to push station:", error.response?.status || error.message);
+                        this.snackbar = { show: true, message: 'Failed to push station', color: 'red' }
+
+                        // stop the progres bar
+                        clearInterval(this.progressLinearInterval); // stop incrementing
+                        this.progressLinearShow = false; // hide the bar
+
+                        this.closePushNowDialog() // close the push now dialog
+                    }
+                },
+
+                
+                // Function to show a simulated progress bar while waiting for a task
+                // Loader to visually indicate progress until a push completes
+                progressLinearControl() {
+                    // Show the progress bar
+                    this.progressLinearShow = true;
+                    this.progressLinear = 0; // Start at 0%
+
+                    // Clear any previous interval to avoid duplicates
+                    if (this.progressLinearInterval) {
+                        clearInterval(this.progressLinearInterval);
+                    }
+
+                    // Smoothly increment progress while task is ongoing
+                    this.progressLinearInterval = setInterval(() => {
+                        // Increment by a small random value
+                        const increment = Math.floor(Math.random() * 2) + 1; // 1–2%
+                        // const increment = Number((Math.random() * 1).toFixed(2)); // 0 – 1%
+                        // Never allow it to reach 100 while task is in progress
+                        if (this.progressLinear < 99) {
+                            this.progressLinear += increment;
+                            if (this.progressLinear > 99) this.progressLinear = 99;
+                        }
+                        // When the task completes (success/fail), push function will set progressLinear = 100
+                    }, 500); // update every 0.5s
+                },
+
+
+                /**
+                * Create a unique key for a cell using its rowIndex and colId.
+                * Used to map editor DOM elements to their event listeners.
+                */
+                _editorKey(rowIndex, colId) {
+                    return `${rowIndex}-${colId}`;
+                },
+
+
+                /**
+                * Called when a cell enters editing mode.
+                * Attaches a keydown listener on the editor GUI that:
+                *  - moves to the next editable cell on ArrowRight (wraps to next row)
+                *  - moves to the previous editable cell on ArrowLeft (wraps to previous row)
+                *  - respects colDef.editable (function or boolean)
+                */
+                onCellEditingStarted(params) {
+                    const api = params.api;
+                    const rowIndex = params.node.rowIndex;
+                    const colId = params.column.getColId();
+                    const key = this._editorKey(rowIndex, colId);
+
+                    // Get the editor instances reliably
+                    const editors = api.getCellEditorInstances
+                    ? api.getCellEditorInstances({ rowNodes: [params.node], columns: [params.column] })
+                    : [];
+
+                    if (!editors || editors.length === 0) return;
+
+                    const editor = editors[0];
+                    const gui = typeof editor.getGui === "function" ? editor.getGui() : null;
+
+                    if (!gui) return;
+
+                    // Remove any previous listener for this same cell
+                    if (this.editorListeners.has(key)) {
+                        const prev = this.editorListeners.get(key);
+                        try { prev.gui.removeEventListener("keydown", prev.handler, true); } catch (_) {}
+                        this.editorListeners.delete(key);
+                    }
+
+                    const handler = (e) => {
+                        const k = e.key;
+
+                        // Only handle left/right arrows (add 'ArrowUp' or 'ArrowDown' if you want up/down too)
+                        if (!["ArrowLeft", "ArrowRight"].includes(k)) return;
+
+                        // Prevent cursor movement inside the editor and stop grid default
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const visibleCols = api.getAllDisplayedColumns() || [];
+
+                        if (visibleCols.length === 0) return;
+
+                        // Current column index among visible columns
+                        const colIndex = visibleCols.findIndex(c => c.getColId() === colId);
+
+                        if (colIndex === -1) return;
+
+                        const displayedRowCount = api.getDisplayedRowCount();
+                        let nextRow = rowIndex;
+                        let nextColIndex = colIndex;
+
+                        // Horizontal movement + wrap across rows
+                        if (k === "ArrowLeft") {
+                            if (colIndex > 2) { // the '> 2' causes the focus to skip the time and tick box column when going back up the row
+                                nextColIndex = colIndex - 1;
+                            } 
+                            else {
+                                // wrap to previous row's last visible column
+                                nextColIndex = visibleCols.length - 1;
+                                nextRow = rowIndex - 1;
+                            }
+                        } 
+                        else if (k === "ArrowRight") {
+                            if (colIndex < visibleCols.length - 1) {
+                                nextColIndex = colIndex + 1;
+                            } 
+                            else {
+                                // wrap to next row's first visible column
+                                nextColIndex = 2; // causes the focus to skip the time and tick box column when gong down the row
+                                nextRow = rowIndex + 1;
+                            }
+                        }
+
+                        // Bounds check: stop if nextRow outside grid (no infinite loop)
+                        if (nextRow < 0 || nextRow >= displayedRowCount) return;
+
+                        let nextCol = visibleCols[nextColIndex];
+
+                        if (!nextCol) return;
+
+                        // --- Check editability (skip non-editable columns) ---
+                        // We'll advance in the same direction until we find an editable col or hit bounds.
+                        const moveForward = k === "ArrowRight";
+                        let attempts = 0;
+                        while (true) {
+                            attempts++;
+                            if (attempts > visibleCols.length) {
+                                // safety: avoid infinite loop (shouldn't happen)
+                                return;
+                            }
+
+                            // Evaluate editable flag (colDef.editable may be function or boolean)
+                            const colDef = nextCol.getColDef ? nextCol.getColDef() : (nextCol.colDef || {});
+                            let isEditable = colDef.editable;
+
+                            if (typeof isEditable === "function") {
+                                try {
+                                    const targetNode = api.getDisplayedRowAtIndex(nextRow);
+                                    isEditable = isEditable({
+                                        node: targetNode,
+                                        data: targetNode ? targetNode.data : undefined,
+                                        colDef,
+                                        column: nextCol,
+                                        api,
+                                        context: params.context,
+                                        rowIndex: nextRow,
+                                    });
+                                } 
+                                catch (_) {
+                                    isEditable = true; // fail-open
+                                }
+                            }
+
+                            if (isEditable !== false) break; // found editable column
+
+                            // move to next candidate (respecting wrap rules)
+                            if (moveForward) {
+                                nextColIndex++;
+
+                                if (nextColIndex >= visibleCols.length) {
+                                    nextColIndex = 0;
+                                    nextRow = nextRow + 1;
+                                }
+                            } else {
+                                nextColIndex--;
+
+                                if (nextColIndex < 0) {
+                                    nextColIndex = visibleCols.length - 1;
+                                    nextRow = nextRow - 1;
+                                }
+                            }
+
+                            // bounds check again after moving
+                            if (nextRow < 0 || nextRow >= displayedRowCount) return;
+
+                            nextCol = visibleCols[nextColIndex];
+
+                            if (!nextCol) return;
+                        }
+                        // --- end editability loop ---
+
+                        // Stop current editing — will trigger onCellEditingStopped and remove this listener
+                        api.stopEditing();
+
+                        // Ensure target cell is visible & focused, then start editing
+                        api.ensureIndexVisible(nextRow);
+                        api.ensureColumnVisible(nextCol);
+
+                        // Focus the cell first (some AG Grid setups require focus before startEditingCell)
+                        api.setFocusedCell(nextRow, nextCol.getColId());
+
+                        // Start editing after a microtask so AG Grid is ready
+                        setTimeout(() => {
+                            api.startEditingCell({
+                                rowIndex: nextRow,
+                                colKey: nextCol.getColId(),
+                            });
+                        }, 0);
+                    };
+
+                    // Capture keydown on the editor GUI (capture=true to catch keys inside inputs)
+                    gui.addEventListener("keydown", handler, true);
+
+                    // Remember this listener for removal later
+                    this.editorListeners.set(key, { gui, handler });
+                },
+
+
+                // Called when the user exits editing mode (even if value didn't change)
+                onCellEditingStopped(params) {
+                    // Build a unique key for this cell
+                    const key = this._editorKey(params.node.rowIndex, params.column.getColId());
+
+                    // Retrieve stored listener for this cell, if any
+                    const rec = this.editorListeners.get(key);
+
+                    if (rec) {
+                        try {
+                            // Remove the keydown listener attached during editing
+                            rec.gui.removeEventListener("keydown", rec.handler, true);
+                        } catch (_) {
+                            // Safe cleanup: ignore removal errors
+                        }
+
+                        // Remove reference from map to avoid memory leaks
+                        this.editorListeners.delete(key);
+                    }
+
+                    // AG Grid may not always trigger onCellValueChanged
+                    // in the way we expect when a cell is cleared.
+                    // So this acts as a safe fallback.
+                    const oldValue = params.oldValue == null
+                        ? ''
+                        : params.oldValue.toString().trim();
+
+                    const newValue = params.value == null
+                        ? ''
+                        : params.value.toString().trim();
+
+                    // Only mark as draft if the value actually changed
+                    if (oldValue !== newValue) {
+                        this.markAsDraft();
+                    }
+                },
+
+
+                onGridReady(params) {
+                    // Capture the APIs for later use
+                    this.gridApi = params.api;
+                    this.gridColumnApi = params.columnApi;
+                },
+
+
+                // allow other components to access main vue app snackbar
+                setSnackbar(new_snack, isError) {
+                    if(isError) {
+                        this.snackbar = { show: true, message: new_snack, color: 'orange' };
+                    }
+                    else {
+                        this.snackbar = { show: true, message: new_snack, color: 'blue' };
+                    }
+                },
+
+
+                // allow other components to access markAsDraft
+                markAsDraft() {
+                    this.draft = true;
+
+                    // look for any rows that still have errors
+                    const hasErrors = this.rowData.some(row =>
+                        row.__errors && Object.keys(row.__errors).length > 0
+                    );
+
+                    // if hasErrors the users shouldn't be allowed to access the save option
+                    if(hasErrors){
+                        this.valid = false;
+                    }
+                    else {
+                        this.valid = true;
+                    }
+                },
+
+
+                // calculates allowed dates
+                allowedDates(date){
+                    return this.now >= date;
+                },
+
+
+                // clears previous data in the table and preps it to recieve new data
+                resetData(){
+                    this.gridData.forEach(rowObj => {
+                        // remove every key on the existing object
+                        Object.keys(rowObj).forEach(key => {
+                            delete rowObj[key];
+                        });
+                    });
+                },
+
+
+                // load the data unto the table
+                loadGridData() {
+                    // 1) Build the 24 hourly rows
+                    const hourlyRows = this.gridData.map((rowObj, idx) => ({
+                        ...rowObj,
+                        time: String(idx).padStart(2, '0') + ':00'
+                    }));
+
+                    // 2) Replace the main rows via setGridOption
+                    this.rowData = hourlyRows;
+                    if (this.gridApi) {
+                        this.gridApi.setGridOption('rowData', hourlyRows);
+                    }
+
+                    // 3) Compute stats & prepare pinned rows
+                    const statsObj = this.calculateStatistics();
+                    const order    = ['sum','avg','min','max','count','stddev'];
+                    const pinned   = order.map(key => ({ ...statsObj[key] }));
+
+                    // 4) Set pinned bottom rows via setGridOption
+                    if (this.gridApi) {
+                        this.gridApi.setGridOption('pinnedBottomRowData', pinned);
+                    }
+                },
+
+
+                // fetches the data
+                fetchData() {    
+                    this.loading = true;
+      
+                    const { stationId, interval, date } = this.requestData;
+                    const month = moment(date).month() + 1 // moment has a zero based index for months
+
+                    if (stationId===null){
+                      this.loading = false;
+                      return
+                    }
+
+                    const url = `/wx/reports/synop/load/?station_id=${stationId}&date=${date}`
+
+                    // get the data
+                    axios.get(url).then(response => {
+                        this.requestedData = Object.assign({}, this.requestData);
+
+                        this.resetData(); // clear the previous data
+
+                        const response_data = response.data[0];
+
+                        timezoneDetails.offsetMinutes = response.data[1]; // Retrieveing the station timezone offset in minutes
+                        timezoneDetails.offsetStr = response.data[2]; // Retrieveing the station timezone offset "string"
+
+                        this.wis2PublishControl = response.data[3];
+                        
+                        // looping through the response and assigning it to gridData
+                        for(i=0; i< response_data.length; i++){
+                            row = parseInt(response_data[i][0].substr(11, 2));
+
+                            this.gridData[row][response_data[i][1]] =  response_data[i][2];
+                            this.gridData[row]['remarks'] =  response_data[i][3];
+
+                            // observer without the logged in user set by default
+                            this.gridData[row]['observer'] =  response_data[i][4];
+
+                        }
+
+                        //  now that we have the data, we must load it into the table
+                        this.loadGridData();
+
+                        // 1) update the grid’s context (selected station)
+                        this.gridOptions.context.selectedStationData = this.requestData;
+
+                        // 2) force all cells to re-render, so they pick up the new context 
+                        this.gridApi.refreshCells({ force: true }); 
+                        // or: this.gridApi.redrawRows();
+              
+                        // draft and loading
+                        this.draft = false;
+                        this.loading = false;
+                    }).catch(error => {
+                        this.gridApi.showNoRowsOverlay(); // don't show the table
+
+                        // Error alert snack bar
+                        this.snackbar = { show: true, message: 'Error fetching table data', color: 'red' };
+
+                        // draft and loading
+                        this.draft = false;
+                        this.loading = false;
+                    });
+
+                    // get the Global QC range threshold
+                    axios.get(`/api/range_threshold/`).then(response => {
+
+                        // save the output to columRanges in the format {var_id:{max:xx, min:xx}}
+                        this.columnRanges = response.data;
+                    });
+                },
+
+
+                // validation for each cell
+                validateCell(params) {
+                    const { colDef, newValue, data } = params;
+                    const val = newValue;
+
+                    // allow empty cells (skip all validation)
+                    if (val === null || val === undefined || val.toString().trim() === '') {
+                        return null;
+                    }
+
+                    // numeric fields
+                    if (this.colIdsNumType.includes(colDef.colId)) {
+                        const num = Number(val);
+
+                        // is numeric check
+                        if(isNaN(num)) {
+                            return 'Must be a number';
+                        }
+
+                        // QC values check
+                        if(this.columnRanges[colDef.colId]) {
+                            // Get the allowed range for the current column (by column ID)
+                            const range = this.columnRanges[colDef.colId];
+
+                            // Safety check: if no range is defined for this column,
+                            // do not allow the value to pass validation
+                            if (!range) {
+                                return 'No Global Threshold defined for this variable';
+                            }
+
+                            // don't allow only setting one part of the check to pass either
+                            if(!Number.isFinite(range.max)) {
+                                return 'Partial Global Range Threshold: Max NOT defined'
+                            }
+                            if(!Number.isFinite(range.min)) {
+                                return 'Partial Global Range Threshold: Min NOT defined'
+                            }
+
+                            // Checks whether a value is within an inclusive numeric range.
+                            const isBetween = (value, min, max) => {
+                                const v = Number(value);
+                                const lo = Number(min);
+                                const hi = Number(max);
+
+                                // If any value is not a valid number, fail validation
+                                if (Number.isNaN(v) || Number.isNaN(lo) || Number.isNaN(hi)) {
+                                    return false;
+                                }
+
+                                // Inclusive range check
+                                return v >= lo && v <= hi;
+                            };
+
+                            // Validate the value against the column's allowed range
+                            if (!isBetween(val, range.min, range.max)) {
+                                return `Value must be between ${range.min} and ${range.max}`;
+                            }
+
+                        }
+                    }
+
+                    // ————— Future‐time check (new) —————
+                    // Grab the date the user loaded (YYYY-MM-DD)
+                    const selectedDate = this.requestData.date;
+
+                    // Grab the row’s hour string ("HH:mm")
+                    const timeStr = data.time;
+
+                    // Build a Moment object for that exact moment (we specify the format so Moment parses it correctly)
+                    const rowMoment = moment(
+                        `${selectedDate} ${timeStr}`,
+                        'YYYY-MM-DD HH:mm'
+                    ).utcOffset(timezoneDetails.offsetMinutes, true);
+
+                    const nowMoment = moment.utc().utcOffset(timezoneDetails.offsetMinutes);
+
+                    if (rowMoment.isAfter(nowMoment)) {
+                        return 'Cannot edit future times';
+                    }
+
+                    // No error
+                    return null;
+                },
+
+
+                // hide / show errors based on cell validataion
+                onCellValueChanged(params) {
+                    // record that this row was changed:
+                    this.updatedHours.add(params.node.rowIndex);
+
+                    const { colDef, newValue, data } = params;
+                    const raw = newValue == null
+                        ? ''
+                        : newValue.toString().trim();
+
+                    // 1) If the user cleared the cell, remove the property entirely
+                    if (raw === '') {
+                        this.$delete(data, colDef.field);
+                    } else {
+                        // otherwise keep the trimmed value
+                        this.$set(data, colDef.field, raw);
+                    }
+
+                    // 2) Run validation (pure) and store any error
+                    const errorMessage = this.validateCell(params);
+                    if (!data.__errors) {
+                        this.$set(data, '__errors', {});
+                    }
+                    if (errorMessage) {
+                        this.$set(data.__errors, colDef.colId, errorMessage);
+                    } else {
+                        this.$delete(data.__errors, colDef.colId);
+                    }
+
+                    // 3) Refresh just this cell’s styling & tooltip
+                    params.api.refreshCells({
+                        rowNodes: [params.node],
+                        force:   true,
+                    });
+
+                    // 4) Recompute & swap in pinned stats
+                    const statsObj = this.calculateStatistics();
+                    const order    = ['sum','avg','min','max','count','stddev'];
+                    const pinned   = order.map(key => ({ ...statsObj[key] }));
+                    if (this.gridApi) {
+                        this.gridApi.setGridOption('pinnedBottomRowData', pinned);
+                        this.gridApi.refreshCells({
+                            force:   true,
+                            columns: order,
+                        });
+                    }
+
+                    // 5) Mark draft + update validity
+                    this.markAsDraft();
+                },
+
+
+                // next slide control for the carousel
+                nextSlide() {              
+                    this.isBack = !this.isBack; // update the control var
+                    this.currentSlide = (this.currentSlide + 1) % 2; // update the carousel
+
+                    // if the user hits the back button don't attempt to fetch station publish logs
+                    if (!this.isBack) {
+                        return
+                    }
+                },
+
+
+                // calculate the relevant statistics for the table
+                calculateStatistics() {
+                    const stats = {
+                        sum:    { time: 'SUM'    },
+                        avg:    { time: 'AVG'    },
+                        min:    { time: 'MIN'    },
+                        max:    { time: 'MAX'    },
+                        count:  { time: 'COUNT'  },
+                        stddev: { time: 'STDDEV' }
+                    };
+
+                    this.colIdsNumType.forEach(colId => {
+                        // 1) Filter OUT empty strings, undefined, null, -99.9 sentinel
+                        const rawValues = this.rowData
+                            .map(row => row[colId]);
+
+                        const validNumbers = rawValues
+                            .filter(raw =>
+                                raw !== undefined &&
+                                raw !== null &&
+                                raw !== '' &&
+                                raw !== -99.9
+                            )
+                            .map(Number)                    // now safe to coerce
+                            .filter(v => Number.isFinite(v));
+
+                        const count = validNumbers.length;
+
+                        // 2) Defaults if no valid data
+                        let sum    = 0;
+                        let min    = null;
+                        let max    = null;
+                        let avg    = null;
+                        let stddev = null;
+
+                        if (count > 0) {
+                            // 3) sum, min, max
+                            sum = validNumbers.reduce((a, v) => a + v, 0);
+                            min = Math.min(...validNumbers);
+                            max = Math.max(...validNumbers);
+
+                            // 4) average
+                            avg = sum / count;
+
+                            // 5) sample standard deviation
+                            if (count > 1) {
+                                const variance = validNumbers
+                                    .reduce((a, v) => a + (v - avg) ** 2, 0)
+                                    / (count - 1);
+                                stddev = Math.sqrt(variance);
+                            } else {
+                                stddev = 0;
+                            }
+
+                            // 6) round sums & averages
+                            sum    = Number(sum.toFixed(2));
+                            avg    = Number(avg.toFixed(2));
+                            stddev = Number(stddev.toFixed(2));
+                        }
+
+                        // 7) Stash into stats
+                        stats.sum[colId]    = sum;
+                        stats.min[colId]    = min;
+                        stats.max[colId]    = max;
+                        stats.count[colId]  = count;
+                        stats.avg[colId]    = avg;
+                        stats.stddev[colId] = stddev;
+                    });
+
+                    return stats;
+                },
+
+
+                // called once rawReadings is set to fill in chart data
+                updateChart() {
+                    this.chartOptions.xAxis.categories = this.rawReadings.map(pt => pt.t)
+                    this.chartOptions.series[0].data   = this.rawReadings.map(pt => pt.v)
+                },
+
+
+                // save the form
+                async updateData() {
+                    // 1) Don’t proceed if there are validation errors
+                    if (!this.valid) return;
+
+                    // 2) Show the loading spinner
+                    this.loading = true;
+
+                    // 3) Build up only the rows the user edited
+                    const formattedData = {};
+                    const formattedEmptyCols = {};
+
+                    this.updatedHours.forEach(rowIndex => {
+                        const original = this.rowData[rowIndex];
+                        const cleanRow = {};
+                        const emptyCols = [];
+
+                        // 4) Only include non-empty numerics (cast to Number), 
+                        //    and fill-empty codes with "/"
+                        this.variableIds.forEach(colId => {
+                            const isNumeric = this.colIdsNumType.includes(colId);
+                            const rawVal   = original[colId];
+
+                            if (rawVal == null || rawVal === "") {
+                                // empty cell
+                                if (!isNumeric) {
+                                    // code/dropdown then fill slash
+                                    cleanRow[colId] = "/";
+                                }
+                                else {
+                                    // storing the col ids for row entries with empty values
+                                    emptyCols.push(colId)
+                                }
+                            } 
+                            // else numeric just skip entirely
+                            else {
+                                // user actually entered something
+
+                                let val = rawVal;
+
+                                if (isNumeric && typeof val === "string") {
+                                    const n = Number(val);
+                                    // if parsing fails, fall back MISSING_VALUE
+                                    val = Number.isFinite(n) ? n : this.MISSING_VALUE;
+                                }
+
+                                cleanRow[colId] = val;
+                            }
+                        });
+
+                        // 5) extra fields to send
+                        cleanRow.remarks  = original.remarks;
+
+                        // Setting the logged in user as the observer
+                        cleanRow.observer = "{{ request.user.username|escapejs }} - {{ request.user.first_name|escapejs }} {{ request.user.last_name|escapejs }}";
+
+                        // 6) stash under the row index
+                        formattedData[rowIndex] = cleanRow;
+
+                        // stash the empty col id's under a row index as well
+                        formattedEmptyCols[rowIndex] = emptyCols;
+
+                    });
+
+                    // 8) POST up to Django
+                    const { stationId, date } = this.requestedData;
+
+                    const url = `/wx/reports/synop/update/?station_id=${stationId}&date=${date}`;
+
+                    try {
+
+                        // send data to the back for saving
+                        const response = await axios.post(url, {
+                            date:  date,
+                            table: formattedData
+                        });
+
+                        // Extract the taskId from the response body
+                        const taskId = response.data.taskId;
+
+                        // Call the polling task
+                        this.pollUpdateData(taskId, stationId, date, formattedEmptyCols);
+                        
+
+                    } 
+                    catch (err) {
+                        console.error("Save operation failed:", err);
+                        this.snackbar = { show: true, message: 'Save operation failed', color: 'red' };
+                    } 
+                },
+
+
+                // poll update task
+                pollUpdateData(taskId, stationId, date, formattedEmptyCols) {
+
+                    const interval = setInterval(async () => {
+                        try {
+                            const res = await axios.get(`/api/task/${taskId}/`);
+
+                            // task completed successfully
+                            if (res.data.status === "completed") {
+                                clearInterval(interval);
+
+                                const url_empty_col = `/wx/reports/synop/capture/update/empty_cols`
+                                                    + `?station_id=${stationId}`
+                                                    + `&date=${date}`;
+
+                                await axios.post(url_empty_col, {
+                                    empty_cols_data: formattedEmptyCols
+                                });
+
+                                this.draft = false;
+                                this.updatedHours.clear();
+
+                                await this.fetchData();
+
+                                this.snackbar = { show: true, message: 'Save operation successful', color: 'green' };
+                                this.loading = false;
+                            } 
+                            // task failed
+                            else if (res.data.status === "failed") {
+                                clearInterval(interval);
+                                this.snackbar = { show: true, message: 'Save operation failed', color: 'red' };
+                                this.loading = false;
+                            }
+
+                        } catch (err) {
+                            clearInterval(interval);
+                            console.error(err);
+                            this.snackbar = { show: true, message: 'Polling failed', color: 'red' };
+                            this.loading = false;
+                        }
+                    }, 2000);
+
+                },
+
+
+                // execute on selection change
+                onSelectionChanged() {
+                    // pull the count into a reactive var
+                    this.selectedCount = this.gridApi.getSelectedNodes().length;
+                },
+
+
+                // for row deletion
+                deleteSelectedRows() {
+                    // gather hours
+                    const nodes = this.gridApi.getSelectedNodes();
+                    if (!nodes.length) return;
+
+                    this.pendingDeleteHours = nodes.map(n =>
+                    Number(n.data.time.split(':')[0])
+                    );
+
+                    // open confirmation dialog
+                    this.confirmDeleteDialog = true;
+                },
+
+                
+                confirmDelete() {
+                    // user confirmed: actually delete
+                    this.confirmDeleteDialog = false;
+                    this.loading = true;
+
+                    const { stationId, date } = this.requestedData;
+
+                    const calls = this.pendingDeleteHours.map(hour => {
+                        const url = `/wx/reports/synop/delete/`
+                                    + `?station_id=${stationId}`
+                                    + `&date=${date}`
+                                    + `&hour=${hour}`;
+
+                        return axios.post(url, { variable_ids: this.variableIds });
+                    });
+
+                    Promise.all(calls)
+                    .then(results => {
+                        this.snackbar = { show: true, message: `Deleted ${results.length} row(s).`, color: 'green' };
+                    })
+                    .catch(err => {
+                        console.error("Bulk delete error:", err);
+                        this.snackbar = { show: true, message: "Error deleting rows. Check console", color: 'red' };
+                    })
+                    .finally(() => {
+                        this.loading = false;
+                        this.fetchData();
+                        this.gridApi.deselectAll();
+                    });
+                },
+
+
+                // toggle themes (compact, open)
+                toggleTheme() {
+                    this.tableTheme =
+                    this.tableTheme === 'ag-theme-quartz'
+                        ? 'ag-theme-balham'
+                        : 'ag-theme-quartz';
+                },
+
+
+                // for production show dialog
+                showProduction() {
+                    // open confirmation dialog
+                    this.inProduction = true;
+                },
+                
+                
+                // utc / local time toggle
+                toggleTimeMode() {
+                    this.useUTC = !this.useUTC;
+                    timezoneChange = this.useUTC;
+
+                    // refresh the time column
+                    this.gridApi.refreshCells({
+                        columns: ['tz'],  // refresh the time column
+                        force: true  // re-render
+                    });
+                },
+
+
+                exportToCSV() {
+                    this.gridApi.exportDataAsCsv({
+                        fileName: `synop-capture-file-${this.requestData.date}.csv`,
+                        columnKeys: ["tz","4041","4062","4056","1001","55","50","10","19","18","30","60","61",
+                                        "4057","0_1","4055","4043","1002","1003","1004","4005","1006","1007","1008",
+                                        "4044","4045","4046","4047","16_1","14_1","1009","1010","4058","1012","1013",
+                                        "4059","1015","1016","4060","1018","1019","4061","4006","remarks","observer"
+                                    ],
+                        allColumns: false,
+                        onlySelected: false,
+                        suppressQuotes: false,
+                    });
+                },
+
+                // more methods
+            },
+            computed: {
+                // computed stuff go here
+                // selection for delete feature
+                hasSelection() {
+                    return this.selectedCount > 0;
+                }
+            },
+            watch: {
+                // watch the station selector and if it changes immediately call fetch data
+                'requestData.stationId': function (newValue, oldValue) {
+
+                    this.hideTable = newValue==null
+                    this.fetchData();
+                },
+
+            },
+            mounted() {
+                // mounted stuff goes here
+                this.rawReadings = [
+                    { t: '9:00',  v: 12.3 },
+                    { t: '10:00', v: 15.6 },
+                    { t: '11:00', v: 14.1 },
+                    { t: '8:00', v: 0 }
+                    // …
+                ]
+
+                // now that rawReadings is defined, build the chart
+                this.updateChart()
+            },
+            beforeDestroy () {
+                this.gridApi.destroy() // release event listeners if stored
+            },
+        });
+    })();
+
+
+
+    $(document).ready(function(){
+        function getCookie(c_name) {
+            if(document.cookie.length > 0) {
+                c_start = document.cookie.indexOf(c_name + "=");
+                if(c_start != -1) {
+                    c_start = c_start + c_name.length + 1;
+                    c_end = document.cookie.indexOf(";", c_start);
+                    if(c_end == -1) c_end = document.cookie.length;
+                    return unescape(document.cookie.substring(c_start,c_end));
+                }
+            }
+            return "";
+        }
+        $(function () {
+        axios.defaults.headers.common["X-CSRFToken"] = getCookie("csrftoken");
+        axios.defaults.headers.common["Content-Type"] = 'application/json';
+        });
+    });
+</script>
+
+<!-- CSS Styling -->
+<style>
+    /* VERTICAL COLUMN DEVIDER (Light gray vertical line) */
+    .ag-theme-quartz .ag-cell {
+        border-right: 1px solid #ccc;
+    }
+    /* .ag-theme-quartz .ag-cell:last-child {
+        border-right: none;
+    } */
+    .ag-theme-balham .ag-cell {
+        border-right: 1px solid #ccc;
+    }
+    /* .ag-theme-balham .ag-cell:last-child {
+        border-right: none;
+    } */
+    
+    /* add a border to the cell headers */
+    .ag-header-cell, .ag-header-group-cell  {
+        border-right: 1px solid #ccc !important;
+    }
+
+
+    /* other styles */
+
+    /* styling for error and info tooltip */
+    /* error look: red background, dark red text */
+    .error-tooltip {
+        background: #fff;
+        color: red;
+        padding: 8px 10px;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        border: 1px solid red;
+    }
+
+    /* info look: light‐blue background, dark blue text */
+    .info-tooltip {
+        background: #fff;
+        color: blue;
+        padding: 8px 10px;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        border: 1px solid blue;
+    }
+
+    /* time column cell styling */
+    .time-col {
+        text-align: center;
+        font-weight: bold;
+        background-color: rgba(224, 224, 224, 0.498);
+    }
+
+    /* observer column cell styling */
+    .obs-cols-group {
+        text-align: center;
+        color: red;
+        /* background-color: rgba(224, 224, 224, 0.498); */
+    }
+
+    /* ON EDIT: centering the entry when you edit a cell */
+    .ag-text-field-input {
+        border: none !important;
+        outline: none !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* ON EDIT: center the icon */
+    .ag-picker-field-icon {
+        position: relative !important;
+        height: 100% !important;
+    }
+
+    .ag-icon-small-down::before {
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;              /* if you also want perfect horizontal centering */
+        transform: translate(-50%, -50%) !important;
+        display: block !important;         /* so top/left actually apply */
+    }
+
+    /* to center the column names */
+    .ag-header-group-cell-with-group {
+        justify-content: center !important;
+    }
+    .ag-header-cell-label {
+        justify-content: center !important;
+    }
+
+    /* error cell code */
+    .invalid-cell {
+        /* a light red background for visibility */
+        background-color: rgba(255, 0, 0, 0.2) !important;
+    }
+
+
+    /* ag grid col header colours */
+    .cloud-cols-group,
+    .cloud-cols-group.ag-header-active,
+    .cloud-cols-group:hover,
+    .cloud-cols-group:focus {
+        background-color: #FFEA99 !important; /* Light Yellow */
+    }
+    .temp-cols-group,
+    .temp-cols-group.ag-header-active,
+    .temp-cols-group:hover,
+    .temp-cols-group:focus {
+        background-color: #FFB3B3 !important; /* Light Red/Coral */
+    }
+    .wind-cols-group,
+    .wind-cols-group.ag-header-active,
+    .wind-cols-group:hover,
+    .wind-cols-group:focus {
+        background-color: #B3FFB3 !important; /* Light Blue */
+    }
+    .pressure-cols-group,
+    .pressure-cols-group.ag-header-active,
+    .pressure-cols-group:hover,
+    .pressure-cols-group:focus {
+        background-color: #D1B3FF !important; /* Light Purple */
+    }
+    .precip-cols-group,
+    .precip-cols-group.ag-header-active,
+    .precip-cols-group:hover,
+    .precip-cols-group:focus {
+        background-color: #B3E0FF !important; /* Light Green */
+    }
+    .sky-cols-group,
+    .sky-cols-group.ag-header-active,
+    .sky-cols-group:hover,
+    .sky-cols-group:focus {
+        background-color: #FFD9B3 !important; /* Light Orange */
+    }
+    .misc-cols-group,
+    .misc-cols-group.ag-header-active,
+    .misc-cols-group:hover,
+    .misc-cols-group:focus {
+        background-color: rgba(224, 224, 224, 0.626) !important; /* Light Gray (default) */
+    }
+
+    /* make the entire last 6 rows light grey */
+    .ag-row.grey-row .ag-cell {
+        background-color: rgba(224, 224, 224, 0.498) !important;
+        /* optional: dim the text, too */
+        color: #648cdb !important;
+    }
+      
+</style>
+
+
+
+{% endblock %}

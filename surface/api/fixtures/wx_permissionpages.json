@@ -1,0 +1,326 @@
+[
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 1,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Manual Data Import",
+            "url_name": "manual-data-import",
+            "description": "Upload and process manually collected station data files.",
+            "category_id": 4
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 2,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Monthly Data Capture",
+            "url_name": "monthly-form",
+            "description": "Capture and update monthly observation forms for stations.",
+            "category_id": 4
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 3,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "SYNOP Capture",
+            "url_name": "synop-capture-form",
+            "description": "Capture and update SYNOP reports and related calculations.",
+            "category_id": 4
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 4,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Data Export",
+            "url_name": "data-export",
+            "description": "Generate, download, combine, schedule, and delete exported data files.",
+            "category_id": 4
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 5,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Maintenance Reports",
+            "url_name": "maintenance-reports",
+            "description": "Create, update, approve, view, and manage station maintenance reports.",
+		    "category_id": 3
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 6,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Equipment Inventory",
+            "url_name": "equipment-inventory",
+            "description": "View and manage equipment inventory records used in maintenance workflows.",
+		    "category_id": 3
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 7,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Stations",
+            "url_name": "stations-list",
+            "description": "View and manage stations, metadata, files, and station variables.",
+		    "category_id": 2
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 8,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Stations Monitoring",
+            "url_name": "stations-monitoring",
+            "description": "Monitor station status and view monitoring map and charts.",
+		    "category_id": 2
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 9,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "WIS2 Dashboard",
+            "url_name": "wis2-dashboard",
+            "description": "View WIS2 records/logs and manage publishing and credential settings.",
+		    "category_id": 5
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 10,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Quality Control Validation",
+            "url_name": "quality-control",
+            "description": "Validate observations and apply quality control updates and thresholds.",
+		    "category_id": 6
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 11,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Range Thresholds",
+            "url_name": "range-threshold",
+            "description": "View and manage range threshold rules for quality control.",
+		    "category_id": 6
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 12,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Step Thresholds",
+            "url_name": "step-threshold",
+            "description": "View and manage step threshold rules for quality control.",
+		    "category_id": 6
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 13,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Persist Thresholds",
+            "url_name": "persist-threshold",
+            "description": "View and manage persist threshold rules for quality control.",
+		    "category_id": 6
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 14,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Yearly Average Report",
+            "url_name": "yearly-average",
+            "description": "View yearly average summaries and supporting data outputs.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 15,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Spatial Analysis",
+            "url_name": "spatial-analysis",
+            "description": "Run spatial interpolation workflows and retrieve generated maps and data.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 16,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Wave Data Analysis",
+            "url_name": "wave-data",
+            "description": "View wave data analysis outputs and retrieve related datasets.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 17,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Agromet Summaries",
+            "url_name": "agromet-summaries",
+            "description": "View agrometeorology monthly and seasonal summaries and their data sources.",
+		    "category_id": 8
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 18,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Agromet Products",
+            "url_name": "agromet-products",
+            "description": "View agrometeorology calculated products and retrieve related datasets.",
+		    "category_id": 8
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 19,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Manage Permissions",
+            "url_name": "manage-permissions",
+            "description": "Manage groups, user group membership, and group page access permissions.",
+		    "category_id": 9
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 20,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Data Inventory",
+            "url_name": "data-inventory",
+            "description": "Browse and explore the data inventory available in the system.",
+            "category_id": 4
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 21,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Station OSCAR Export",
+            "url_name": "station-oscar-export",
+            "description": "Export station metadata to OSCAR compatible formats.",
+		    "category_id": 2
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 22,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Station Report",
+            "url_name": "station-report",
+            "description": "Generate and export reports based on station observations.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 23,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Variable Report",
+            "url_name": "variable-report",
+            "description": "Generate and export reports based on variable observations.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 24,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Product Compare",
+            "url_name": "product-compare",
+            "description": "Compare meteorological data products and export comparison results.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 25,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Extremes and Means",
+            "url_name": "extremes-means",
+            "description": "View calculated climate extremes and mean statistics.",
+		    "category_id": 7
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 26,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Configuration Settings",
+            "url_name": "configuration-settings",
+            "description": "Manage system configuration settings and environment options.",
+		    "category_id": 9
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 27,
+        "fields": {
+            "created_at": "2026-03-04T00:00:00Z",
+            "updated_at": "2026-03-04T00:00:00Z",
+            "name": "Reference Station",
+            "url_name": "reference-station",
+            "description": "Manage reference stations used in data validation.",
+		    "category_id": 6
+        }
+    }
+]

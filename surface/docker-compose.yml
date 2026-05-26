@@ -1,0 +1,357 @@
+networks:
+  surface-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+services:
+  nginx:
+    image: nmsbdocker/surface-nginx:v1.1.1
+    container_name: surface-nginx
+    restart: unless-stopped
+
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+
+    volumes:
+    # setting files to read only
+      - ./api/static:/home/app/web/staticfiles:ro
+      - ./data:/home/app/web/data:ro
+
+    depends_on:
+      - api
+
+    networks:
+      - surface-net
+
+  cache:
+    container_name: surface-cache
+    image: memcached
+    restart: unless-stopped
+    networks:
+      - surface-net
+
+  redis:
+    container_name: surface-redis
+    image: redis
+    restart: unless-stopped
+    networks:
+      - surface-net
+
+  postgres:
+    container_name: surface-database
+    image: timescale/timescaledb-postgis:2.3.0-pg13
+    shm_size: 4g
+    restart: unless-stopped
+    env_file:
+      - api/production.env
+    volumes:
+      - ./:/app
+      - ./data/postgresql:/var/lib/postgresql/data
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+      - ./backup_restore_dumps:/restore_dumps
+      - ./pg_hba.custom.conf:/etc/postgresql/pg_hba.custom.conf
+    ports:
+      - 5432:5432
+    command:
+      - "postgres"
+      - "-c"
+      - "max_locks_per_transaction=1024"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.custom.conf"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+
+  api:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-api
+    command: ./startup.sh
+    env_file:
+      - api/production.env
+    restart: unless-stopped
+    volumes:
+      - ./api:/surface
+      - ./data/media:/data/media
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+      - ./data/exported_data:/data/exported_data
+      - ./data/documents:/data/documents
+    depends_on:
+      - postgres
+      - cache
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+
+  celery_beat:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-celery-beat
+    restart: unless-stopped
+    command: /home/surface/.local/bin/celery -A tempestas_api beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file:
+      - api/production.env
+    volumes:
+      - ./api:/surface
+      - ./data/postgresql:/data
+    depends_on:
+      - api
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+  
+  
+  # NOTE:
+  # Celery concurrency is intentionally configured explicitly.
+  # Do not rely on Celery's default CPU-based concurrency because different
+  # servers expose different CPU counts, which can cause SURFACE to behave
+  # differently between deployments.
+  #
+  # All workers use --prefetch-multiplier=1 so that workers do not reserve too
+  # many tasks ahead of time. This improves fairness between queues and prevents
+  # large backlogs from being hidden inside worker reservations.
+
+
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker: Default Queue
+  # ---------------------------------------------------------------------------
+  # Handles normal/background tasks that are not explicitly routed elsewhere.
+  #
+  # Queue:
+  #   celery
+  #
+  # Concurrency:
+  #   5 worker processes
+  #
+  # Purpose:
+  #   Keeps general app tasks available even when summary, ingest, or maintenance
+  #   queues are busy.
+  # ---------------------------------------------------------------------------
+  celery_worker_default:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-celery-worker-default
+    command: /home/surface/.local/bin/celery -A tempestas_api worker -l info -Q celery --concurrency=5 --prefetch-multiplier=1
+    env_file:
+      - api/production.env
+    restart: unless-stopped
+    volumes:
+      - ./api:/surface
+      - ./data/documents/ingest:/data/documents/ingest
+      - ./data/exported_data:/data/exported_data
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+    depends_on:
+      - api
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker: Summary Queue
+  # ---------------------------------------------------------------------------
+  # Handles summary-related processing.
+  #
+  # Queue:
+  #   summary
+  #
+  # Concurrency:
+  #   6 worker processes
+  #
+  # Purpose:
+  #   Summary tasks can create large backlogs, especially after historical or
+  #   high-frequency data ingestion. Keeping these tasks in their own queue
+  #   prevents them from taking over the entire Celery system.
+  #
+  # Important:
+  #   This is the queue that should receive tasks like:
+  #     - process_hourly_summary_tasks
+  #     - process_daily_summary_tasks
+  #     - process_hfdata_summary_tasks
+  #     - calculate_last24h_summary
+  # ---------------------------------------------------------------------------
+  celery_worker_summary:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-celery-worker-summary
+    command: /home/surface/.local/bin/celery -A tempestas_api worker -l info -Q summary --concurrency=6 --prefetch-multiplier=1
+    env_file:
+      - api/production.env
+    restart: unless-stopped
+    volumes:
+      - ./api:/surface
+      - ./data/documents/ingest:/data/documents/ingest
+      - ./data/exported_data:/data/exported_data
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+    depends_on:
+      - api
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker: Ingest Queue
+  # ---------------------------------------------------------------------------
+  # Handles file ingestion and FTP ingestion tasks.
+  #
+  # Queue:
+  #   ingest
+  #
+  # Concurrency:
+  #   4 worker processes
+  #
+  # Purpose:
+  #   Keeps data/file ingestion separate from summaries and maintenance tasks.
+  #   This allows FTP/file ingestion to continue even if the summary queue is
+  #   heavily backed up.
+  #
+  # Important:
+  #   This is the queue that should receive tasks like:
+  #     - process_station_data_files
+  #     - ftp_ingest_highfrequency_station_files
+  #     - ftp_ingest_standard_station_files
+  #     - ftp_ingest_staged_station_files
+  # ---------------------------------------------------------------------------
+  celery_worker_ingest:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-celery-worker-ingest
+    command: /home/surface/.local/bin/celery -A tempestas_api worker -l info -Q ingest --concurrency=4 --prefetch-multiplier=1
+    env_file:
+      - api/production.env
+    restart: unless-stopped
+    volumes:
+      - ./api:/surface
+      - ./data/documents/ingest:/data/documents/ingest
+      - ./data/exported_data:/data/exported_data
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+    depends_on:
+      - api
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker: Maintenance Queue
+  # ---------------------------------------------------------------------------
+  # Handles scheduled operational/maintenance tasks.
+  #
+  # Queue:
+  #   maintenance
+  #
+  # Concurrency:
+  #   3 worker processes
+  #
+  # Purpose:
+  #   Keeps important operational tasks from being blocked by large ingest or
+  #   summary backlogs.
+  #
+  # Important:
+  #   This is the queue that should receive tasks like:
+  #     - backup_postgres
+  #     - wis2publish_task
+  #     - wis2publish_cleanup
+  #     - dcp_tasks_scheduler
+  #     - gen_toa5_file
+  #     - interpolation_img_cleanup
+  #     - mark_stuck_station_data_files_as_error
+  # ---------------------------------------------------------------------------
+  celery_worker_maintenance:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-celery-worker-maintenance
+    command: /home/surface/.local/bin/celery -A tempestas_api worker -l info -Q maintenance --concurrency=3 --prefetch-multiplier=1
+    env_file:
+      - api/production.env
+    restart: unless-stopped
+    volumes:
+      - ./api:/surface
+      - ./data/documents/ingest:/data/documents/ingest
+      - ./data/exported_data:/data/exported_data
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+    depends_on:
+      - api
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net
+
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker: Export Queue
+  # ---------------------------------------------------------------------------
+  # Handles data export tasks.
+  #
+  # Queue:
+  #   export
+  #
+  # Concurrency:
+  #   2 worker processes
+  #
+  # Purpose:
+  #   Keeps data export tasks from being blocked by large ingests and summary
+  #   backlogs
+  #
+  # Important:
+  #   This is the queue that should receive tasks like:
+  #     - export_data
+  #     - combine_xlsx_files
+  # ---------------------------------------------------------------------------
+  celery_worker_export:
+    image: nmsbdocker/surface-base:v1.0.0
+    container_name: surface-celery-worker-export
+    command: /home/surface/.local/bin/celery -A tempestas_api worker -l info -Q export --concurrency=2 --prefetch-multiplier=1
+    env_file:
+      - api/production.env
+    restart: unless-stopped
+    volumes:
+      - ./api:/surface
+      - ./data/documents/ingest:/data/documents/ingest
+      - ./data/exported_data:/data/exported_data
+      - ./data/shared:/data/shared
+      - ./data/backup:/data/backup
+    depends_on:
+      - api
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1M"
+        max-file: "10"
+    networks:
+      - surface-net

@@ -1,0 +1,1006 @@
+{% extends "base.html" %} {% block content %} {% load static %} {% load wx_filters %}
+
+<div class="srf-container" style="max-height: 280px">
+  <div
+    class="srf-flex flex-row align-items-center justify-content-between srf-padding"
+  >
+    <span class="srf-display-1 text-uppercase">Data Export</span><br /><br />
+  </div>
+  <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
+    <v-app>
+      <div>
+        <form class="col l12">
+
+          <!-- Form title -->
+          <h6>Station Filters</h6>
+
+          <!-- Row 1-->
+          <v-row dense justify="start" class="mb-3">
+            <!-- Distrit selector -->
+            <v-col class="text-center" cols="3">
+              <v-autocomplete
+                item-text="name"
+                item-value="name"
+                v-model="filter.stationDistrict"
+                :items="stationDistrictList"
+                label="District"
+                autocomplete="off"
+                clearable
+              ></v-autocomplete>
+            </v-col>
+
+            <!-- Watershed Selector -->
+            <v-col class="text-center" cols="3">
+              <v-autocomplete
+                item-text="name"
+                item-value="name"
+                v-model="filter.stationWatershed"
+                :items="stationWatershedList"
+                label="Watershed"
+                autocomplete="off"
+                clearable
+              ></v-autocomplete>
+            </v-col>
+
+            <!-- Station Profile Selector -->
+            <v-col class="text-center" cols="2">
+              <v-autocomplete
+                item-text="name"
+                item-value="id"
+                v-model="filter.stationProfile"
+                :items="stationProfileList"
+                label="Profile"
+                autocomplete="off"
+                clearable
+              ></v-autocomplete>
+            </v-col>
+
+            <!-- is active switch -->
+            <v-col class="text-center" cols="2">
+              <v-switch
+                inset
+                v-model="filter.isActive"
+                @change="invertValue(filter.isActive)"
+                label="Active"
+              ></v-switch>
+            </v-col>
+
+            <!-- is automatic switch -->
+            <v-col class="text-center" cols="2">
+              <v-switch
+                inset
+                v-model="filter.isAutomatic"
+                @change="invertValue(filter.isAutomatic)"
+                label="Automatic"
+              ></v-switch>
+            </v-col>
+          </v-row>
+
+          <!-- Row 2 -->
+          <v-row dense justify="start" class="pt-3">
+            <!-- station search -->
+            <v-col class="text-center" cols="10">
+              <v-autocomplete
+                v-model="station"
+                :items="stationList"
+                :search-input.sync="searchStations"
+                label="Station"
+                multiple
+                chips
+                deletable-chips
+                small-chips
+                return-object
+                autocomplete="off"
+                clearable
+              ></v-autocomplete>
+            </v-col>
+
+            <!-- select all station button -->
+            <v-col class="text-center" cols="2">
+              <v-btn
+                class="ml-2"
+                outlined
+                justify-end
+                color="primary"
+                @click="selectAllStations"
+                >Select All</v-btn
+              >
+            </v-col>
+          </v-row>
+
+          <!-- Row 3 -->
+          <v-row dense justify="start" class="pt-3">
+            <!-- data source-->
+            <v-col class="text-center" :cols="6">
+              <v-select
+                v-model="source"
+                :items="sources"
+                label="Data Source"
+                return-object
+                v-on:change="onChangeTimescale"
+              ></v-select>
+            </v-col>
+                    
+            <!-- data interval -->
+            <v-col class="text-center" :cols="6" v-if="source.source === 'raw_data'">
+              <v-select
+              v-model="dataInterval"
+              :items="dataIntervals"
+              label="Data Interval"
+              ></v-select>
+            </v-col>
+
+            <!-- dropdown for aggregation -->
+            <v-col class="text-center" :cols="6" v-if="source.source != 'raw_data'">
+              <!-- <v-select
+                v-model="aggregation"
+                :items="aggregations"
+                label="Aggregation"
+              ></v-select> -->
+              <v-autocomplete
+                v-model="aggregation"
+                :items="aggregations"
+                :search-input.sync="searchAggregations"
+                label="Aggregation"
+                multiple
+                chips
+                deletable-chips
+                small-chips
+                return-object
+                autocomplete="off"
+                clearable
+              ></v-autocomplete>
+            </v-col>
+
+          </v-row>
+
+          <!-- Row 4 -->
+          <v-row dense justify="start">
+            <v-col class="text-center" cols="12">
+              <v-autocomplete
+                v-model="variables"
+                :items="variable_list"
+                :search-input.sync="searchVariables"
+                label="Variables"
+                multiple
+                chips
+                deletable-chips
+                small-chips
+                return-object
+                autocomplete="off"
+                clearable
+              ></v-autocomplete>
+            </v-col>
+          </v-row>
+
+          <!-- Row 5 -->
+          <v-row dense justify="start">
+            <v-col class="text-center" cols="3">
+              <v-menu
+                :close-on-content-click="false"
+                v-model="initial_date_menu"
+                transition="scale-transition"
+                offset-y
+                class="max-50"
+              >
+                <template v-slot:activator="{ on }">
+                  <v-text-field
+                    v-model="initial_date"
+                    label="Initial date"
+                    prepend-icon="event"
+                    v-on="on"
+                    required
+                    persistent-hint
+                  ></v-text-field>
+                </template>
+                <v-date-picker
+                  v-model="initial_date"
+                  @input="initial_date_menu = false"
+                  :type="getDatepickFormat()"
+                  :allowed-dates="allowedDates"
+                ></v-date-picker>
+              </v-menu>
+            </v-col>
+            <v-col class="text-center" cols="3">
+              <v-menu
+                v-if="source.source === 'hourly_summary' || source.source === 'raw_data'"
+                :close-on-content-click="false"
+                v-model="initial_time_menu"
+                transition="scale-transition"
+                offset-y
+                class="max-50"
+              >
+                <template v-slot:activator="{ on }">
+                  <v-text-field
+                    v-model="initial_time"
+                    label="Initial time"
+                    v-on="on"
+                    prepend-icon="access_time"
+                    required
+                    persistent-hint
+                  ></v-text-field>
+                </template>
+                <v-time-picker v-model="initial_time"></v-time-picker>
+              </v-menu>
+            </v-col>
+
+            <v-col class="text-center" cols="3">
+              <v-menu
+                :close-on-content-click="false"
+                v-model="final_date_menu"
+                transition="scale-transition"
+                offset-y
+                class="max-50"
+              >
+                <template v-slot:activator="{ on }">
+                  <v-text-field
+                    v-model="final_date"
+                    label="Final date"
+                    v-on="on"
+                    required
+                    prepend-icon="event"
+                    persistent-hint
+                  ></v-text-field>
+                </template>
+                <v-date-picker
+                  v-model="final_date"
+                  @input="final_date_menu = false"
+                  :type="getDatepickFormat()"
+                  :allowed-dates="allowedDates"
+                ></v-date-picker>
+              </v-menu>
+            </v-col>
+
+            <v-col class="text-center" cols="3">
+              <v-menu
+                v-if="source.source === 'hourly_summary' || source.source === 'raw_data'"
+                :close-on-content-click="false"
+                v-model="final_time_menu"
+                transition="scale-transition"
+                offset-y
+                class="max-50"
+              >
+                <template v-slot:activator="{ on }">
+                  <v-text-field
+                    v-model="final_time"
+                    label="Final time"
+                    prepend-icon="access_time"
+                    v-on="on"
+                    required
+                    persistent-hint
+                  ></v-text-field>
+                </template>
+                <v-time-picker v-model="final_time"></v-time-picker>
+              </v-menu>
+            </v-col>
+          </v-row>
+
+          <!-- Row 6 -->
+          <v-row dense justify="start">
+            <!-- Togglable switch to determine whether the output should be in local time of utc time -->
+            <v-col class="text-center" cols="auto" v-if="source.source === 'hourly_summary' || source.source === 'raw_data'">
+              <v-switch
+                inset
+                v-model="displayUTC"
+                label="Coordinated Universal Time (UTC)"
+              ></v-switch>
+            </v-col>
+
+            <!-- Export aqc validated -->
+            <v-col class="text-center" cols="auto" v-if="source.source === 'raw_data'">
+              <v-switch
+                inset
+                v-model="export_aqc"
+                label="Export AQC Validated Data"
+              ></v-switch>
+            </v-col>
+
+            <!-- Export manual validated -->
+            <v-col class="text-center" cols="auto" v-if="source.source === 'raw_data'">
+              <v-switch
+                inset
+                v-model="export_mqc"
+                label="Export Manual Validated Data"
+              ></v-switch>
+            </v-col>    
+          </v-row>
+
+          <!-- Action Buttons -->
+          <v-row dense justify="start">
+            <!-- Export to CSV button -->
+            <v-col class="text-center" cols="auto">
+              <v-btn
+                @click="exportCSV()"
+                color="primary"
+                :disabled="variables.length == 0 || station.length == 0"
+              >
+                Export
+                <i class="material-icons right">send</i>
+              </v-btn>
+            </v-col>
+
+            <!-- Combine and Dowload .XLSX -->
+            <v-col class="text-center" cols="auto">
+              <v-btn
+                color="success"
+                @click="convertCombineXLSX"
+                :disabled="showCombineXLSX()"
+              >
+                <template>
+                  Combine and Download .XLSX
+                  <i class="material-icons right">download</i>
+                </template>
+              </v-btn>    
+            </v-col>    
+
+            <div class="tooltip-container">
+              <!-- Info Button -->
+              <v-col class="text-center" cols="auto">
+                <v-icon
+                  outlined
+                  color="warning"
+                  large
+                >
+                  info
+                </v-icon> 
+              </v-col>
+
+              <!-- Info Message -->
+              <v-col cols="auto">
+                <span class="custom_tooltip">
+                  <span style="color: red;">Note:</span> Exported values are rounded based on each variable's configured precision. 
+                  
+                  <br><br>
+
+                  To change this, update the variable's precision setting.
+                </span>
+              </v-col>
+            </div>
+
+          </v-row>
+        </form>
+
+        <!-- Alert -->
+        <v-alert v-model="request_error" dismissible type="error">
+          [[ request_error_message ]]
+        </v-alert>
+
+        <v-divider class="pa-3"></v-divider>
+
+        <!-- output files -->
+        <v-tabs
+          v-if="documents.length > 0"
+          v-model="export_files_model"
+          centered
+          slider-color="green"
+          class="mb-9"
+        >
+          <v-tab :key="1" :href="`#tab-1`" >
+            Export Files
+          </v-tab>
+
+          <v-tab :key="2" :href="`#tab-2`">
+            Combined .XLSX Files
+          </v-tab>
+        </v-tabs>
+
+        <v-tabs-items v-model="export_files_model">
+          <v-tab-item
+            :key="1"
+            :value="`tab-1`"
+          >
+
+            <v-row dense v-if="documents.length > 0" justify="center">
+              <v-overlay :value="loading">
+                <v-progress-circular indeterminate size="64"></v-progress-circular>
+              </v-overlay>
+              <v-data-table
+                ref="documents_table"
+                :headers="documents_headers"
+                :items="documents"
+                :items-per-page="5"
+                class="elevation-1"
+                sort-by="id"
+                sort-desc
+                dense
+                calculate-widths
+                show-expand
+    
+                :item-class="getRowClass"
+              >
+                <!-- handling the actions section of the table -->
+                <template v-slot:item.action="{ item }">
+                  <!-- if the status is ready add a download file option -->
+                  <v-tooltip bottom v-if="item.status.value == 1">
+                    <template v-slot:activator="{ on }">
+                      <v-icon small class="mr-2" @click="download(item)" v-on="on">
+                        get_app
+                      </v-icon>
+                    </template>
+                    <span>Download CSV</span>
+                  </v-tooltip>
+    
+                  <!-- if the status is readdy add the excel download option -->
+                  <v-tooltip bottom v-if="item.status.value == 1">
+                    <template v-slot:activator="{ on }">
+                      <v-icon small class="mr-2" @click="convert_to_xlsx(item)" v-on="on">
+                        mdi-file-excel
+                      </v-icon>
+                    </template>
+                    <span>Download xlsx</span>
+                  </v-tooltip>
+    
+                  <!-- show the delete option based on user privileges -->
+                  {% if request|has_any_feature_permission:"data-export:delete" %}
+                    <v-tooltip bottom>
+                      <template v-slot:activator="{ on }">
+                        <v-icon small @click="deleteItem(item)" v-on="on">
+                          delete
+                        </v-icon>
+                      </template>
+                      <span>Delete file</span>
+                    </v-tooltip>
+                  {% endif %}
+    
+                </template>
+                <!-- Display each row dropdown -->
+                <template v-slot:expanded-item="{ item, headers }">
+                  <td colspan="5">
+                    <!-- variables -->
+                    <span class="subtitle-1 font-weight-bold">Variables:</span
+                    ><br />
+                    <span class="text-end" v-for="v in item.variables"
+                      >&nbsp;&nbsp;&nbsp;[[ v ]]<br
+                    /></span>
+                    <!-- status -->
+                    <span class="subtitle-1 font-weight-bold">Status:</span><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.status.text ]]<br
+                    /></span>
+                    <!-- aggregation -->
+                    <!-- <span class="subtitle-1 font-weight-bold">Aggregation:</span><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[]]<br
+                    /></span> -->
+                  </td>
+    
+                  <td colspan="2">
+                    <!-- source -->
+                    <span class="subtitle-1 font-weight-bold">Source:</span><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.source.text ]]<br
+                    /></span>
+                    <!-- Initital Date -->
+                    <span class="subtitle-1 font-weight-bold">Initial date:</span
+                    ><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.initial_date ]]<br
+                    /></span>
+                    <!-- Final Date -->
+                    <span class="subtitle-1 font-weight-bold">Final date:</span
+                    ><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.final_date ]]<br
+                    /></span>
+                  </td>
+                </template>
+              </v-data-table>
+            </v-row>
+
+          </v-tab-item>
+
+          <v-tab-item
+            :key="2"
+            :value="`tab-2`"
+          >
+
+            <v-row dense v-if="documents.length > 0" justify="center">
+              <v-overlay :value="loading">
+                <v-progress-circular indeterminate size="64"></v-progress-circular>
+              </v-overlay>
+              <v-data-table
+                ref="combine_documents_table"
+                :headers="combine_documents_headers"
+                :items="combine_documents"
+                :items-per-page="5"
+                class="elevation-1"
+                sort-by="id"
+                sort-desc
+                dense
+                calculate-widths
+                show-expand
+    
+                :item-class="getRowClass"
+              >
+                <!-- handling the actions section of the table -->
+                <template v-slot:item.action="{ item }">
+                  <!-- if the status is ready add the excel download option -->
+                  <v-tooltip bottom v-if="item.status.value == 1">
+                    <template v-slot:activator="{ on }">
+                      <v-icon small class="mr-2" @click="download_combine_xlsx(item)" v-on="on">
+                        mdi-file-excel
+                      </v-icon>
+                    </template>
+                    <span>Download</span>
+                  </v-tooltip>
+    
+                  <!-- show the delete option based on user privileges -->
+                  {% if user.is_superuser %}
+                    <v-tooltip bottom>
+                    <!-- <v-tooltip bottom> -->
+                      <template v-slot:activator="{ on }">
+                        <v-icon small @click="deleteCombineItem(item)" v-on="on">
+                          delete
+                        </v-icon>
+                      </template>
+                      <span>Delete file</span>
+                    </v-tooltip>
+                  {% endif %}
+    
+                </template>
+                <!-- Display each row dropdown -->
+                <template v-slot:expanded-item="{ item, headers }">
+                  <td colspan="5">
+                    <!-- variables -->
+                    <span class="subtitle-1 font-weight-bold">Variables:</span
+                    ><br />
+                    <span class="text-end" v-for="v in item.variables"
+                      >&nbsp;&nbsp;&nbsp;[[ v ]]<br
+                    /></span>
+                    <!-- Station names -->
+                    <span class="subtitle-1 font-weight-bold">Station Name(s):</span
+                    ><br />
+                    <span class="text-end" v-for="s in item.station"
+                      >&nbsp;&nbsp;&nbsp;[[ s ]]<br
+                    /></span>
+                    <!-- status -->
+                    <span class="subtitle-1 font-weight-bold">Aggregation(s):</span><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.aggregation ]]<br
+                    /></span>
+                    <!-- aggregation -->
+                    <!-- <span class="subtitle-1 font-weight-bold">Aggregation:</span><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[]]<br
+                    /></span> -->
+                  </td>
+    
+                  <td colspan="2">
+                    <!-- source -->
+                    <span class="subtitle-1 font-weight-bold">Source:</span><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.source.text ]]<br
+                    /></span>
+                    <!-- Initital Date -->
+                    <span class="subtitle-1 font-weight-bold">Initial date:</span
+                    ><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.initial_date ]]<br
+                    /></span>
+                    <!-- Final Date -->
+                    <span class="subtitle-1 font-weight-bold">Final date:</span
+                    ><br />
+                    <span class="text-end"
+                      >&nbsp;&nbsp;&nbsp;[[ item.final_date ]]<br
+                    /></span>
+                  </td>
+                </template>
+              </v-data-table>
+            </v-row>
+
+          </v-tab-item>
+        </v-tabs-items>
+
+      </div>
+    </v-app>
+  </div>
+</div>
+
+{% endblock %} {% block localjavascript %}
+
+<script>
+  (function() {
+    const date = new Date();
+    new Vue({
+      el: "#app",
+      vuetify: new Vuetify(),
+      delimiters: ["[[", "]]"],
+      data: {
+        export_files_model: 'tab-1',
+        combineXLSXtaskId: 0,
+        hours: (function() {
+          const hours = [];
+          hours.length = 24;
+          hours.fill('');
+          return hours.map((el, index) => `${index < 10 ? '0' : ''}${index}:00`);
+        })(),
+        loading: false,
+        station: [],
+        searchStations: '',
+        displayUTC: false,
+        export_aqc: true,
+        export_mqc: false,
+        stations: [
+          {% for station in station_list %}
+          { value: {{ station.id }},
+            text: "{{ station.name | safe }} - {{ station.code }}",
+            name: "{{ station.name | safe }}",
+            code: "{{ station.code }}",
+            region: "{{ station.region | safe }}",
+            watershed: "{{ station.watershed | safe }}",
+            profile: "{{ station.profile.id | safe }}",
+            is_automatic: {{ station.is_automatic | lower }},
+            is_active: {{ station.is_active | lower }},
+          },
+          {% endfor %}
+        ],
+        timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        documents: [],
+        documents_headers: [
+          { text: "Id", value: "id", align: "left"},
+          { text: "Station", value: "station", align: "left"},
+          { text: "Prepared by", value: "prepared_by", align: "left"},
+          { text: "AQC Checks", value: "aqc_checks", align: "left"},
+          { text: "MQC Checks", value: "mqc_checks", align: "left"},
+          { text: "Requested at", value: "request_date", align: "left"},
+          { text: "Ready at", value: "ready_date", align: "left"},
+          { text: "Status", value: "status.text", align: "left"},
+          { text: "Lines", value: "lines", align: "left"},
+          { text: 'Actions', value: 'action', align: "center", sortable: false },
+        ],
+        combine_documents: [],
+        combine_documents_headers: [
+          { text: "Id", value: "id", align: "left"},
+          { text: "Prepared by", value: "prepared_by", align: "left"},
+          { text: "AQC Checks", value: "aqc_checks", align: "left"},
+          { text: "MQC Checks", value: "mqc_checks", align: "left"},
+          { text: "Requested at", value: "request_date", align: "left"},
+          { text: "Ready at", value: "ready_date", align: "left"},
+          { text: "Status", value: "status.text", align: "left"},
+          { text: "Lines", value: "lines", align: "left"},
+          { text: 'Actions', value: 'action', align: "center", sortable: false },
+        ],
+        variables: [],
+        searchVariables: null,
+        variables_headers: [
+          { text: "Variable", value: "variable", align: "left"},
+          { text: "Aggregation type", value: "agg", align: "right"},
+          { text: 'Actions', value: 'action', align: "center", sortable: false },
+        ],
+        variable_list: [
+          {% for variable in variable_list %}
+          {
+            value: {{ variable.id }},
+            text: "{{ variable.name }}",
+          },
+          {% endfor %}
+        ],
+        source: {value: 0, text: "Raw data", source: "raw_data"},
+        sources: [
+          {value: 0, text: "Raw data", source: "raw_data"},
+          {value: 1, text: "Hourly summary", source: "hourly_summary"},
+          {value: 2, text: "Daily summary", source: "daily_summary"},
+          {value: 3, text: "Monthly summary", source: "monthly_summary"},
+          {value: 4, text: "Yearly summary", source: "yearly_summary"},
+        ],
+        aggregation: [],
+        searchAggregations: null,
+        aggregations: [
+          {text: "Maximum", value: "max"},
+          {text: "Minimum", value: "min"},
+          {text: "Average", value: "avg"},
+          {text: "Sum", value: "sum"},
+        ],
+        initial_date: moment().format('YYYY-MM-DD'),
+        initial_time: '00:00',
+        final_date: moment().add(1, 'days').format('YYYY-MM-DD'),
+        final_time: '00:00',
+        initial_date_menu: false,
+        initial_time_menu: false,
+        final_date_menu: false,
+        final_time_menu: false,
+        request_error: false,
+        request_error_message: '',
+        filter: {
+          isActive: true,
+          isAutomatic: true
+        },
+        dataInterval:300,
+        dataIntervals: [
+          {% for interval in interval_list %}
+          {value: {{ interval.seconds }}, text: "{{ interval.description }}" },
+          {% endfor %}
+        ],
+        stationProfileList: [
+          {% for station_profile in station_profile_list %}
+          {id: {{ station_profile.id }}, name: "{{ station_profile.name }}" },
+          {% endfor %}
+        ],
+        stationWatershedList: [
+          {% for station_watershed in station_watershed_list %}
+          {id: {{ station_watershed.id }}, name: "{{ station_watershed.watershed }}" },
+          {% endfor %}
+        ],
+        stationDistrictList: [
+          {% for station_district in station_district_list %}
+          {id: {{ station_district.id }}, name: "{{ station_district.name }}" },
+          {% endfor %}
+        ],
+      },
+      watch: {
+        station (newSelectedArray, oldSelectedArray) {
+          this.searchStations = '';
+        },
+        variables (newSelectedArray, oldSelectedArray) {
+          this.searchVariables = '';
+        },
+        aggregation (newSelectedArray, oldSelectedArray) {
+          this.searchAggregations = '';
+        }
+      },
+      computed: {
+        stationList () {
+          let filteredStations = this.stations;
+
+          if(this.filter.stationDistrict)
+            filteredStations = filteredStations.filter(station => station.region == this.filter.stationDistrict);
+
+          if(this.filter.stationWatershed)
+            filteredStations = filteredStations.filter(station => station.watershed == this.filter.stationWatershed);
+
+          if(this.filter.stationProfile)
+            filteredStations = filteredStations.filter(station => station.profile == this.filter.stationProfile);
+
+          filteredStations = filteredStations.filter(station => this.filter.isAutomatic == station.is_automatic);
+
+          filteredStations = filteredStations.filter(station => this.filter.isActive == station.is_active);
+
+          return filteredStations;
+        },
+      },
+      methods: {
+        // Function to control button state
+        showCombineXLSX() {
+          // based on other conditions
+          if (this.station.length > 1 && this.variables.length > 0 && this.source.source == "raw_data") {
+            return false;
+          }
+          if (this.station.length >= 1 && this.variables.length > 0) {
+            if (this.aggregation.length >= 1 && this.source.source != "raw_data") {
+              return false;
+            }
+          }
+          return true;
+        },
+        getDatepickFormat(){
+            return this.source.source === "monthly_summary" || this.source.source === "yearly_summary" ? 'month': 'date';
+        },
+        allowedDates(val){
+          if(this.source.source === "yearly_summary")
+            return val.split('-')[1] == '01' // just january
+          return true;
+        },
+        getStationCode(name) {
+          return this.stations.find(s => s.name == name).code;
+        },
+        formatDatetimeForRequest(datetime){
+            return datetime.clone().tz(this.timezone, true).utc().format('YYYY-MM-DD HH:mm:ss');
+        },
+        handleServerDatetime(datetime){
+          return datetime ? moment.utc(datetime).tz(this.timezone).format('YYYY-MM-DD HH:mm:ss'): null;
+        },
+        selectAllStations(){
+          this.station = this.stationList;
+        },
+        onChangeTimescale(){
+          if(this.source.source === 'monthly_summary') {
+            this.initial_date = moment().format('YYYY-MM')
+            this.final_date = moment().add(1, 'month').format('YYYY-MM')
+            this.initial_time = '00:00'
+            this.final_time = '00:00'
+          } else if(this.source.source === 'yearly_summary') {
+            this.initial_date = moment().format('YYYY-01')
+            this.final_date = moment().add(1, 'year').format('YYYY-01')
+            this.initial_time = '00:00'
+            this.final_time = '00:00'
+          } else if(this.source.source === 'daily_summary') {
+            this.initial_time = '00:00'
+            this.final_time = '00:00'
+          }
+        },
+        invertValue(bool){
+          bool = !bool;
+        },
+        exportCSV() {
+          // switch to the combined .xlsx files tab
+          this.export_files_model = 'tab-1';
+
+          this.loading = true;
+
+          let start_datetime = moment(`${this.initial_date} ${this.initial_time}`)
+          let end_datetime = moment(`${this.final_date} ${this.final_time}`)
+
+          axios.post("schedule/", {
+            multiple: true,
+            stations: this.station.map(s => s.value),
+            source: this.source.source,
+            start_datetime: this.formatDatetimeForRequest(start_datetime),
+            end_datetime: this.formatDatetimeForRequest(end_datetime),
+            variables: this.variables.map(v => v.value),
+            data_interval: this.dataInterval,
+            aggregation: this.aggregation.map(a => a.value),
+            aqc_checks: this.export_aqc,
+            mqc_checks: this.export_mqc,
+            displayUTC: this.displayUTC // determine whether or not the timestamps in the final output will be in UTC.
+          }).then(response => {
+            // update the table
+            this.updateTable();
+
+            // previous versions add the loading end here instead of after the this.$forceUpdate() call in the updateTable method;
+          }).catch(err => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = err.message;
+          })
+        },
+        updateTable() {
+          axios.get('files/').then(res => {
+              res.data.forEach(record => {
+                record.request_date =  this.handleServerDatetime(record.request_date);
+                record.ready_date =  this.handleServerDatetime(record.ready_date);
+                record.initial_date =  this.handleServerDatetime(record.initial_date);
+                record.final_date =  this.handleServerDatetime(record.final_date);
+              });
+              this.documents = res.data
+            }).finally(async () => {
+              this.$forceUpdate();
+              await this.$nextTick();
+              this.loading = false;
+            });
+
+        },
+        download(item) {
+          window.location.href = `download/?id=${item.id}`; // Redirect to download
+        },
+        download_combine_xlsx(item) {
+          window.location.href = `download/?id=combine-${item.id}`; // Redirect to download for combine xlsx
+        },
+        convert_to_xlsx(item) {
+          window.location.href = `download_xlsx/?id=${item.id}&station_name=${item.station}`; // Redirect to download
+        },
+        convertCombineXLSX(){
+          // switch to the combined .xlsx files tab
+          this.export_files_model = 'tab-2';
+
+          // set loading to true
+          this.loading = true;
+
+          // call the exportXLSX method
+          this.exportXLSX();
+        },
+        exportXLSX() {
+          let start_datetime = moment(`${this.initial_date} ${this.initial_time}`)
+          let end_datetime = moment(`${this.final_date} ${this.final_time}`)
+
+
+          axios.post("combine_xlsx/", {
+            multiple: true,
+            stations: this.station.map(s => s.value),
+            source: this.source.source,
+            start_datetime: this.formatDatetimeForRequest(start_datetime),
+            end_datetime: this.formatDatetimeForRequest(end_datetime),
+            variables: this.variables.map(v => v.value),
+            data_interval: this.dataInterval,
+            aggregation: this.aggregation.map(a => a.value),
+            aqc_checks: this.export_aqc,
+            mqc_checks: this.export_mqc,
+            displayUTC: this.displayUTC // determine whether or not the timestamps in the final output will be in UTC.
+          }).then(response => {
+            // update the table combine xlsx table
+            this.updateCombineTable();
+
+          }).catch(err => {
+            this.loading = false;
+            this.request_error = true;
+            this.request_error_message = err.message;
+          })
+        },
+        updateCombineTable() {
+          axios.get('combine_files/').then(res => {
+              res.data.forEach(record => {
+                record.request_date =  this.handleServerDatetime(record.request_date);
+                record.ready_date =  this.handleServerDatetime(record.ready_date);
+                record.initial_date =  this.handleServerDatetime(record.initial_date);
+                record.final_date =  this.handleServerDatetime(record.final_date);
+              });
+              this.combine_documents = res.data
+            }).finally(async () => {
+              this.$forceUpdate();
+              await this.$nextTick();
+              this.loading = false;
+            });
+        },
+        deleteItem(item) {
+          this.loading = true;
+          axios.get('delete/?id='+item.id).then(data => {
+            // this.updateTable();
+            // this.loading = false; // note: this is redundant as loading is already set to false in updateTable
+          }).finally(() => {
+            this.updateTable();
+          });
+        },
+        // to delete the combine xlsx file
+        deleteCombineItem(item) {
+          this.loading = true;
+          axios.get('delete/?id=combine-'+item.id).then(data => {
+            this.updateCombineTable();
+            this.loading = false;
+          });
+        },
+        // Helper function to parse the date string
+        parseDate(dateString) {
+          const isoString = dateString.replace(" ", "T"); // Convert "YYYY-MM-DD HH:mm:ss" to "YYYY-MM-DDTHH:mm:ss"
+          return new Date(isoString);
+        },
+
+        // Check if the item's request_date is within 10 seconds of the current time
+        getRowClass(item) {
+          const currentTime = new Date().getTime();
+          const itemTime = this.parseDate(item.request_date).getTime();
+          const timeDiff = Math.abs(currentTime - itemTime);
+    
+          return timeDiff <= 10000 ? "recently-added-file" : ""; // 10000 ms = 10 seconds
+        },
+      },
+      mounted() {
+
+        this.updateTable();
+
+        // update the table combine xlsx table
+        this.updateCombineTable();
+
+        setInterval(this.updateTable, 10000)
+
+        setInterval(this.updateCombineTable, 10000)
+      }
+    })
+  })();
+</script>
+
+<style>
+  .recently-added-file {
+    background-color: #9ccc65; /* Light green for success */
+    animation: fadeOut 7s forwards; 
+  }
+
+  @keyframes fadeOut {
+    from {
+      background-color: #c8e6c9; 
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+
+  .custom_tooltip {
+    display: none;
+    width: 300px;
+    position: absolute;
+    transform: translateX(-50%);
+    left: 650%;
+    z-index: 100;
+    background: #F8F9FA;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    font-size: 14px;
+    color: #5F6368;
+    line-height: 1.5;
+  }
+
+  .tooltip-container:hover .custom_tooltip {
+    display: block;
+  }
+</style>
+
+{% endblock %}
