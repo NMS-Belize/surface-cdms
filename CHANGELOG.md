@@ -5,6 +5,41 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.8.0-beta.1] - 2026-05-27
+
+### Changed
+
+- Started the `0.8.0-beta` release line.
+- Updated package metadata for beta release readiness.
+- Updated package license metadata to GPL-3.0.
+- Updated package classifiers for beta status and scientific/engineering usage.
+
+### Verified
+
+- Confirmed clean-machine lifecycle testing passed.
+- Confirmed SURFACE application validation issues from alpha testing were fixed.
+- Confirmed local dump restore works.
+- Confirmed FTP dump restore works.
+- Confirmed WIS2Box publishing validation is complete.
+- Confirmed core CLI commands are available:
+  - `surface install`
+  - `surface info`
+  - `surface doctor`
+  - `surface up`
+  - `surface down`
+  - `surface restart`
+  - `surface logs`
+  - `surface containers`
+  - `surface uninstall`
+
+### Notes
+
+- This is the first beta release of SURFACE CDMS.
+- No major new features should be added before `v1.0.0` unless they are blocking.
+- Focus after this release should be bug fixes, documentation, packaging, and release candidate preparation.
+- Backup dump size and backup duration optimization are deferred to a future release.
+
+
 ## [0.7.0-alpha.2] - 2026-05-27
 
 ### Added
