@@ -4,6 +4,7 @@ import json
 import secrets
 from cryptography.fernet import Fernet
 from ftplib import FTP
+import string
 
 from django.shortcuts import render, redirect
 from django.urls import reverse
@@ -15,6 +16,12 @@ from .forms import SurfaceConfigurationForm
 from .models import InstallType, AnsibleRun
 from .tasks import install_surface, get_ansible_task_status
 from .utils import process_form
+
+
+# Safe for Docker Compose .env / env_file values.
+# Avoid "$" because Docker Compose treats it as variable interpolation.
+# Avoid quotes, spaces, backslashes, and shell-sensitive characters.
+SAFE_ENV_SECRET_CHARS = string.ascii_letters + string.digits + "_-.@#"
 
 
 # project directory and playbook name variables
@@ -78,20 +85,52 @@ def config_complete(request, task_id):
         return render(request, 'surface_app/config_complete.html', {'task_id': task_id})
     else:
         return redirect(reverse('wx_configuration'))
-    
+
+
+def generate_env_safe_secret(length=50):
+    """
+    Generate a random secret that is safe to write into Docker Compose env files.
+
+    This avoids characters like '$' that Docker Compose may interpret as
+    environment variable references.
+    """
+
+    return "".join(secrets.choice(SAFE_ENV_SECRET_CHARS) for _ in range(length))
+
+
 # generate encryption key
 def gen_encrypt_key(request):
-    key = Fernet.generate_key().decode('utf-8')  # 44-char Base64 key
+    """
+    Generate a Fernet encryption key.
+
+    Fernet keys are URL-safe base64 strings and are safe for env files.
+    Example characters: letters, numbers, '-', '_', '='
+    """
+
+    key = Fernet.generate_key().decode("utf-8")
     return JsonResponse({"key": key})
 
-# generate encryption key
+
+# generate secret key
 def gen_secret_key(request):
-    key = get_random_secret_key()
+    """
+    Generate a Django SECRET_KEY value that is safe for Docker Compose env files.
+
+    Not using Django's get_random_secret_key() here because it can include '$',
+    which Docker Compose interprets as variable interpolation.
+    """
+
+    key = generate_env_safe_secret(50)
     return JsonResponse({"key": key})
 
-# generate encryption key
+
+# generate password key
 def gen_db_pwd(request):
-    pwd = secrets.token_urlsafe(24)  # 32-char pwd (24 bytes...note: bytes * 3 / 4 ≈ character length)
+    """
+    Generate a database password safe for Docker Compose env files.
+    """
+
+    pwd = generate_env_safe_secret(32)
     return JsonResponse({"pwd": pwd})
 
 # retrieve country details

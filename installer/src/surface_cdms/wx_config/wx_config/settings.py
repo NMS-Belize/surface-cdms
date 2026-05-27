@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -138,6 +139,4 @@ CELERY_BROKER_URL = "redis://localhost:52377/0"
 CELERY_RESULT_BACKEND = "redis://localhost:52377/0"
 
 # app versions
-APP_VERSION = "v0.1.0"
-APP_VERSION_STAGE = "-Stable"
-APP_VERSION_LABEL = f"{APP_VERSION}{APP_VERSION_STAGE}"
+APP_VERSION_LABEL = str(os.getenv('SURFACE_CDMS_VERSION'))

@@ -1,7 +1,9 @@
+import os
 import logging
 
 import psycopg2
 from django.conf import settings
+
 
 logger = logging.getLogger('surface')
 
@@ -36,7 +38,5 @@ def get_surface_context(req):
 
 def get_surface_version(req):
     return {
-        'APP_VERSION': settings.APP_VERSION,
-        'APP_VERSION_STAGE': settings.APP_VERSION_STAGE,
-        'APP_VERSION_LABEL': settings.APP_VERSION_LABEL
+        'APP_VERSION_LABEL': settings.APP_VERSION_LABEL,
     }

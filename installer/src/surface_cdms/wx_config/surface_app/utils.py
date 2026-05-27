@@ -1,5 +1,7 @@
 import os
 
+from surface_cdms.version import get_surface_version, normalize_surface_version
+
 
 # path to ansible project folder
 django_app_dir = os.path.dirname(os.path.dirname(__file__))
@@ -60,18 +62,24 @@ def replace_text_in_file(file_path, search_text, replace_text):
 # mainly for used in the playbook execution
 def write_out_surface_variables(form):
     # write out surface variables
-    with open(variable_file_path, 'w') as vf:
-        vf.write('---\n')
-
+    # using 'a' instead of 'w' because the installer writes the SURFACE artifact path here. 
+    # Also the installer clears this file before every "surface install" run
+    with open(variable_file_path, 'a') as vf:
         # write with_data
-        vf.write(f'"with_data": "{form.cleaned_data["with_data"]}"\n')
+        vf.write(f'\n"with_data": "{form.cleaned_data["with_data"]}"\n')
 
-        # write surface_repo_path
-        surface_repo_path = form.cleaned_data['surface_repo_path'].strip()
-        if surface_repo_path[-1] == "/":
-            vf.write(f'"surface_repo_path": "{surface_repo_path}surface/"\n')
-        else:
-            vf.write(f'"surface_repo_path": "{surface_repo_path}/surface/"\n')
+        # User chooses the parent directory where SURFACE should be installed.
+        surface_install_parent_path = form.cleaned_data["surface_repo_path"].strip()
+
+        if not surface_install_parent_path.endswith("/"):
+            surface_install_parent_path += "/"
+
+        # The artifact contains a top-level "surface/" folder, so after extraction
+        # the actual SURFACE repo/app path will be parent + "surface/".
+        surface_repo_path = f"{surface_install_parent_path}surface/"
+
+        vf.write(f'"surface_install_parent_path": "{surface_install_parent_path}"\n')
+        vf.write(f'"surface_repo_path": "{surface_repo_path}"\n')
 
         # get dumps via ftp
         ftp_host = form.cleaned_data['dump_ftp_host']
@@ -205,6 +213,9 @@ def write_out_production_variables(form):
         prod.write(f'SPATIAL_ANALYSIS_INITIAL_LONGITUDE={form.cleaned_data["spatial_analysis_initial_longitude"]}\n')
         prod.write(f'SPATIAL_ANALYSIS_FINAL_LATITUDE={form.cleaned_data["spatial_analysis_final_latitude"]}\n')
         prod.write(f'SPATIAL_ANALYSIS_FINAL_LONGITUDE={form.cleaned_data["spatial_analysis_final_longitude"]}\n')
+
+        # SURFACE production version
+        prod.write(f"\nSURFACE_CDMS_VERSION={normalize_surface_version(get_surface_version())}\n\n")
 
         # writing a variable called transmit_wis2_regional and transmit_wis2_local if the options are filled in
         # Check if wis2box_topic_hierarchy has content (after stripping whitespace)

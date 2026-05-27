@@ -7,6 +7,8 @@ from pathlib import Path
 import ansible_runner
 import click
 
+from surface_cdms.version import get_surface_version
+
 
 # Package directory:
 # installer/src/surface_cdms/
@@ -26,6 +28,10 @@ PLAYBOOK_EXTRAVARS = WX_PLAYBOOK_PATH / "env" / "extravars"
 # installer/src/surface_cdms/wx_config/
 WEBAPP_PROJECT_PATH = PACKAGE_DIR / "wx_config"
 
+SURFACE_APP_EXTRAVARS = (WEBAPP_PROJECT_PATH / "ansible" / "surface_app" / "env" / "extravars")
+
+ARTIFACTS_DIR = PACKAGE_DIR / "artifacts"
+
 
 def wx_configuration(sudo_password):
     """
@@ -42,6 +48,9 @@ def wx_configuration(sudo_password):
         
         # Reset runtime files so old installer values are not reused.
         reset_runtime_env_files()
+
+        # Get the path to the packaged SURFACE app artifact.
+        surface_artifact_path = get_packaged_surface_artifact_path()
         
         # Write out the current Linux username for local installations.
         write_user_to_file(
@@ -50,14 +59,14 @@ def wx_configuration(sudo_password):
         )
 
         # Configure the web app playbook with the Django configuration app path.
-        #
-        # Important:
-        # We no longer write venv_path or venv_activate here because the
-        # installer is now intended to run through normal pip/pip editable
-        # installs, not the old pipx-specific virtual environment flow.
         with PLAYBOOK_EXTRAVARS.open("w", encoding="utf-8") as extravars_file:
             extravars_file.write(f"\ndjango_webapp_path: {WEBAPP_PROJECT_PATH}")
             extravars_file.write(f"\nsurface_python_executable: {sys.executable}")
+
+        # Configure the SURFACE app playbook
+        with SURFACE_APP_EXTRAVARS.open("a", encoding="utf-8") as extravars_file:
+            extravars_file.write(f"\nsurface_artifact_path: {surface_artifact_path}")
+            extravars_file.write(f"\nsurface_artifact_version: {get_surface_version()}")
 
         # Write sudo password required by the Ansible playbook.
         with SUDO_PASSWORD_PATH.open("w", encoding="utf-8") as sudo_password_file:
@@ -176,3 +185,71 @@ def ensure_current_python_bin_on_path() -> None:
 
     if str(python_bin_dir) not in current_path.split(os.pathsep):
         os.environ["PATH"] = str(python_bin_dir) + os.pathsep + current_path
+
+
+def python_version_to_surface_version(version: str) -> str:
+    """
+    Convert Python-normalized prerelease versions to SURFACE-style versions.
+
+    Example:
+        0.2.0a3 -> 0.2.0-alpha.3
+        0.2.0b1 -> 0.2.0-beta.1
+        0.2.0rc1 -> 0.2.0-rc.1
+    """
+
+    if "rc" in version:
+        base, number = version.split("rc", 1)
+        return f"{base}-rc.{number}"
+
+    if "a" in version:
+        base, number = version.split("a", 1)
+        return f"{base}-alpha.{number}"
+
+    if "b" in version:
+        base, number = version.split("b", 1)
+        return f"{base}-beta.{number}"
+    
+    return version
+
+
+def get_packaged_surface_artifact_path() -> Path:
+    """
+    Return the packaged same-version SURFACE app artifact path.
+
+    Expected:
+        surface_cdms/artifacts/surface-app-v<version>.tar.gz
+
+    In installed wheel/pipx mode, Python may normalize versions:
+        0.2.0-alpha.3 -> 0.2.0a3
+
+    So we check both forms.
+    """
+
+    version = get_surface_version()
+
+    candidate_versions = [
+        version,
+        python_version_to_surface_version(version),
+    ]
+
+    for candidate_version in candidate_versions:
+        artifact_path = ARTIFACTS_DIR / f"surface-app-v{candidate_version}.tar.gz"
+
+        if artifact_path.exists():
+            return artifact_path
+
+    matching_artifacts = sorted(ARTIFACTS_DIR.glob("surface-app-v*.tar.gz"))
+
+    if len(matching_artifacts) == 1:
+        return matching_artifacts[0]
+
+    if len(matching_artifacts) > 1:
+        raise FileNotFoundError(
+            "Multiple SURFACE app artifacts were found, but none matched "
+            f"version {version}: {matching_artifacts}"
+        )
+
+    raise FileNotFoundError(
+        f"SURFACE app artifact was not found in {ARTIFACTS_DIR}. "
+        f"Expected one of: {candidate_versions}"
+    )

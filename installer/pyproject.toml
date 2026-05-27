@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "surface-cdms"
-version = "v0.2.0-alpha.2"
+version = "v0.2.0-alpha.3"
 description = "Installer and management CLI for SURFACE CDMS"
 readme = "README.md"
 requires-python = ">=3.10"

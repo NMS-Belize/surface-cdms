@@ -5,6 +5,44 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.2.0-alpha.3] - 2026-05-26
+
+### Added
+
+- Packaged the same-version SURFACE app artifact inside the `surface-cdms` wheel.
+- Added installer support for locating the packaged SURFACE app artifact.
+- Added `surface_artifact_path` and `surface_artifact_version` to the SURFACE install playbook variables.
+- Added `SURFACE_CDMS_VERSION` to generated `production.env`.
+- Added `scripts/build_installer_wheel.sh` to rebuild the SURFACE app artifact before building the installer wheel.
+
+### Changed
+
+- Replaced the old Git clone install flow with artifact extraction.
+- Updated the SURFACE install playbook to extract the packaged app artifact.
+- Updated generated secrets to avoid Docker Compose variable interpolation issues caused by `$`.
+- Ensured SURFACE shell scripts are executable after artifact extraction.
+- Updated README instructions for artifact-based builds.
+
+### Fixed
+
+- Fixed artifact version lookup when Python normalizes versions like `0.2.0-alpha.3` to `0.2.0a3`.
+- Fixed Docker startup failure caused by non-executable `startup.sh`.
+- Fixed Docker Compose warnings caused by generated secrets containing `$`.
+
+### Verified
+
+- Confirmed the SURFACE app artifact is included in the installer wheel.
+- Confirmed `surface doctor` passes from a pipx install.
+- Confirmed `surface install` can extract the packaged SURFACE artifact.
+- Confirmed SURFACE starts successfully from the artifact-based install flow.
+
+### Notes
+
+- The installer now uses the bundled same-version SURFACE app artifact instead of cloning the SURFACE repository.
+- If files in `surface/` are modified, the SURFACE app artifact must be rebuilt before the installer wheel is built.
+- Update, backup, restore, logs, and uninstall commands are still deferred.
+
+
 ## [0.2.0-alpha.2] - 2026-05-26
 
 ### Added

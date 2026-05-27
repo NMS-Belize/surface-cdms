@@ -2,19 +2,22 @@
 
 SURFACE CDMS is a weather and climate data management system.
 
-This repository contains the SURFACE CDMS installer and management CLI. The full SURFACE application source will be added later as the project structure matures.
+This repository contains the SURFACE CDMS installer and management CLI, along with the SURFACE application source.
 
 ## Current Status
 
 SURFACE CDMS is currently in early alpha development.
 
-Current version: `0.1.0-alpha.6`
+Current version: `0.2.0-alpha.3`
 
-At this stage, this repository focuses on the installer package and the `surface` command-line tool.
+At this stage, this repository contains:
+
+- The `surface-cdms` installer package
+- The `surface` command-line tool
+- The SURFACE application source under `surface/`
+- A build process for packaging the SURFACE app into the installer wheel
 
 ## What is included right now?
-
-The current alpha includes the SURFACE CDMS installer package.
 
 The installer provides the `surface` command:
 
@@ -25,7 +28,7 @@ surface doctor
 surface install
 ```
 
-The full SURFACE application has not yet been added as a top-level `surface/` folder.
+The current installer flow uses a packaged SURFACE app artifact instead of cloning the old SURFACE repository.
 
 ## Recommended Installation Method
 
@@ -53,18 +56,18 @@ surface install
 
 ## Local Wheel Testing
 
-During development, you can build the package and test it locally with `pipx`.
+During development, build the installer wheel and test it locally with `pipx`.
 
-From the `installer/` directory:
+From the repository root:
 
 ```bash
-python -m build
+./scripts/build_installer_wheel.sh
 ```
 
 Then install the built wheel with `pipx`:
 
 ```bash
-pipx install dist/surface_cdms-0.1.0a6-py3-none-any.whl
+pipx install installer/dist/surface_cdms-0.2.0a3-py3-none-any.whl
 ```
 
 Then test:
@@ -80,7 +83,7 @@ If you already have an older version installed with `pipx`, uninstall it first:
 
 ```bash
 pipx uninstall surface-cdms
-pipx install dist/surface_cdms-0.1.0a6-py3-none-any.whl
+pipx install installer/dist/surface_cdms-0.2.0a3-py3-none-any.whl
 ```
 
 ## Development Setup
@@ -106,21 +109,52 @@ surface doctor
 surface install
 ```
 
-## Building the Installer Package
+## Building the SURFACE App Artifact
 
-From the `installer/` directory:
+The installer wheel includes a packaged SURFACE app artifact.
 
-```bash
-python -m build
+The artifact is built from the top-level `surface/` directory and copied into:
+
+```text
+installer/src/surface_cdms/artifacts/
 ```
 
-This creates distribution files in:
+If you modify anything inside the top-level `surface/` directory, rebuild the SURFACE app artifact before building the installer wheel:
+
+```bash
+./scripts/build_surface_artifact.sh
+```
+
+If you skip this step, the installer wheel may still contain an older SURFACE app artifact.
+
+## Building the Installer Package
+
+The recommended development build command is:
+
+```bash
+./scripts/build_installer_wheel.sh
+```
+
+This script does both required build steps:
+
+1. Rebuilds the SURFACE app artifact from `surface/`
+2. Builds the installer wheel from `installer/`
+
+The installer wheel is created in:
 
 ```text
 installer/dist/
 ```
 
-The wheel file can then be installed locally using `pip` or `pipx`.
+If you want to run the steps manually:
+
+```bash
+./scripts/build_surface_artifact.sh
+
+cd installer
+rm -rf build dist *.egg-info src/*.egg-info src/surface_cdms.egg-info
+python -m build
+```
 
 ## Commands
 
@@ -170,9 +204,13 @@ Early releases use alpha versions such as:
 
 ```text
 0.1.0-alpha.1
-0.1.0-alpha.2
-0.1.0-alpha.3
+0.2.0-alpha.1
+0.2.0-alpha.3
 ```
+
+The root `VERSION` file controls the platform version.
+
+The installer package version and the packaged SURFACE app artifact version should always match.
 
 Release notes are tracked in `CHANGELOG.md`.
 
@@ -182,12 +220,23 @@ Current structure:
 
 ```text
 surface-cdms/
+├── surface/
+│   ├── api/
+│   ├── nginx/
+│   ├── docker-compose.yml
+│   └── pg_hba.custom.conf
 ├── installer/
 │   ├── src/
 │   │   └── surface_cdms/
+│   │       ├── artifacts/
+│   │       ├── wx_config/
+│   │       └── wx_playbook/
 │   ├── pyproject.toml
 │   ├── MANIFEST.in
 │   └── requirements.txt
+├── scripts/
+│   ├── build_surface_artifact.sh
+│   └── build_installer_wheel.sh
 ├── AUTHORS.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
@@ -196,18 +245,6 @@ surface-cdms/
 └── VERSION
 ```
 
-Future structure will include the full SURFACE application:
-
-```text
-surface-cdms/
-├── surface/
-├── installer/
-├── docs/
-├── CHANGELOG.md
-├── README.md
-└── VERSION
-```
-
 ## Notes
 
-This project is still in early alpha. The installer package and release process are being stabilized before the full SURFACE application is added to the repository.
+This project is still in early alpha. The installer package, artifact packaging, and release process are being stabilized before the first stable `v1.0.0` release.

@@ -26,3 +26,28 @@ def get_surface_version() -> str:
         return version("surface-cdms")
     except PackageNotFoundError:
         return "unknown"
+    
+
+def normalize_surface_version(version: str) -> str:
+    """
+    Convert Python-normalized prerelease versions back to SURFACE-style versions.
+
+    Examples:
+        0.2.0a3  -> 0.2.0-alpha.3
+        0.2.0b1  -> 0.2.0-beta.1
+        0.2.0rc1 -> 0.2.0-rc.1
+    """
+
+    if "a" in version:
+        base, number = version.split("a", 1)
+        return f"{base}-alpha.{number}"
+
+    if "b" in version:
+        base, number = version.split("b", 1)
+        return f"{base}-beta.{number}"
+
+    if "rc" in version:
+        base, number = version.split("rc", 1)
+        return f"{base}-rc.{number}"
+
+    return version

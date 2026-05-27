@@ -11,15 +11,20 @@ set -euo pipefail
 #
 # Example output:
 #
-#   dist/surface-app-v0.2.0-alpha.2.tar.gz
+#   dist/surface-app-v0.2.0-alpha.3.tar.gz
 #
-# The version comes from the root VERSION file.
+# It also copies the artifact into:
+#
+#   installer/src/surface_cdms/artifacts/
+#
+# so the Python wheel can include the matching SURFACE app artifact.
 # ------------------------------------------------------------
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION_FILE="${REPO_ROOT}/VERSION"
 SURFACE_DIR="${REPO_ROOT}/surface"
 DIST_DIR="${REPO_ROOT}/dist"
+PACKAGE_ARTIFACTS_DIR="${REPO_ROOT}/installer/src/surface_cdms/artifacts"
 
 if [ ! -f "${VERSION_FILE}" ]; then
     echo "ERROR: VERSION file not found at ${VERSION_FILE}"
@@ -39,9 +44,11 @@ if [ ! -d "${SURFACE_DIR}" ]; then
 fi
 
 mkdir -p "${DIST_DIR}"
+mkdir -p "${PACKAGE_ARTIFACTS_DIR}"
 
 ARTIFACT_NAME="surface-app-${VERSION}.tar.gz"
 ARTIFACT_PATH="${DIST_DIR}/${ARTIFACT_NAME}"
+PACKAGE_ARTIFACT_PATH="${PACKAGE_ARTIFACTS_DIR}/${ARTIFACT_NAME}"
 
 echo "Building SURFACE app artifact..."
 echo "Version: ${VERSION}"
@@ -85,3 +92,14 @@ tar \
 echo ""
 echo "Artifact created successfully:"
 echo "${ARTIFACT_PATH}"
+
+echo ""
+echo "Copying artifact into Python package..."
+
+# Keep only the current matching app artifact inside the package.
+rm -f "${PACKAGE_ARTIFACTS_DIR}"/surface-app-v*.tar.gz
+
+cp "${ARTIFACT_PATH}" "${PACKAGE_ARTIFACT_PATH}"
+
+echo "Packaged artifact copied to:"
+echo "${PACKAGE_ARTIFACT_PATH}"

@@ -3,6 +3,7 @@ include LICENSE
 
 recursive-include src/surface_cdms/wx_playbook *
 recursive-include src/surface_cdms/wx_config *
+recursive-include src/surface_cdms/artifacts *
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
@@ -10,3 +11,5 @@ recursive-exclude * .DS_Store
 
 exclude src/surface_cdms/wx_config/db.sqlite3
 recursive-exclude src/surface_cdms/wx_config/productionfiles *
+recursive-exclude src/surface_cdms/wx_config/ansible/surface_app/artifacts *
+recursive-exclude src/surface_cdms/wx_playbook/artifacts *

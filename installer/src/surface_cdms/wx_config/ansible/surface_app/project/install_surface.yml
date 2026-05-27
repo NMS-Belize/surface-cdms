@@ -147,17 +147,51 @@
             path: "{{ surface_repo_path }}"
             state: absent
 
-        - name: Clone SURFACE Repository
-          ansible.builtin.git:
-            repo: https://github.com/opencdms/surface.git
-            dest: "{{ surface_repo_path }}"
-            force: true
-            version: development
+        - name: Confirm SURFACE app artifact exists
+          ansible.builtin.stat:
+            path: "{{ surface_artifact_path }}"
+          register: surface_artifact
+
+        - name: Fail if SURFACE app artifact is missing
+          ansible.builtin.fail:
+            msg: "SURFACE app artifact was not found at {{ surface_artifact_path }}"
+          when: not surface_artifact.stat.exists
+
+        - name: Ensure SURFACE parent directory exists
+          ansible.builtin.file:
+            path: "{{ surface_repo_path | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Extract SURFACE app artifact
+          ansible.builtin.unarchive:
+            src: "{{ surface_artifact_path }}"
+            dest: "{{ surface_install_parent_path }}"
+            remote_src: true
+
+        - name: Confirm SURFACE docker-compose file exists after extraction
+          ansible.builtin.stat:
+            path: "{{ surface_repo_path }}docker-compose.yml"
+          register: surface_compose_file
+
+        - name: Fail if SURFACE artifact did not extract correctly
+          ansible.builtin.fail:
+            msg: "SURFACE artifact extraction failed. Expected {{ surface_repo_path }}docker-compose.yml"
+          when: not surface_compose_file.stat.exists
 
         - name: Remove example SUFACE config file (production.env.example)
           ansible.builtin.file:
             path: "{{ surface_repo_path }}api/production.env.example"
             state: absent
+
+        - name: Ensure SURFACE startup scripts are executable
+          ansible.builtin.file:
+            path: "{{ item }}"
+            mode: "0755"
+          loop:
+            - "{{ surface_repo_path }}api/startup.sh"
+            - "{{ surface_repo_path }}api/load_initial_data.sh"
+            - "{{ surface_repo_path }}api/deploy_workflow_migrations.sh"
 
         - name: Add SURFACE config file (production.env)
           ansible.builtin.copy:
@@ -317,6 +351,7 @@
           community.docker.docker_compose_v2:
             project_src: "{{ surface_repo_path }}"
             build: always
+            remove_orphans: true
             state: present
             services:
               - postgres
@@ -389,7 +424,9 @@
           community.docker.docker_compose_v2:
             project_src: "{{ surface_repo_path }}"
             state: present
-
+            build: always
+            remove_orphans: true
+            
         # Verify file permissions and ownership
         - name: Verify file permissions and ownership inside containers
           block:
