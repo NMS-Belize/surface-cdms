@@ -5,6 +5,29 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.6.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added a clean-machine lifecycle test checklist.
+- Added documented validation steps for installing, managing, restarting, stopping, starting, and uninstalling SURFACE CDMS.
+- Added documented validation steps for reinstalling SURFACE after uninstall.
+
+### Changed
+
+- Started the `0.6.0-alpha` release line for clean-machine lifecycle validation.
+
+### Verified
+
+- This release is intended for clean-machine lifecycle testing.
+
+### Notes
+
+- This release does not add major installer features.
+- The purpose of this release is to validate the full SURFACE CDMS lifecycle on a fresh machine.
+- Full SURFACE application validation is planned for a later release.
+
+
 ## [0.5.0-alpha.1] - 2026-05-26
 
 ### Added
