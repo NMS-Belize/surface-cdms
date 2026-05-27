@@ -39,8 +39,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 1.2 Admin user created correctly
@@ -60,8 +60,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 1.3 Permissions and roles load correctly
@@ -80,8 +80,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 2. Database
@@ -109,8 +109,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 2.2 Initial fixtures load
@@ -129,8 +129,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Fail
+Notes: Unable to update (download & delete) any of the configuration items except the organization logo in the configuration page
 ```
 
 ### 2.3 Stations, variables, and code tables exist
@@ -151,8 +151,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Fail
+Notes: When you attempt to delete a station and it stops you. If the cancel btn is pressed it does not take you back to the station metadata. Instead you see an api view
 ```
 
 ### 2.4 Timescale/PostGIS functionality works
@@ -172,8 +172,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 3. Core UI
@@ -194,8 +194,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 3.2 Station pages load
