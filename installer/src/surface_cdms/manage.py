@@ -3,11 +3,159 @@
 import json
 import subprocess
 from pathlib import Path
+import shutil
 
 import click
 
 
 METADATA_PATH = Path.home() / ".surface-cdms" / "install.json"
+
+
+def sudo_remove_directory(path: Path, sudo_password: str) -> int:
+    """
+    Remove a directory using sudo.
+
+    Needed because Docker-created files may be owned by root or container users.
+    """
+
+    command = [
+        "sudo",
+        "-S",
+        "rm",
+        "-rf",
+        "--",
+        str(path),
+    ]
+
+    result = subprocess.run(
+        command,
+        input=f"{sudo_password}\n",
+        text=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise click.ClickException(
+            "Failed to delete SURFACE install directory.\n"
+            f"Path: {path}\n"
+            f"Error: {result.stderr.strip()}"
+        )
+
+    return result.returncode
+
+
+def validate_surface_install_path(surface_repo_path: Path) -> None:
+    """
+    Make sure we are deleting what looks like a SURFACE install directory.
+
+    This protects against accidentally deleting dangerous paths.
+    """
+
+    surface_repo_path = surface_repo_path.resolve()
+
+    if str(surface_repo_path) in ["/", "/home", "/root", "/usr", "/var", "/opt", "/srv"]:
+        raise click.ClickException(
+            f"Refusing to delete unsafe path: {surface_repo_path}"
+        )
+
+    if surface_repo_path.name != "surface":
+        raise click.ClickException(
+            "Refusing to delete install directory because it is not named 'surface'.\n"
+            f"Path: {surface_repo_path}"
+        )
+
+    if not (surface_repo_path / "docker-compose.yml").exists():
+        raise click.ClickException(
+            "Refusing to delete install directory because docker-compose.yml was not found.\n"
+            f"Path: {surface_repo_path}"
+        )
+
+    if not (surface_repo_path / "api").exists():
+        raise click.ClickException(
+            "Refusing to delete install directory because api/ was not found.\n"
+            f"Path: {surface_repo_path}"
+        )
+
+
+def uninstall_surface(sudo_password: str, remove_images: bool = True) -> int:
+    """
+    Uninstall SURFACE CDMS from the local machine.
+
+    This stops/removes Docker Compose services, removes volumes and orphans,
+    deletes the installed SURFACE directory, and removes install metadata.
+    """
+
+    metadata = load_install_metadata()
+
+    surface_repo_path = Path(metadata["surface_repo_path"]).resolve()
+    compose_file = Path(metadata["compose_file"]).resolve()
+
+    if not surface_repo_path.exists():
+        raise click.ClickException(
+            "SURFACE install directory was not found.\n"
+            f"Expected: {surface_repo_path}"
+        )
+
+    validate_surface_install_path(surface_repo_path)
+
+    click.echo(click.style("SURFACE CDMS uninstall", fg="red", bold=True))
+    click.echo("")
+    click.echo("This will permanently remove SURFACE CDMS from:")
+    click.echo(str(surface_repo_path))
+    click.echo("")
+    click.echo("This will also stop containers and remove Docker Compose volumes.")
+    click.echo("")
+
+    confirmation = click.prompt(
+        "Type DELETE SURFACE to continue",
+        default="",
+        show_default=False,
+    )
+
+    if confirmation != "DELETE SURFACE":
+        click.echo(click.style("Uninstall cancelled.", fg="yellow"))
+        return 1
+
+    compose_down_args = [
+        "down",
+        "--remove-orphans",
+        "--volumes",
+    ]
+
+    if remove_images:
+        compose_down_args.extend(["--rmi", "all"])
+
+    command = [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--project-directory",
+        str(surface_repo_path),
+        *compose_down_args,
+    ]
+
+    click.echo(click.style("Stopping and removing Docker services...", fg="yellow"))
+
+    down_code = subprocess.call(command)
+
+    if down_code != 0:
+        raise click.ClickException(
+            "Docker Compose cleanup failed. SURFACE directory was not deleted."
+        )
+
+    click.echo(click.style("Deleting SURFACE install directory...", fg="yellow"))
+
+    sudo_remove_directory(surface_repo_path, sudo_password)
+
+    if METADATA_PATH.exists():
+        METADATA_PATH.unlink()
+
+    click.echo(click.style("SURFACE CDMS has been uninstalled.", fg="green"))
+
+    return 0
 
 
 def load_install_metadata() -> dict:
@@ -41,6 +189,15 @@ def load_install_metadata() -> dict:
         raise click.ClickException(
             "SURFACE CDMS install metadata is missing required fields.\n"
             f"File: {METADATA_PATH}"
+        )
+    
+    install_status = metadata.get("install_status")
+
+    if install_status != "installed":
+        raise click.ClickException(
+            "SURFACE CDMS is not ready for management commands yet.\n"
+            f"Current install status: {install_status or 'unknown'}\n\n"
+            "Wait for `surface install` to finish successfully before running this command."
         )
 
     compose_path = Path(compose_file)

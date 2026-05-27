@@ -16,6 +16,7 @@ from surface_cdms.manage import (
     show_logs,
     start_services,
     stop_services,
+    uninstall_surface,
 )
 
 
@@ -128,6 +129,39 @@ def install(sudo_password):
     click.echo(click.style("Starting SURFACE CDMS installer...", fg="green"))
 
     wx_configuration(sudo_password)
+
+
+@main.command()
+@click.option(
+    "--keep-images",
+    is_flag=True,
+    help="Do not remove Docker images during uninstall.",
+)
+@click.option(
+    "--sudo-password",
+    prompt="[sudo] password",
+    hide_input=True,
+    required=True,
+    confirmation_prompt=True,
+    help="Sudo password used to remove Docker-created files.",
+)
+def uninstall(keep_images, sudo_password):
+    """Uninstall SURFACE CDMS from this machine."""
+
+    click.echo(click.style("Checking sudo password...", fg="yellow"))
+
+    if not validate_sudo_password(sudo_password):
+        click.echo(click.style("Invalid sudo password. Uninstall cancelled.", fg="red"))
+        raise SystemExit(1)
+
+    click.echo(click.style("Sudo password verified.", fg="green"))
+
+    raise SystemExit(
+        uninstall_surface(
+            sudo_password=sudo_password,
+            remove_images=not keep_images,
+        )
+    )
 
 
 if __name__ == "__main__":

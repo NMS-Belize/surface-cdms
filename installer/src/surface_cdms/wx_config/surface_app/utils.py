@@ -89,10 +89,44 @@ def write_install_metadata(surface_repo_path):
         "surface_cdms_version": normalize_surface_version(get_surface_version()),
         "surface_repo_path": normalized_surface_repo_path,
         "compose_file": os.path.join(normalized_surface_repo_path, "docker-compose.yml"),
-        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "install_status": "installing",
+        "install_started_at": datetime.now(timezone.utc).isoformat(),
     }
 
     os.makedirs(surface_cdms_metadata_dir, exist_ok=True)
+
+    with open(surface_cdms_install_metadata_path, "w") as metadata_file:
+        json.dump(metadata, metadata_file, indent=2)
+        metadata_file.write("\n")
+
+
+def update_install_metadata_status(status):
+    """
+    Update the local install metadata status.
+
+    Expected statuses:
+        installing
+        installed
+        failed
+        uninstalled
+    """
+
+    if not os.path.exists(surface_cdms_install_metadata_path):
+        return
+
+    with open(surface_cdms_install_metadata_path, "r") as metadata_file:
+        metadata = json.load(metadata_file)
+
+    metadata["install_status"] = status
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    if status == "installed":
+        metadata["installed_at"] = now
+    elif status == "failed":
+        metadata["failed_at"] = now
+    elif status == "uninstalled":
+        metadata["uninstalled_at"] = now
 
     with open(surface_cdms_install_metadata_path, "w") as metadata_file:
         json.dump(metadata, metadata_file, indent=2)

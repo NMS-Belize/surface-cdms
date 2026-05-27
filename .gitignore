@@ -133,7 +133,8 @@ installer/src/surface_cdms/wx_config/db.sqlite3
 installer/src/surface_cdms/wx_config/productionfiles/
 
 # Generated artifacts
-**/artifacts/*
+# **/artifacts/*
+installer/src/surface_cdms/wx_playbook/artifacts/
 
 # SURFACE app runtime data
 surface/data/

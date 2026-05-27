@@ -2,6 +2,7 @@ from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db import transaction
 from .models import AnsibleRun, AnsibleEvent, InstallType
+from .utils import update_install_metadata_status
 import ansible_runner
 
 import os
@@ -28,6 +29,7 @@ def install_surface(self, project_dir, playbook_name, install_type):
 
     # Cleanup artifacts directory
     artifacts_dir = os.path.join(project_dir, 'artifacts')
+
     if os.path.exists(artifacts_dir):
         shutil.rmtree(artifacts_dir)
 
@@ -42,16 +44,24 @@ def install_surface(self, project_dir, playbook_name, install_type):
         # captures playbook return code and updates the task status accordingly
         if playbook_run.status == 'successful':
             ansible_run.status = 'SUCCESS'
+            update_install_metadata_status("installed")
             click.launch("http://0.0.0.0:8080") # start surface on success
         else:
             ansible_run.status = 'FAILURE'
+            update_install_metadata_status("failed")
 
     except SoftTimeLimitExceeded:
         # set the status to failure if the task exceeds the time limit
         ansible_run.status = 'FAILURE'
+        update_install_metadata_status("failed")
 
-    # save ansible_run entry
-    ansible_run.save()
+    except Exception:
+        ansible_run.status = 'FAILURE'
+        update_install_metadata_status("failed")
+
+    finally:
+        # save ansible_run entry
+        ansible_run.save()
 
     return ansible_run.status
 

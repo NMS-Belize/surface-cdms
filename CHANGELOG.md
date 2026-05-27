@@ -5,6 +5,41 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.4.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added `surface uninstall` command.
+- Added uninstall confirmation prompt requiring `DELETE SURFACE`.
+- Added sudo-based removal for Docker-created files that may be owned by root or container users.
+- Added install metadata status tracking with `install_status`.
+- Added install status support for `installing`, `installed`, and `failed`.
+- Updated `surface info` to show install metadata and install status.
+
+### Changed
+
+- Updated management commands to require a completed installation before running.
+- Improved install metadata so commands like `surface logs`, `surface containers`, `surface up`, `surface down`, and `surface restart` do not run while installation is still in progress.
+- Updated install task behavior to mark metadata as `installed` only after the SURFACE install playbook succeeds.
+- Updated install task behavior to mark metadata as `failed` if the install playbook fails or times out.
+
+### Fixed
+
+- Fixed permission errors during uninstall caused by Docker-created folders such as `data/exported_data`.
+
+### Verified
+
+- Confirmed `surface info` shows installer and installation metadata.
+- Confirmed management commands are blocked while install status is not `installed`.
+- Confirmed `surface uninstall` can stop services and remove the installed SURFACE directory.
+- Confirmed `surface --version`, `surface info`, `surface doctor`, `surface containers`, and `surface logs` work after rebuilding the wheel.
+
+### Notes
+
+- `surface uninstall` is destructive and requires explicit confirmation.
+- Backup, restore, and update commands are still deferred.
+
+
 ## [0.3.0-alpha.1] - 2026-05-26
 
 ### Added
