@@ -678,8 +678,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will conduct testing in the next release
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 8.4 Restore from FTP dump works
