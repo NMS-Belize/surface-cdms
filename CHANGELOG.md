@@ -5,6 +5,59 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.5.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added additional `surface doctor` checks for Docker and Docker Compose availability.
+- Added `surface doctor` checks for the packaged SURFACE app artifact.
+- Added installation metadata checks to `surface doctor`.
+- Added clearer reporting for installed SURFACE path, Docker Compose file, and install status.
+
+### Changed
+
+- Improved diagnostic output for installer and installed SURFACE environments.
+- Improved `surface doctor` behavior so a missing install metadata file does not fail installer health checks.
+- Improved distinction between the installed CLI package and an existing SURFACE deployment.
+
+### Verified
+
+- Confirmed `surface doctor` passes before SURFACE is installed.
+- Confirmed `surface doctor` reports existing install metadata when SURFACE was installed previously.
+- Confirmed `surface doctor` reports installer and installation health after install.
+
+
+## [0.5.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added additional `surface doctor` checks for Docker and Docker Compose availability.
+- Added `surface doctor` checks for the packaged SURFACE app artifact.
+- Added installation metadata checks to `surface doctor`.
+- Added clearer reporting for installed SURFACE path, Docker Compose file, and install status.
+
+### Changed
+
+- Improved diagnostic output for installer and installed SURFACE environments.
+- Improved error messages when install metadata is missing, incomplete, or stale.
+- Improved post-install and post-uninstall validation flow.
+
+### Verified
+
+- Confirmed `surface-cdms` installs from a locally built wheel using `pipx`.
+- Confirmed `surface install` completes successfully.
+- Confirmed `surface info` shows installer and installation metadata.
+- Confirmed `surface doctor` reports installer and installation health.
+- Confirmed `surface up`, `surface down`, `surface restart`, `surface logs`, and `surface containers` work after install.
+- Confirmed `surface uninstall` removes the installed SURFACE directory and metadata.
+- Confirmed SURFACE can be reinstalled after uninstall.
+
+### Notes
+
+- This release focuses on hardening and diagnostics.
+- Backup, restore, and update commands are still deferred.
+
+
 ## [0.4.0-alpha.1] - 2026-05-26
 
 ### Added
