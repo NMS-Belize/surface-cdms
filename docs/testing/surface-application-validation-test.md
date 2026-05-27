@@ -129,8 +129,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Fail
-Notes: Unable to update (download & delete) any of the configuration items except the organization logo in the configuration page
+Pass/Fail: Pass
+Notes:
 ```
 
 ### 2.3 Stations, variables, and code tables exist
@@ -151,8 +151,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Fail
-Notes: When you attempt to delete a station and it stops you. If the cancel btn is pressed it does not take you back to the station metadata. Instead you see an api view
+Pass/Fail: Pass
+Notes:
 ```
 
 ### 2.4 Timescale/PostGIS functionality works
@@ -255,8 +255,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Fail
-Notes: Deleting a record that is "safe" and a record that is "protected" works. However there are issues redirecting to proper page after the delete and cancel action.
+Pass/Fail: Pass
+Notes: 
 ```
 
 ## 4. Data ingestion
@@ -283,8 +283,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Fail
-Notes: Files are accepted and the decode process run except for davis and r format. the default work works but doesn't repect the manually validated tag sometimes. investigate this.
+Pass/Fail: Pass
+Notes: 
 ```
 
 ### 4.2 High-frequency ingestion works
