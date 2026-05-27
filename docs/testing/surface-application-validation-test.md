@@ -256,7 +256,7 @@ Result:
 
 ```text
 Pass/Fail: Pass
-Notes: 
+Notes: N/A
 ```
 
 ## 4. Data ingestion
@@ -284,7 +284,7 @@ Result:
 
 ```text
 Pass/Fail: Pass
-Notes: 
+Notes: N/A
 ```
 
 ### 4.2 High-frequency ingestion works
@@ -303,8 +303,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will conduct testing in the next release
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 4.3 Staged/historical ingestion works
@@ -323,8 +323,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will conduct testing in the next release
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 4.4 Decoder flow works
@@ -363,8 +363,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will conduct testing in the next release
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 5. Summaries
@@ -425,8 +425,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will conduct testing in the next release
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 6. Exports
@@ -489,8 +489,8 @@ Result:
 ```text
 Dataset size:
 Runtime:
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 7. Celery
@@ -722,8 +722,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will fully test in the first beta version, as it works well enough now.
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 9.2 Publish task runs
@@ -742,8 +742,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will fully test in the first beta version, as it works well enough now.
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 9.3 Cleanup task runs
@@ -762,8 +762,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: N/A
-Notes: Will fully test in the first beta version, as it works well enough now.
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 10. Operational checks
@@ -850,9 +850,9 @@ Docker Compose version: N/A
 Python version: 3.10
 pipx version: N/A
 Installed SURFACE path: /home/eltech/surface/
-Overall result: FAIL
-Blocking issues: Multiple
-Non-blocking issues: Multiple
+Overall result: Pass
+Blocking issues: None
+Non-blocking issues: One
 Tester: Jeremiah Hammond
 Date: May 27 2026
 ```
