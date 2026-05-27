@@ -4,6 +4,37 @@ All notable changes to SURFACE CDMS will be documented in this file.
 
 This project follows Semantic Versioning.
 
+## [0.7.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added a full SURFACE application validation checklist.
+- Added validation steps for authentication, admin user creation, and permissions.
+- Added validation steps for database migrations, fixtures, TimescaleDB, and PostGIS functionality.
+- Added validation steps for core UI pages, forms, and protected delete behavior.
+- Added validation steps for standard, high-frequency, staged, and historical data ingestion.
+- Added validation steps for decoder behavior and quality-control processing.
+- Added validation steps for hourly, daily, and high-frequency summaries.
+- Added validation steps for CSV, XLSX, and large export workflows.
+- Added validation steps for Celery beat and queue-specific workers.
+- Added validation steps for manual backup, scheduled backup, local restore, and FTP restore.
+- Added validation steps for WIS2Box publishing configuration, publish tasks, and cleanup tasks.
+- Added operational validation steps for logs, restart behavior, and container recovery after reboot.
+
+### Changed
+
+- Started the `0.7.0-alpha` release line for full SURFACE application validation.
+
+### Verified
+
+- This release is intended for validating SURFACE application behavior after a successful install.
+
+### Notes
+
+- This release does not add major installer or CLI features.
+- The purpose of this release is to prove that SURFACE itself behaves correctly after installation.
+- Issues found during this validation should be fixed in follow-up `0.7.0-alpha` releases before moving toward beta.
+
 
 ## [0.6.0-alpha.1] - 2026-05-26
 
