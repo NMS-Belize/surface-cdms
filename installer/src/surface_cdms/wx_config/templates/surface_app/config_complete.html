@@ -174,14 +174,14 @@
                                 progressBar.style.width = '100%';
                                 progressBar.style.backgroundColor = '#4caf50';
                                 progressBar.textContent = '100%';
-                                status.textContent = 'Success! SURFACE is running. You can now access it via localhost using the port you selected during setup.'
-                            } else if (progress <= 90) {
-                                percentage = Math.min(progress * 100 / 95, 100);
-                                progressBar.style.width = Math.floor(percentage) + '%';
-                                progressBar.textContent = Math.floor(percentage) + '%';
-                                status.textContent = 'Loading...';
+                                status.textContent = 'Success! SURFACE is running. You can now access it via localhost using the port you selected during setup.';
                             } else {
-                                percentage = Math.min(90 * 100 / 95, 100);
+                                // Smooth logarithmic/exponential progress curve
+                                percentage = Math.min(
+                                    94 * (1 - Math.exp(-progress_count / 40)),
+                                    94
+                                );
+
                                 progressBar.style.width = Math.floor(percentage) + '%';
                                 progressBar.textContent = Math.floor(percentage) + '%';
                                 status.textContent = 'Loading...';

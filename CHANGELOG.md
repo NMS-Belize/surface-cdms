@@ -4,6 +4,41 @@ All notable changes to SURFACE CDMS will be documented in this file.
 
 This project follows Semantic Versioning.
 
+
+## [0.7.0-alpha.2] - 2026-05-27
+
+### Added
+
+- Added install duration tracking to install metadata.
+- Added install duration reporting to `surface info`.
+
+### Fixed
+
+- Fixed configuration page update/download/delete behavior for configuration items.
+- Fixed station delete cancel redirect behavior.
+- Fixed protected-object and safe-delete redirect behavior.
+- Fixed standard ingestion issues found during validation.
+- Fixed manually validated flag handling during ingestion.
+- Fixed issues discovered during the first full SURFACE application validation run.
+
+### Verified
+
+- Confirmed failed validation sections from `0.7.0-alpha.1` were retested.
+- Confirmed configuration item update/download/delete behavior works.
+- Confirmed station delete and cancel flows return to the expected UI pages.
+- Confirmed protected-object and safe-delete flows redirect correctly.
+- Confirmed standard ingestion works for tested formats.
+- Confirmed manually validated data behavior is respected.
+- Confirmed restore from local dump works.
+- Confirmed restore from FTP dump works.
+
+### Notes
+
+- This release fixes issues found during the first full SURFACE application validation run.
+- Backup dump size and backup duration optimization are deferred to a future release.
+- WIS2Box full validation is still planned for beta testing.
+
+
 ## [0.7.0-alpha.1] - 2026-05-26
 
 ### Added

@@ -74,14 +74,14 @@ variable_dict = {
     'hi_temp':     16,   # TEMPMAX
     'low_temp':    14,   # TEMPMIN
     'out_hum':     31,   # RHAVG
-    'dew_pt':      4064, # TDEWPNTAVG
+    # 'dew_pt':      4064, # TDEWPNTAVG
     'wind_speed':  50,   # WNDSPD
     'wind_dir':    55,   # WNDDIR
     'wind_run':    103,  # WINDRUN
     'hi_speed':    53,   # WNDSPMAX
-    'wind_chill':  4065, # WNDCHILLAVG
+    # 'wind_chill':  4065, # WNDCHILLAVG
     'heat_index':  27,   # HEATIDXAVG
-    'bar':         4066, # PRESSTNAVG
+    # 'bar':         4066, # PRESSTNAVG
     'rain':        0,    # PRECIP
     'solar_rad':   73,   # SOLARRADAVG
     'hi_solar_rad': 75,  # SOLRDMAX

@@ -154,6 +154,23 @@ def get_data(raw_data_list, utc_offset_minutes=None):
 
     variable_ids = set(grouped["variable_id"].tolist())
 
+    # Safety check:
+    # Every daily row must reference a variable that exists in wx_variable.
+    # If not, fail early with a clear decoder/mapping error.
+    existing_variable_ids = set(
+        Variable.objects.filter(
+            id__in=variable_ids,
+        ).values_list("id", flat=True)
+    )
+
+    missing_variable_ids = variable_ids - existing_variable_ids
+
+    if missing_variable_ids:
+        raise ValueError(
+            "Daily insert received variable_id values that do not exist in wx_variable: "
+            f"{sorted(missing_variable_ids)}"
+        )
+
     qc_variable_ids = set(
         Variable.objects.filter(
             id__in=variable_ids,
@@ -357,6 +374,17 @@ def get_data(raw_data_list, utc_offset_minutes=None):
                     df1[qc_column] = None
 
             df1 = df1.assign(measured=settings.MISSING_VALUE)
+
+        # raw_data.quality_flag is NOT NULL.
+        # If QC did not run, or the decoder left the overall quality flag empty,
+        # mark the row as "Not checked".
+        #
+        # QualityFlag:
+        # 1 = Not checked
+        # 2 = Suspicious
+        # 3 = Bad
+        # 4 = Good
+        df1["quality_flag"] = df1["quality_flag"].fillna(1)
 
         # Convert the processed dataframe group into insert-ready rows.
         # This must remain outside the process_qc block.

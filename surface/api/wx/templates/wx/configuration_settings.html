@@ -310,7 +310,7 @@
           },
           logoUploading: false,
           logoDeleting: false,
-          uploadUrl: "/wx/settings/organization-logo/update/",
+          uploadUrlOrg: "/wx/settings/organization-logo/update/",
 
           // file control
           MAX_FILE_SIZE: 15 * 1024 * 1024, // 15 MB in bytes
@@ -324,74 +324,18 @@
         isUploading(idx) { return !!this.uploading[idx]; },
         isDeleting(idx) { return !!this.deleting[idx]; },
 
-        // retrieving the org logo
-        getOrganizationLogo() {
-          axios.get('/wx/settings/organization-logo/details/')
-            .then((response) => {
-              this.logo = response.data;
-            })
-            .catch((error) => {
-              console.error('Error fetching organization logo details:', error);
-            });
-        },
-
-        // upload the logo method
-        uploadLogo(event) {
-          const file = event.target.files[0];
-          if (!file) return;
-
-          const allowedExtensions = ['png', 'jpg', 'jpeg', 'svg'];
-          const fileExtension = file.name.split('.').pop().toLowerCase();
-
-          if (!allowedExtensions.includes(fileExtension)) {
-            alert('Invalid file type. Allowed types: PNG, JPG, JPEG, SVG.');
-            event.target.value = '';
-            return;
-          }
-
-          const maxSizeBytes = 15 * 1024 * 1024;
-          if (file.size > maxSizeBytes) {
-            alert('File size exceeds 15 MB.');
-            event.target.value = '';
-            return;
-          }
-
-          const formData = new FormData();
-          formData.append('file', file);
-
-          this.logoUploading = true;
-
-          axios.post('/wx/settings/organization-logo/upload/', formData, {
-            headers: {
-              'Content-Type': 'multipart/form-data',
-              'X-CSRFToken': csrf_token,
-            }
-          })
-          .then((response) => {
-            this.logo = response.data;
-            event.target.value = '';
-          })
-          .catch((error) => {
-            console.error('Error uploading organization logo:', error);
-            alert(error?.response?.data?.message || 'Failed to upload logo.');
-            event.target.value = '';
-          })
-          .finally(() => {
-            this.logoUploading = false;
-          });
-        },
-
         // Org Logo controls
         getOrganizationLogoDetails() {
           axios.get('/wx/settings/organization-logo/')
-            .then((response) => {
-              this.logo = response.data;
-            })
-            .catch((error) => {
-              console.error('Error fetching organization logo details:', error);
-            });
+          .then((response) => {
+            this.logo = response.data;
+          })
+          .catch((error) => {
+            console.error('Error fetching organization logo details:', error);
+          });
         },
-
+        
+        // upload the logo method
         async uploadLogo(evt) {
           const file = evt.target.files && evt.target.files[0];
           if (!file) return;
@@ -418,7 +362,7 @@
             form.append("key", "organization_logo");
             form.append("file", file);
 
-            const res = await wxFetch(this.uploadUrl, {
+            const res = await wxFetch(this.uploadUrlOrg, {
               method: "POST",
               body: form,
             });
@@ -456,7 +400,7 @@
             form.append("action", "delete");
             form.append("key", "organization_logo");
 
-            const res = await wxFetch(this.uploadUrl, {
+            const res = await wxFetch(this.uploadUrlOrg, {
               method: "POST",
               body: form,
             });
@@ -615,7 +559,7 @@
               opt.uploadDate = null;
             } else {
               // alert(data.message || "Delete failed");
-              alert(`${data.message} - Delete failed`);
+              this.showAlert(`${data.message} - Delete failed`);
             }
           } catch (err) {
             console.error("Delete error", err);

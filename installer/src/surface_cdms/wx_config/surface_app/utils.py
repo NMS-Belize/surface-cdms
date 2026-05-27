@@ -119,19 +119,34 @@ def update_install_metadata_status(status):
 
     metadata["install_status"] = status
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
 
     if status == "installed":
-        metadata["installed_at"] = now
+        metadata["installed_at"] = now_iso
     elif status == "failed":
-        metadata["failed_at"] = now
+        metadata["failed_at"] = now_iso
     elif status == "uninstalled":
-        metadata["uninstalled_at"] = now
+        metadata["uninstalled_at"] = now_iso
+
+    install_started_at = metadata.get("install_started_at")
+
+    if install_started_at and status in ["installed", "failed"]:
+        try:
+            started_at = datetime.fromisoformat(install_started_at)
+            duration_seconds = int((now - started_at).total_seconds())
+
+            metadata["install_duration_seconds"] = duration_seconds
+            metadata["install_duration_minutes"] = round(duration_seconds / 60, 2)
+
+        except (ValueError, TypeError):
+            metadata["install_duration_seconds"] = None
+            metadata["install_duration_minutes"] = None
 
     with open(surface_cdms_install_metadata_path, "w") as metadata_file:
         json.dump(metadata, metadata_file, indent=2)
         metadata_file.write("\n")
-
+        
 
 # mainly for used in the playbook execution
 def write_out_surface_variables(form):

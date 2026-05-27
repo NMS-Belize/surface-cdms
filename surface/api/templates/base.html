@@ -766,12 +766,17 @@
 
         .custom-navbar-text-fade-in {
           display: inline-block;
-          opacity: 0;
-          visibility: hidden;
-          animation: customFadeIn 0.55s forwards; /* 0.55s fade-in */
+          opacity: 1;
+          visibility: visible;
+          animation: customFadeIn 0.35s forwards;
         }
 
         @keyframes customFadeIn {
+          from {
+            opacity: 0;
+            visibility: hidden;
+          }
+
           to {
             opacity: 1;
             visibility: visible;
@@ -847,8 +852,15 @@
     {% block extrastyle %} {% endblock %}
   </head>
   <body>
-    <ul id="slide-out" class="sidenav sidenav-fixed collapsed-mode accent_background" onmouseover="hoverOpenSidebar()" onmouseout="hoverCloseSidebar()" onmouseleave="closeSidebarSubMenu()" style="z-index: 9999;">
-      
+    <!--  <ul id="slide-out" class="sidenav sidenav-fixed collapsed-mode accent_background" onmouseover="hoverOpenSidebar()" onmouseout="hoverCloseSidebar()" onmouseleave="closeSidebarSubMenu()" style="z-index: 9999;"> -->
+    <ul
+      id="slide-out"
+      class="sidenav sidenav-fixed collapsed-mode accent_background"
+      onmouseenter="hoverOpenSidebar()"
+      onmouseleave="hoverCloseSidebar(); closeSidebarSubMenu();"
+      style="z-index: 9999;"
+    >
+
       <div style="display: flex;
         flex-direction: column;
         justify-content: space-between;

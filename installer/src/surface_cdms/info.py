@@ -83,6 +83,7 @@ def show_info() -> None:
     install_started_at = metadata.get("install_started_at")
     installed_at = metadata.get("installed_at")
     failed_at = metadata.get("failed_at")
+    install_duration_minutes = metadata.get("install_duration_minutes")
 
     if surface_cdms_version:
         click.echo(f"Installed SURFACE version: {surface_cdms_version}")
@@ -101,3 +102,6 @@ def show_info() -> None:
 
     if failed_at:
         click.echo(f"Failed at: {failed_at}")
+
+    if install_duration_minutes is not None:
+        click.echo(f"Install duration: {install_duration_minutes} minutes")

@@ -164,6 +164,25 @@ def get_data(raw_data_list):
         for (station_id, variable_id, seconds, month), df_group in grouped_data
     }
 
+    # Safety check:
+    # Every decoder must produce variable_id values that exist in wx_variable.
+    # If a decoder sends a hardcoded/invalid variable_id, fail here with a clear error
+    # instead of later failing with a confusing database constraint error.
+    existing_variable_ids = set(
+        Variable.objects.filter(
+            id__in=variable_ids,
+        ).values_list("id", flat=True)
+    )
+
+    missing_variable_ids = variable_ids - existing_variable_ids
+
+    if missing_variable_ids:
+        raise ValueError(
+            "insert_raw_data received variable_id values that do not exist in wx_variable: "
+            f"{sorted(missing_variable_ids)}"
+        )
+
+
     numeric_variable_ids = set(
         Variable.objects.filter(
             id__in=variable_ids,
@@ -349,6 +368,17 @@ def get_data(raw_data_list):
 
             df1 = df1.assign(measured=settings.MISSING_VALUE)
 
+        # raw_data.quality_flag is NOT NULL.
+        # If QC did not run, or a decoder left the overall quality flag empty,
+        # mark the row as "Not checked".
+        #
+        # QualityFlag:
+        # 1 = Not checked
+        # 2 = Suspicious
+        # 3 = Bad
+        # 4 = Good
+        df1["quality_flag"] = df1["quality_flag"].fillna(1)
+
         # Convert the dataframe group into rows matching insert_columns.
         t0 = time.perf_counter()
 
@@ -405,6 +435,17 @@ def insert_query(reads, override_data_on_conflict, is_manually_validated):
         with conn.cursor() as cursor:
 
             logger.info(f"Inserting into database #{len(reads)} records.")
+
+            # If this file/import was manually validated, mark new inserted rows as manually validated too.
+            #
+            # Existing rows are handled separately in the ON CONFLICT DO UPDATE clause below.
+            # This block handles brand-new rows, because INSERT uses the manual_flag value
+            # that is already inside each row in `reads`.
+            if is_manually_validated:
+                manual_flag_index = insert_columns.index("manual_flag")
+
+                for row in reads:
+                    row[manual_flag_index] = 4
 
             if override_data_on_conflict:
 

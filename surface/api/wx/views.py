@@ -35,7 +35,7 @@ from django.contrib.auth import get_user_model
 from wx.mixins import WxPermissionRequiredMixin
 from django.contrib.messages.views import SuccessMessageMixin
 from django.core.cache import cache
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import connection, transaction, IntegrityError
 from django.utils.dateparse import parse_datetime
@@ -3918,42 +3918,50 @@ class StationDelete(LoginRequiredMixin, DeleteView):
     fields = ['code', 'name', 'profile']
 
     def get_success_url(self):
-        return reverse('stations-list')
+        return reverse('station-metadata')
 
     def post(self, request, *args, **kwargs):
         """
-        Handle the delete form submission manually.
+        Handle station deletion manually.
 
-        If the station is connected to other records, stay on this same delete
-        page and show a friendly error message instead of showing an
-        IntegrityError page.
+        If deletion fails because the station is connected to other records,
+        stay on the delete page and show a friendly message.
+
+        If deletion succeeds, redirect away immediately because the delete page
+        no longer has a valid station to display.
         """
 
-        # Get the station being deleted
         self.object = self.get_object()
 
+        # Save these before attempting delete.
+        # After delete(), the in-memory object's id may become None.
+        station_id = self.object.id
+        station_name = self.object.name
+
         try:
-            # Try to delete the station inside a transaction.
-            # If the database blocks the delete because related records exist,
-            # the error will be caught below.
             with transaction.atomic():
                 self.object.delete()
 
         except (ProtectedError, IntegrityError):
-            # Re-render the same delete page with an error message
+            # Since delete failed, the station still exists in the DB.
+            # Re-fetch it so the template gets a clean object with a valid id.
+            station = Station.objects.get(id=station_id)
+
             context = self.get_context_data(
-                object=self.object,
-                station=self.object,
+                object=station,
+                station=station,
                 delete_error=(
-                    f'Cannot delete station "{self.object.name}" because it is '
+                    f'Cannot delete station "{station_name}" because it is '
                     f'associated with other records in the database.'
                 )
             )
 
             return self.render_to_response(context)
 
-        # If delete was successful, go to the stations list
-        return HttpResponseRedirect(self.get_success_url())
+        # Delete succeeded.
+        # Do not render this delete page again.
+        return redirect('station-metadata')
+        
 
 
 @method_decorator(wx_mapped_permission_required, name="dispatch")
