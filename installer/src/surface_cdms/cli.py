@@ -10,6 +10,14 @@ from surface_cdms.info import show_info
 from surface_cdms.install import wx_configuration
 from surface_cdms.version import get_surface_version
 
+from surface_cdms.manage import (
+    restart_services,
+    show_containers,
+    show_logs,
+    start_services,
+    stop_services,
+)
+
 
 def validate_sudo_password(sudo_password: str) -> bool:
     """
@@ -58,6 +66,44 @@ def doctor():
 
     if not passed:
         raise click.ClickException("SURFACE CDMS doctor checks failed.")
+    
+
+@main.command()
+def up():
+    """Start SURFACE Docker services."""
+
+    raise SystemExit(start_services())
+
+
+@main.command()
+def down():
+    """Stop SURFACE Docker services."""
+
+    raise SystemExit(stop_services())
+
+
+@main.command()
+def restart():
+    """Restart SURFACE Docker services."""
+
+    raise SystemExit(restart_services())
+
+
+@main.command()
+@click.argument("service", required=False)
+@click.option("-f", "--follow", is_flag=True, help="Follow log output.")
+@click.option("--tail", type=int, default=None, help="Number of lines to show from the end of logs.")
+def logs(service, follow, tail):
+    """Show SURFACE Docker logs."""
+
+    raise SystemExit(show_logs(service=service, follow=follow, tail=tail))
+
+
+@main.command()
+def containers():
+    """Show SURFACE Docker containers."""
+
+    raise SystemExit(show_containers())
 
 
 @main.command()

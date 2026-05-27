@@ -5,6 +5,35 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.3.0-alpha.1] - 2026-05-26
+
+### Added
+
+- Added local install metadata support using `~/.surface-cdms/install.json`.
+- Added `surface up` command for starting SURFACE Docker services.
+- Added `surface down` command for stopping SURFACE Docker services.
+- Added `surface restart` command for restarting SURFACE Docker services.
+- Added `surface logs` command for viewing SURFACE Docker logs.
+- Added `surface containers` command for viewing SURFACE Docker containers.
+
+### Changed
+
+- Updated the installer GUI flow to save the installed SURFACE path for future CLI management commands.
+- Added Docker Compose management helpers that use the saved install metadata.
+
+### Verified
+
+- Confirmed install metadata is written after the installer GUI is submitted.
+- Confirmed `surface containers` can show the installed SURFACE containers.
+- Confirmed `surface logs` can read Docker Compose logs.
+- Confirmed `surface up`, `surface down`, and `surface restart` work using saved install metadata.
+
+### Notes
+
+- This release starts the `0.3.0-alpha` line for SURFACE runtime management commands.
+- `surface uninstall` is still deferred because it is destructive and needs extra safety checks.
+
+
 ## [0.2.0-alpha.3] - 2026-05-26
 
 ### Added

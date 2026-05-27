@@ -242,7 +242,7 @@
 
         - name: Retrieve data dump file from FTP server
           ansible.builtin.get_url:
-            url: "ftp://{{ ftp_username }}:{{ ftp_password }}@{{ ftp_host }}:{{ ftp_port }}{{ ftp_data_dump }}"
+            url: "ftp://{{ ftp_username | urlencode }}:{{ ftp_password | urlencode }}@{{ ftp_host }}:{{ ftp_port }}/{{ ftp_data_dump | regex_replace('^/', '') }}"
             dest: "{{ surface_repo_path }}backup_restore_dumps/{{ data_file_name }}"
             force: true
           when: dump_via_ftp in ['true', 'True', 'TRUE']

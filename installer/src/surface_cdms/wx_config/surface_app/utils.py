@@ -1,4 +1,7 @@
+import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from surface_cdms.version import get_surface_version, normalize_surface_version
 
@@ -42,6 +45,12 @@ lrgs_install_jar = os.path.join(project_dir, 'env', 'lrgs', 'lrgs-client-install
 # path lrgs installation script
 lrgs_installation_script = os.path.join(project_dir, 'env', 'lrgs', 'LRGS-installation-script',)
 
+# path to SURFACE CDMS local metadata directory
+surface_cdms_metadata_dir = os.path.join(Path.home(), ".surface-cdms")
+
+# path to local install metadata file
+surface_cdms_install_metadata_path = os.path.join(surface_cdms_metadata_dir,"install.json",)
+
 
 def replace_text_in_file(file_path, search_text, replace_text):
     try:
@@ -57,6 +66,37 @@ def replace_text_in_file(file_path, search_text, replace_text):
             file.write(new_content)
     except:
         pass
+
+
+def write_install_metadata(surface_repo_path):
+    """
+    Write local SURFACE CDMS install metadata.
+
+    This file allows future CLI commands such as:
+
+        surface up
+        surface down
+        surface restart
+        surface logs
+        surface containers
+
+    to know where the installed SURFACE Docker Compose project lives.
+    """
+
+    normalized_surface_repo_path = surface_repo_path.rstrip("/") + "/"
+
+    metadata = {
+        "surface_cdms_version": normalize_surface_version(get_surface_version()),
+        "surface_repo_path": normalized_surface_repo_path,
+        "compose_file": os.path.join(normalized_surface_repo_path, "docker-compose.yml"),
+        "installed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    os.makedirs(surface_cdms_metadata_dir, exist_ok=True)
+
+    with open(surface_cdms_install_metadata_path, "w") as metadata_file:
+        json.dump(metadata, metadata_file, indent=2)
+        metadata_file.write("\n")
 
 
 # mainly for used in the playbook execution
@@ -80,6 +120,9 @@ def write_out_surface_variables(form):
 
         vf.write(f'"surface_install_parent_path": "{surface_install_parent_path}"\n')
         vf.write(f'"surface_repo_path": "{surface_repo_path}"\n')
+
+        # Save install metadata for future CLI management commands.
+        write_install_metadata(surface_repo_path)
 
         # get dumps via ftp
         ftp_host = form.cleaned_data['dump_ftp_host']
