@@ -214,8 +214,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 3.3 Forms save correctly
@@ -235,8 +235,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 3.4 Delete/protected-object behavior works
@@ -255,8 +255,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Fail
+Notes: Deleting a record that is "safe" and a record that is "protected" works. However there are issues redirecting to proper page after the delete and cancel action.
 ```
 
 ## 4. Data ingestion
@@ -283,8 +283,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Fail
+Notes: Files are accepted and the decode process run except for davis and r format. the default work works but doesn't repect the manually validated tag sometimes. investigate this.
 ```
 
 ### 4.2 High-frequency ingestion works
@@ -303,8 +303,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will conduct testing in the next release
 ```
 
 ### 4.3 Staged/historical ingestion works
@@ -323,8 +323,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will conduct testing in the next release
 ```
 
 ### 4.4 Decoder flow works
@@ -343,8 +343,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: TOA5 decoder working flawlessly.
 ```
 
 ### 4.5 Quality control runs successfully
@@ -363,8 +363,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will conduct testing in the next release
 ```
 
 ## 5. Summaries
@@ -385,8 +385,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 5.2 Daily summaries generate
@@ -405,8 +405,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 5.3 High-frequency summaries generate
@@ -425,8 +425,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will conduct testing in the next release
 ```
 
 ## 6. Exports
@@ -447,8 +447,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 6.2 XLSX export works
@@ -467,8 +467,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 6.3 Large export behavior is acceptable
@@ -513,8 +513,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 7.2 Default queue works
@@ -533,8 +533,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 7.3 Summary queue works
@@ -553,8 +553,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 7.4 Ingest queue works
@@ -573,8 +573,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 7.5 Maintenance queue works
@@ -593,8 +593,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 7.6 Export queue works
@@ -613,8 +613,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 8. Backups
@@ -636,9 +636,8 @@ Expected:
 Result:
 
 ```text
-Backup file:
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: However backups are taking extremely long times to complete. This is not an immediate issue right now, but it should be looked into for the v1.1.0 release. Also backups are unusually large. Another issue for the v1.1.0 release. An issue on GitHub should definitely be created.
 ```
 
 ### 8.2 Scheduled backup works
@@ -657,8 +656,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 8.3 Restore from local dump works
@@ -679,9 +678,8 @@ Expected:
 Result:
 
 ```text
-Dump file:
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will conduct testing in the next release
 ```
 
 ### 8.4 Restore from FTP dump works
@@ -702,10 +700,8 @@ Expected:
 Result:
 
 ```text
-FTP host:
-Dump file:
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## 9. WIS2Box / publishing
@@ -726,8 +722,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will fully test in the first beta version, as it works well enough now.
 ```
 
 ### 9.2 Publish task runs
@@ -746,8 +742,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will fully test in the first beta version, as it works well enough now.
 ```
 
 ### 9.3 Cleanup task runs
@@ -766,8 +762,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: N/A
+Notes: Will fully test in the first beta version, as it works well enough now.
 ```
 
 ## 10. Operational checks
@@ -790,8 +786,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 10.2 Restart works
@@ -813,8 +809,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ### 10.3 Containers recover correctly after reboot
@@ -838,8 +834,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail:
-Notes:
+Pass/Fail: Pass
+Notes: N/A
 ```
 
 ## Final validation result
@@ -847,16 +843,16 @@ Notes:
 Record the final result:
 
 ```text
-SURFACE CDMS version:
-Test machine OS:
-Docker version:
-Docker Compose version:
-Python version:
-pipx version:
-Installed SURFACE path:
-Overall result: PASS / FAIL
-Blocking issues:
-Non-blocking issues:
-Tester:
-Date:
+SURFACE CDMS version: 0.6.0-alpha.1
+Test machine OS: Ubuntu 22.04
+Docker version: N/A
+Docker Compose version: N/A
+Python version: 3.10
+pipx version: N/A
+Installed SURFACE path: /home/eltech/surface/
+Overall result: FAIL
+Blocking issues: Multiple
+Non-blocking issues: Multiple
+Tester: Jeremiah Hammond
+Date: May 27 2026
 ```
