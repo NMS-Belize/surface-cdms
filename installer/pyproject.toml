@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "surface-cdms"
-version = "0.8.0-beta.2"
+version = "0.9.0-rc.1"
 description = "Installer and management CLI for SURFACE CDMS"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,7 +17,7 @@ authors = [
 
 maintainers = [
   { name = "Jeremiah Hammond", email = "jeremiahhammond14@gmail.com" },
-  { name = "National Meteorological Service of Belize", email = "nmstechbz@gmail.com" },
+  { name = "National Meteorological Service of Belize", email = "eltech@nms.gov.bz" },
 ]
 
 keywords = [

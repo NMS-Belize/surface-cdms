@@ -5,6 +5,41 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.9.0-rc.1] - 2026-05-27
+
+### Changed
+
+- Started the `0.9.0-rc` release-candidate line.
+- Finalized release-readiness checks for the first stable `v1.0.0` release.
+- Confirmed package metadata, README rendering, and build output are ready for package index testing.
+
+### Verified
+
+- Confirmed the installer wheel builds successfully.
+- Confirmed the source distribution builds successfully.
+- Confirmed `twine check` passes for the wheel and source distribution.
+- Confirmed the packaged SURFACE app artifact is included in the installer wheel.
+- Confirmed package installation works through the TestPyPI/PyPI-style workflow.
+- Confirmed clean-machine lifecycle testing passed.
+- Confirmed SURFACE application validation issues found during alpha and beta testing were fixed.
+- Confirmed core CLI commands are available:
+  - `surface install`
+  - `surface info`
+  - `surface doctor`
+  - `surface up`
+  - `surface down`
+  - `surface restart`
+  - `surface logs`
+  - `surface containers`
+  - `surface uninstall`
+
+### Notes
+
+- This is the first release candidate for SURFACE CDMS.
+- No major new features should be added before `v1.0.0` unless they are blocking.
+- If no blocking issues are found, this release candidate can be promoted to `v1.0.0`.
+
+
 ## [0.8.0-beta.2] - 2026-05-27
 
 ### Fixed
