@@ -1,6 +1,8 @@
-# SURFACE CDMS Clean Machine Lifecycle Test
+# SURFACE CDMS Install Lifecycle Smoke Test
 
-This checklist validates that SURFACE CDMS can be installed, managed, and uninstalled on a clean machine.
+This checklist validates that SURFACE CDMS can be installed, managed, uninstalled, and reinstalled on a test machine.
+
+This is a smaller smoke test than the full SURFACE application validation checklist. It focuses on the installer, management CLI, Docker lifecycle, and uninstall/reinstall behavior.
 
 ## Test machine requirements
 
@@ -13,10 +15,16 @@ This checklist validates that SURFACE CDMS can be installed, managed, and uninst
 
 ## 1. Install the CLI
 
-Install from the locally built wheel:
+Install from PyPI:
 
 ```bash
-pipx install /path/to/surface_cdms-0.6.0a1-py3-none-any.whl
+pipx install surface-cdms
+```
+
+Or, during development, install from a locally built wheel:
+
+```bash
+pipx install installer/dist/*.whl
 ```
 
 Verify:
@@ -29,10 +37,17 @@ surface doctor
 
 Expected:
 
-- `surface --version` shows `0.6.0-alpha.1` or `0.6.0a1`
+- `surface --version` shows the version being tested
 - `surface info` works
 - `surface doctor` passes installer checks
 - If SURFACE is not installed yet, `surface doctor` should not fail only because install metadata is missing
+
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
 
 ## 2. Run install
 
@@ -68,6 +83,13 @@ Expected metadata should include:
 }
 ```
 
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
+
 ## 3. Verify containers
 
 ```bash
@@ -84,6 +106,13 @@ Expected:
 - celery beat container is running
 - celery worker containers are running
 
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
+
 ## 4. Verify logs
 
 ```bash
@@ -96,15 +125,34 @@ Expected:
 - logs are readable
 - no immediate crash loops
 - no permission errors
-- no missing env variable interpolation warnings caused by generated secrets
+- no missing environment variable interpolation warnings caused by generated secrets
+
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
 
 ## 5. Verify management commands
+
+Restart services:
 
 ```bash
 surface restart
 surface containers
+```
+
+Stop services:
+
+```bash
 surface down
 surface containers
+```
+
+Start services again:
+
+```bash
 surface up
 surface containers
 ```
@@ -114,7 +162,14 @@ Expected:
 - restart completes
 - down stops services
 - up starts services again
-- containers return to healthy/running state
+- containers return to running state
+
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
 
 ## 6. Verify uninstall cancellation
 
@@ -131,8 +186,15 @@ DELETE SURFACE
 Expected:
 
 - uninstall is cancelled
-- SURFACE directory still exists
+- SURFACE install directory still exists
 - containers are not removed by the cancelled operation
+
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
 
 ## 7. Verify uninstall
 
@@ -169,6 +231,13 @@ Expected:
 - `surface doctor` still passes installer checks
 - `surface containers` fails cleanly and tells the user to run `surface install` first
 
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
+
 ## 8. Verify reinstall after uninstall
 
 ```bash
@@ -184,7 +253,14 @@ Expected:
 - metadata is recreated
 - containers start successfully
 
-## 9. Record test result
+Result:
+
+```text
+Pass/Fail:
+Notes:
+```
+
+## 9. Record final test result
 
 Record the following after testing:
 
@@ -200,4 +276,7 @@ Management commands result:
 Uninstall result:
 Reinstall result:
 Known issues:
+Overall result: PASS / FAIL
+Tester:
+Date:
 ```
