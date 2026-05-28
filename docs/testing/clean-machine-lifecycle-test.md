@@ -1,7 +1,5 @@
 # SURFACE CDMS Clean Machine Lifecycle Test
 
-Version: `0.6.0-alpha.1`
-
 This checklist validates that SURFACE CDMS can be installed, managed, and uninstalled on a clean machine.
 
 ## Test machine requirements
