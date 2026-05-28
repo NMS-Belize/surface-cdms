@@ -15,31 +15,32 @@ When reporting a bug, include:
 - The full error message or traceback
 - Steps to reproduce the issue
 
-## Local development
 
-Clone the repository:
+## Developer workflow
 
-```bash
-git clone https://github.com/NMS-Belize/surface-cdms.git
-cd surface-cdms
+Developers should follow the detailed workflow guide when creating new features, fixing bugs, or preparing pull requests:
+
+```text
+docs/development/developer-workflow.md
 ```
 
-Set up the installer package:
+In general:
+
+- Do not work directly on `main`.
+- Create a feature or fix branch from the latest `main`.
+- Keep changes focused and easy to review.
+- Test the relevant SURFACE workflow before opening a pull request.
+- Rebuild the installer wheel when changes affect the packaged SURFACE app artifact.
+- Do not commit secrets, runtime files, Docker data, database files, or generated environment files.
+
+If a change modifies files inside the top-level `surface/` directory, rebuild the packaged SURFACE app artifact before building the installer wheel:
 
 ```bash
-cd installer
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e .
+./scripts/build_installer_wheel.sh
 ```
 
-Test the CLI:
+Pull requests should include a clear summary, the type of change, what was tested, and any notes reviewers should pay attention to.
 
-```bash
-surface --version
-surface install
-```
 
 ## Versioning
 
