@@ -47,5 +47,12 @@
         "fields": {
             "name": "System Administrator"
         }
+    },
+    {
+        "model": "auth.group",
+        "pk": 8,
+        "fields": {
+            "name": "Administrator"
+        }
     }
 ]

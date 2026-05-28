@@ -5,6 +5,23 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [0.8.0-beta.2] - 2026-05-27
+
+### Fixed
+
+- Fixed a SURFACE application issue found during beta/TestPyPI validation.
+
+### Verified
+
+- Confirmed package installation from TestPyPI works.
+- Confirmed the SURFACE application bug fix works after rebuilding the packaged app artifact.
+- Confirmed the installer wheel still builds successfully and passes `twine check`.
+
+### Notes
+
+- This release contains a small SURFACE application bug fix before moving to release candidate testing.
+
+
 ## [0.8.0-beta.1] - 2026-05-27
 
 ### Changed
