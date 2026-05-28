@@ -37,8 +37,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 1.2 Admin user created correctly
@@ -58,8 +58,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 1.3 Permissions and roles load correctly
@@ -78,8 +78,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 2. Database
@@ -107,8 +107,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 2.2 Initial fixtures load
@@ -127,7 +127,7 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
+Pass/Fail:
 Notes:
 ```
 
@@ -149,7 +149,7 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
+Pass/Fail:
 Notes:
 ```
 
@@ -170,8 +170,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 3. Core UI
@@ -192,8 +192,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 3.2 Station pages load
@@ -212,8 +212,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 3.3 Forms save correctly
@@ -233,8 +233,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 3.4 Delete/protected-object behavior works
@@ -253,8 +253,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 4. Data ingestion
@@ -281,8 +281,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 4.2 High-frequency ingestion works
@@ -301,8 +301,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 4.3 Staged/historical ingestion works
@@ -321,8 +321,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 4.4 Decoder flow works
@@ -341,8 +341,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: TOA5 decoder working flawlessly.
+Pass/Fail:
+Notes:
 ```
 
 ### 4.5 Quality control runs successfully
@@ -361,8 +361,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 5. Summaries
@@ -383,8 +383,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 5.2 Daily summaries generate
@@ -403,8 +403,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 5.3 High-frequency summaries generate
@@ -423,8 +423,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 6. Exports
@@ -445,8 +445,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 6.2 XLSX export works
@@ -465,8 +465,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 6.3 Large export behavior is acceptable
@@ -487,8 +487,8 @@ Result:
 ```text
 Dataset size:
 Runtime:
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 7. Celery
@@ -511,8 +511,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 7.2 Default queue works
@@ -531,8 +531,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 7.3 Summary queue works
@@ -551,8 +551,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 7.4 Ingest queue works
@@ -571,8 +571,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 7.5 Maintenance queue works
@@ -591,8 +591,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 7.6 Export queue works
@@ -611,8 +611,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 8. Backups
@@ -634,8 +634,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: However backups are taking extremely long times to complete. This is not an immediate issue right now, but it should be looked into for the v1.1.0 release. Also backups are unusually large. Another issue for the v1.1.0 release. An issue on GitHub should definitely be created.
+Pass/Fail:
+Notes:
 ```
 
 ### 8.2 Scheduled backup works
@@ -654,8 +654,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 8.3 Restore from local dump works
@@ -676,8 +676,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 8.4 Restore from FTP dump works
@@ -698,8 +698,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 9. WIS2Box / publishing
@@ -720,8 +720,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 9.2 Publish task runs
@@ -740,8 +740,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 9.3 Cleanup task runs
@@ -760,8 +760,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## 10. Operational checks
@@ -784,8 +784,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 10.2 Restart works
@@ -807,8 +807,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ### 10.3 Containers recover correctly after reboot
@@ -832,8 +832,8 @@ Expected:
 Result:
 
 ```text
-Pass/Fail: Pass
-Notes: N/A
+Pass/Fail:
+Notes:
 ```
 
 ## Final validation result
@@ -841,16 +841,16 @@ Notes: N/A
 Record the final result:
 
 ```text
-Test machine OS: Ubuntu 22.04
-SURFACE CDMS VERSION: 1.0.0
-Docker version: N/A
-Docker Compose version: N/A
-Python version: 3.10
-pipx version: N/A
-Installed SURFACE path: /home/eltech/surface/
-Overall result: Pass
-Blocking issues: None
-Non-blocking issues: One (Question 8.1)
-Tester: Jeremiah Hammond
-Date: May 27 2026
+Test machine OS:
+SURFACE CDMS VERSION:
+Docker version:
+Docker Compose version:
+Python version:
+pipx version:
+Installed SURFACE path:
+Overall result: 
+Blocking issues: 
+Non-blocking issues: 
+Tester:
+Date:
 ```
