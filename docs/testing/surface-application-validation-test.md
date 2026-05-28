@@ -842,6 +842,7 @@ Record the final result:
 
 ```text
 Test machine OS: Ubuntu 22.04
+SURFACE CDMS VERSION: 1.0.0
 Docker version: N/A
 Docker Compose version: N/A
 Python version: 3.10
