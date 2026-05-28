@@ -1,7 +1,5 @@
 # SURFACE CDMS Application Validation Test
 
-Version: `0.7.0-alpha.1`
-
 This checklist validates that the installed SURFACE application works correctly after a successful SURFACE CDMS installation.
 
 This test is different from the clean-machine lifecycle test. The lifecycle test confirms that SURFACE CDMS can be installed, managed, and uninstalled. This application validation test confirms that SURFACE itself behaves correctly after installation.
@@ -843,7 +841,6 @@ Notes: N/A
 Record the final result:
 
 ```text
-SURFACE CDMS version: 0.6.0-alpha.1
 Test machine OS: Ubuntu 22.04
 Docker version: N/A
 Docker Compose version: N/A
@@ -852,7 +849,7 @@ pipx version: N/A
 Installed SURFACE path: /home/eltech/surface/
 Overall result: Pass
 Blocking issues: None
-Non-blocking issues: One
+Non-blocking issues: One (Question 8.1)
 Tester: Jeremiah Hammond
 Date: May 27 2026
 ```
