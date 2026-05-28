@@ -271,11 +271,11 @@ docs/testing/
 Important validation checklists include:
 
 ```text
-docs/testing/clean-machine-lifecycle-test.md
+docs/testing/install-lifecycle-smoke-test.md
 docs/testing/surface-application-validation-test.md
 ```
 
-The clean-machine lifecycle test validates that SURFACE CDMS can be installed, managed, uninstalled, and reinstalled on a clean machine.
+The install-lifecycle smoke test validates that SURFACE CDMS can be installed, managed, uninstalled, and reinstalled on a clean machine.
 
 The SURFACE application validation test validates that the installed SURFACE application itself works correctly after installation.
 
