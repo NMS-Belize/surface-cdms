@@ -5,6 +5,40 @@ All notable changes to SURFACE CDMS will be documented in this file.
 This project follows Semantic Versioning.
 
 
+## [1.0.0] - 2026-05-27
+
+### Added
+
+- Published the first stable SURFACE CDMS release.
+
+### Changed
+
+- Promoted SURFACE CDMS from release candidate to stable `v1.0.0`.
+- Finalized the installer, management CLI, packaged SURFACE app artifact, and release workflow for the first stable release.
+
+### Verified
+
+- Confirmed `v0.9.0-rc.1` passed final release-candidate testing with no blocking issues.
+- Confirmed clean-machine install works.
+- Confirmed SURFACE application validation passed.
+- Confirmed TestPyPI/PyPI-style installation works.
+- Confirmed core CLI commands work:
+  - `surface install`
+  - `surface info`
+  - `surface doctor`
+  - `surface up`
+  - `surface down`
+  - `surface restart`
+  - `surface logs`
+  - `surface containers`
+  - `surface uninstall`
+
+### Notes
+
+- This is the first stable release of SURFACE CDMS.
+- Future feature work, including backup optimization and additional management commands, should continue in `v1.1.0` or later.
+
+
 ## [0.9.0-rc.1] - 2026-05-27
 
 ### Changed

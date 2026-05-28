@@ -6,18 +6,19 @@ This repository contains the SURFACE CDMS installer and management CLI, along wi
 
 ## Current Status
 
-SURFACE CDMS is currently in early alpha development.
+SURFACE CDMS is currently in its first stable release.
 
-Current version: `0.2.0-alpha.3`
+Current version: `1.0.0`
 
-At this stage, this repository contains:
+This repository contains:
 
 - The `surface-cdms` installer package
 - The `surface` command-line tool
 - The SURFACE application source under `surface/`
 - A build process for packaging the SURFACE app into the installer wheel
+- CLI commands for installing, managing, inspecting, and uninstalling SURFACE
 
-## What is included right now?
+## What is included?
 
 The installer provides the `surface` command:
 
@@ -26,9 +27,15 @@ surface --version
 surface info
 surface doctor
 surface install
+surface up
+surface down
+surface restart
+surface logs
+surface containers
+surface uninstall
 ```
 
-The current installer flow uses a packaged SURFACE app artifact instead of cloning the old SURFACE repository.
+The installer uses a packaged same-version SURFACE app artifact instead of cloning the SURFACE application from a separate repository.
 
 ## Recommended Installation Method
 
@@ -54,6 +61,100 @@ Then start the installer:
 surface install
 ```
 
+## Basic Usage
+
+### Start the installer
+
+```bash
+surface install
+```
+
+This starts the SURFACE CDMS installation/configuration process.
+
+The installer asks for the sudo password and validates it before continuing.
+
+### Show version
+
+```bash
+surface --version
+```
+
+### Show installer and installation information
+
+```bash
+surface info
+```
+
+This displays useful information such as:
+
+- Installer version
+- Python executable
+- Python version
+- Operating system
+- Installer package path
+- Install status
+- Installed SURFACE path
+- Docker Compose file
+- Install duration, when available
+
+### Check installer and installation health
+
+```bash
+surface doctor
+```
+
+This checks whether the installer environment appears healthy, including required Python packages, bundled installer assets, Docker availability, Docker Compose availability, and installation metadata when available.
+
+### Show containers
+
+```bash
+surface containers
+```
+
+This shows the Docker Compose containers for the installed SURFACE deployment.
+
+### View logs
+
+```bash
+surface logs --tail 50
+surface logs api --tail 50
+surface logs api --follow
+```
+
+### Start services
+
+```bash
+surface up
+```
+
+### Stop services
+
+```bash
+surface down
+```
+
+### Restart services
+
+```bash
+surface restart
+```
+
+### Uninstall SURFACE CDMS
+
+```bash
+surface uninstall
+```
+
+This stops SURFACE containers, removes Docker resources used by the installation, deletes the installed SURFACE directory, and removes local install metadata.
+
+This command is destructive and requires explicit confirmation.
+
+To keep Docker images during uninstall:
+
+```bash
+surface uninstall --keep-images
+```
+
 ## Local Wheel Testing
 
 During development, build the installer wheel and test it locally with `pipx`.
@@ -67,7 +168,7 @@ From the repository root:
 Then install the built wheel with `pipx`:
 
 ```bash
-pipx install installer/dist/surface_cdms-0.2.0a3-py3-none-any.whl
+pipx install installer/dist/surface_cdms-1.0.0-py3-none-any.whl
 ```
 
 Then test:
@@ -83,7 +184,7 @@ If you already have an older version installed with `pipx`, uninstall it first:
 
 ```bash
 pipx uninstall surface-cdms
-pipx install installer/dist/surface_cdms-0.2.0a3-py3-none-any.whl
+pipx install installer/dist/surface_cdms-1.0.0-py3-none-any.whl
 ```
 
 ## Development Setup
@@ -135,10 +236,11 @@ The recommended development build command is:
 ./scripts/build_installer_wheel.sh
 ```
 
-This script does both required build steps:
+This script does three required build steps:
 
-1. Rebuilds the SURFACE app artifact from `surface/`
-2. Builds the installer wheel from `installer/`
+1. Copies the root `README.md` into `installer/README.md`
+2. Rebuilds the SURFACE app artifact from `surface/`
+3. Builds the installer wheel from `installer/`
 
 The installer wheel is created in:
 
@@ -149,6 +251,8 @@ installer/dist/
 If you want to run the steps manually:
 
 ```bash
+cp README.md installer/README.md
+
 ./scripts/build_surface_artifact.sh
 
 cd installer
@@ -156,61 +260,65 @@ rm -rf build dist *.egg-info src/*.egg-info src/surface_cdms.egg-info
 python -m build
 ```
 
-## Commands
+## Testing
 
-### Show the version
+Testing documents are available under:
 
-```bash
-surface --version
+```text
+docs/testing/
 ```
 
-### Show installer information
+Important validation checklists include:
 
-```bash
-surface info
+```text
+docs/testing/clean-machine-lifecycle-test.md
+docs/testing/surface-application-validation-test.md
 ```
 
-This displays useful information such as:
+The clean-machine lifecycle test validates that SURFACE CDMS can be installed, managed, uninstalled, and reinstalled on a clean machine.
 
-- SURFACE CDMS version
-- Python executable
-- Python version
-- Operating system
-- Installer package path
-
-### Check installer health
-
-```bash
-surface doctor
-```
-
-This checks whether the installer environment appears healthy, including required Python packages and bundled installer assets.
-
-### Start the installer
-
-```bash
-surface install
-```
-
-This starts the SURFACE CDMS installation/configuration process.
-
-The installer will ask for the sudo password and validate it before continuing.
+The SURFACE application validation test validates that the installed SURFACE application itself works correctly after installation.
 
 ## Versioning
 
 SURFACE CDMS follows Semantic Versioning.
 
-Early releases use alpha versions such as:
+Example versions:
 
 ```text
-0.1.0-alpha.1
-0.2.0-alpha.1
-0.2.0-alpha.3
+0.7.0-alpha.2
+0.8.0-beta.1
+1.0.0-rc.1
+1.0.0
 ```
 
 The root `VERSION` file controls the platform version.
 
 The installer package version and the packaged SURFACE app artifact version should always match.
+
+Git tags include the leading `v`, for example:
+
+```text
+v1.0.0
+```
+
+Python package versions do not include the leading `v`, for example:
+
+```text
+1.0.0
+```
+
+Python packaging may normalize prerelease versions. For example:
+
+```text
+1.0.0-rc.1
+```
+
+may appear as:
+
+```text
+1.0.0rc1
+```
 
 Release notes are tracked in `CHANGELOG.md`.
 
@@ -237,6 +345,8 @@ surface-cdms/
 ├── scripts/
 │   ├── build_surface_artifact.sh
 │   └── build_installer_wheel.sh
+├── docs/
+│   └── testing/
 ├── AUTHORS.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
@@ -245,6 +355,14 @@ surface-cdms/
 └── VERSION
 ```
 
+## License
+
+SURFACE CDMS is licensed under the GNU General Public License v3.0.
+
+See `LICENSE` for details.
+
 ## Notes
 
-This project is still in early alpha. The installer package, artifact packaging, and release process are being stabilized before the first stable `v1.0.0` release.
+This is the first stable SURFACE CDMS release.
+
+Future feature work, including backup optimization and additional management commands, should continue in later releases.
