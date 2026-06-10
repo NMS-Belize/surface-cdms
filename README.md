@@ -4,6 +4,8 @@ SURFACE CDMS is a weather and climate data management system.
 
 This repository contains the SURFACE CDMS installer and management CLI, along with the SURFACE application source.
 
+THE SURFACE-CDMS user manual can be downloadeded [HERE](https://drive.google.com/file/d/1yXNMtJANoSxN-3roaM9hh5OzoR3vKAC9/view?usp=drive_link)
+
 ## Current Status
 
 SURFACE CDMS is currently in its first stable release.
