@@ -6,6 +6,19 @@ This repository contains the SURFACE CDMS installer and management CLI, along wi
 
 THE SURFACE-CDMS user manual can be downloaded [HERE](https://drive.google.com/file/d/1yXNMtJANoSxN-3roaM9hh5OzoR3vKAC9/view?usp=drive_link)
 
+# INSTALLATION PROCEDURES
+
+- Install Ubuntu 22.04 desktop version on your preferred hardware.
+- Update Ubuntu and install pipx: sudo apt update && sudo apt install pipx
+- Add pipx to terminal path:  pipx ensurepath && exec $SHELL
+- Install automated installation package: pipx install surface-cdms
+- Install command and wait for installation wizard to appear: surface install
+- Follow installation wizard instructions
+
+<img width="696" height="388" alt="image" src="https://github.com/user-attachments/assets/89106300-8eac-43ca-a599-169b7a919708" />
+
+
+
 ## Current Status
 
 SURFACE CDMS is currently in its first stable release.
