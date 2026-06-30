@@ -167,6 +167,23 @@ surface/**/.DS_Store
 # Additional SURFACE generated/static runtime files
 surface/api/staticfiles/
 surface/api/productionfiles/
+surface/api/LrgsClient/
+surface/api/fixtures/wx_administrativeregion.json
+surface/api/fixtures/wx_country.json
+surface/api/fixtures/wx_countryisocode.json
+surface/api/static/shape.png
 
 # Release/build artifacts
 dist/
+
+# surface installation
+installer/src/surface_cdms/wx_config/ansible/surface_app/artifacts/
+installer/src/surface_cdms/wx_config/ansible/surface_app/env/.env
+installer/src/surface_cdms/wx_config/ansible/surface_app/env/become_password
+installer/src/surface_cdms/wx_config/ansible/surface_app/env/extravars
+installer/src/surface_cdms/wx_config/ansible/surface_app/env/production.env
+installer/src/surface_cdms/wx_config/surface_app/migrations/0001_initial.py
+installer/src/surface_cdms/wx_playbook/env/become_password
+installer/src/surface_cdms/wx_playbook/env/extravars
+surface/.env.example
+surface/api/production.env.example

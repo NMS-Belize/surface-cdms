@@ -1070,7 +1070,7 @@ class Migration(migrations.Migration):
                 variable_id integer NOT NULL,
                 observation_flag_id integer,
                 is_daily boolean DEFAULT false NOT NULL,
-                remarks character varying(256),
+                remarks TEXT,
                 observer character varying(256),
                 code character varying(60),
                 ml_flag integer DEFAULT 1
