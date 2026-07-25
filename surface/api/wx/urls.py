@@ -52,7 +52,7 @@ urlpatterns = [
     path('api/agromet/aquacrop/run/', views.AquacropModelRunView.as_view()),
     path('api/agromet/aquacrop/available/', views.AquacropAvailableDataView.as_view()),
     path('api/crops/', views.CropViewSet.as_view({'get': 'list'})),
-    path('station_geo_features/<str:lon>/<str:lat>', views.station_geo_features), # country hard coded to Belize...fix this
+    path('station_geo_features/<str:lon>/<str:lat>', views.station_geo_features),
     path('decoders/', views.DecoderList.as_view()),
     # ----------- #
     path('api/', include(router.urls)),

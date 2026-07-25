@@ -583,8 +583,8 @@
               inset
               :loading="loadBasemap"
               v-model="showBasemap"
-              @change="toggleDistrictsOverlay()"
-              label="Districts"
+              @change="toggleRegionsOverlay()"
+              label="Administrative Regions"
             ></v-switch>
           </v-list-item>
           <!-- <v-list-item>
@@ -772,7 +772,7 @@
 
       getGeoJson: {
         watershed: () => {return axios.get("{% static 'Watersheds.geojson' %}")},
-        districts: () => {return axios.get("{% static 'Basemap.geojson' %}")},
+        regions: () => {return axios.get("{% static 'Basemap.geojson' %}")},
         nationalWaters: () => {return axios.get("{% static 'NationalWaters.geojson' %}")},
         river: () => {return axios.get("{% static 'Rivers.geojson' %}")},
         groundwater: () => {return axios.get("{% static 'GWP_Campur.geojson' %}")},
@@ -1060,20 +1060,20 @@
         }
       },
       
-      toggleDistrictsOverlay() {
+      toggleRegionsOverlay() {
         if (!this.Basemap_geojson) {
           // display loading icon
           this.loadBasemap = true;
 
-          this.getGeoJson.districts().then(data => {
+          this.getGeoJson.regions().then(data => {
             this.Basemap_geojson = data.data;
 
           }).catch(error => {
             // if an error occurs alert the user
             if (error.response.status == '404') {
-              this.showAlert("District Shapefile Not Found");
+              this.showAlert("Administrative Region Shapefile Not Found");
             } else {
-              this.showAlert(`Error Occured Accessing District Shapefile - ${error.response.status}`);
+              this.showAlert(`Error Occured Accessing Administrative Region Shapefile - ${error.response.status}`);
             }
 
             // reset the button

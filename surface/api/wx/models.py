@@ -1104,15 +1104,6 @@ class PeriodicJob(BaseModel):
         ordering = ('station', 'periodic_job_type',)
 
 
-
-class District(models.Model):
-    id_field = models.IntegerField()
-    district = models.CharField(max_length=64)
-    acres = models.FloatField()
-    hectares = models.FloatField()
-    geom = models.MultiPolygonField(srid=4326)
-
-
 class NoaaTransmissionType(models.Model):
     acronym = models.CharField(max_length=5, unique=True)
     description = models.CharField(max_length=255)
