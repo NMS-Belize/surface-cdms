@@ -15,7 +15,7 @@ from django.db import connection
 from rasterio import RasterioIOError
 
 from wx.enums import QualityFlagEnum
-from wx.models import Watershed, District, StationVariable
+from wx.models import Watershed, StationVariable
 
 mpl.use('Agg')
 import matplotlib.pyplot as plt
@@ -62,22 +62,6 @@ def get_watershed(lon, lat):
         return 'NOT FOUND'
 
     return watershed.watershed
-
-
-def get_district(lon, lat):
-    pnt = Point(lon, lat)
-
-    try:
-
-        district = District.objects.get(geom__contains=pnt)
-
-    except District.DoesNotExist as e:
-
-        logging.exception(e)
-
-        return 'NOT FOUND'
-
-    return district.district
 
 
 def parse_bool_value(value):

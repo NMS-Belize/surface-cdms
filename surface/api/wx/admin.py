@@ -157,12 +157,6 @@ class WatershedAdmin(admin.ModelAdmin):
     search_fields = ("watershed",)
 
 
-@admin.register(models.District)
-class DistrictAdmin(admin.ModelAdmin):
-    list_display = ("district", "hectares",)
-    search_fields = ("district",)
-
-
 @admin.register(models.NoaaTransmissionType)
 class NoaaTransmissionTypeAdmin(admin.ModelAdmin):
     list_display = ("acronym", "description",)

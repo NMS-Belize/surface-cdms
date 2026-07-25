@@ -15,9 +15,9 @@
                 <v-autocomplete
                   item-text="name"
                   item-value="name"
-                  v-model="filter.stationDistrict"
-                  :items="stationDistrictList"
-                  label="District"
+                  v-model="filter.stationAdminRegion"
+                  :items="stationAdminRegionList"
+                  label="Administrative Region"
                   autocomplete="off"
                   clearable
                 ></v-autocomplete>
@@ -528,9 +528,9 @@
             {id: {{ station_watershed.id }}, name: "{{ station_watershed.watershed }}" },
             {% endfor %}
           ],
-          stationDistrictList: [
-            {% for station_district in station_district_list %}
-            {id: {{ station_district.id }}, name: "{{ station_district.name }}" },
+          stationAdminRegionList: [
+            {% for station_admin_region in station_admin_region_list %}
+            {id: {{ station_admin_region.id }}, name: "{{ station_admin_region.name }}" },
             {% endfor %}
           ],
         };
@@ -539,8 +539,8 @@
         stationList () {
           let filteredStations = this.stations;
 
-          if(this.filter.stationDistrict)
-            filteredStations = filteredStations.filter(station => station.region == this.filter.stationDistrict);
+          if(this.filter.stationAdminRegion)
+            filteredStations = filteredStations.filter(station => station.region == this.filter.stationAdminRegion);
 
           if(this.filter.stationWatershed)
             filteredStations = filteredStations.filter(station => station.watershed == this.filter.stationWatershed);
