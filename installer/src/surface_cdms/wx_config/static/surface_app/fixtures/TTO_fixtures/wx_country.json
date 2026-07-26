@@ -1,0 +1,13 @@
+[
+    {
+        "model": "wx.country", 
+        "pk": 175, 
+        "fields": {
+            "created_at": "2015-01-21T17:01:28Z", 
+            "updated_at": "2022-04-13T15:24:34.390Z", 
+            "notation": "TTO", 
+            "name": "Trinidad and Tobago", 
+            "description": "Trinidad and Tobago"
+        }
+    }
+]

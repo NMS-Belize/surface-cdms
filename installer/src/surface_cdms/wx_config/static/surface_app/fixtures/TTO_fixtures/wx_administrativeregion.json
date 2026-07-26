@@ -1,0 +1,178 @@
+[
+  {
+    "model": "wx.administrativeregion",
+    "pk": 1,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Couva-Tabaquite-Talparo",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 2,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Diego Martin",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 3,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Eastern Tobago",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 4,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Penal-Debe",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 5,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Princes Town",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 6,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Rio Claro-Mayaro",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 7,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Sangre Grande",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 8,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "San Juan-Laventille",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 9,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Siparia",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 10,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Tunapuna-Piarco",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 11,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Western Tobago",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 12,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Port of Spain",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 13,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "San Fernando",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 14,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Arima",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 15,
+    "fields": {
+      "created_at": "2015-01-21T17:01:28Z",
+      "updated_at": "2015-01-21T17:01:28Z",
+      "name": "Point Fortin",
+      "administrative_region_type_id": 4,
+      "country_id": 175
+    }
+  },
+  {
+    "model": "wx.administrativeregion",
+    "pk": 16,
+    "fields": {
+      "created_at": "2025-03-30T01:49:31.532Z",
+      "updated_at": "2025-03-30T01:49:31.532Z",
+      "name": "Not Specified",
+      "administrative_region_type_id": 5,
+      "country_id": 175
+    }
+  }
+]
