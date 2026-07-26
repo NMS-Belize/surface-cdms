@@ -1,0 +1,236 @@
+[
+    {
+        "model": "wx.Manufacturer",
+        "pk": 1,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Vaisala"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 2,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "U-L"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 3,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Trimble"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 4,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Sunsaver Morning star"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 5,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Sierra Wireless"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 6,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Rotronic"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 7,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Renco"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 8,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "RM Young"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 9,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Quincy Lab"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 10,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "NESA"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 11,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Hyquest Solution"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 12,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Hypersolution FCD"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 13,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "HOBO"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 14,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "GILL"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 15,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "EKO"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 16,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Campbell Scientific"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 17,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "COAX"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 18,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "CASELLA"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 19,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Apogee"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 20,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "OTT Hydromet"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 21,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Kipp & Zonen"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 22,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Thies"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 23,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Sutron"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 24,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Davis Instruments"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 25,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Met One Instruments"
+        }
+    },
+    {
+        "model": "wx.Manufacturer",
+        "pk": 26,
+        "fields": {
+            "created_at" : "2023-06-26T16:30:26.855Z",
+            "updated_at" : "2023-06-26T16:30:26.855Z",
+            "name" : "Lufft"
+        }
+    }
+]
