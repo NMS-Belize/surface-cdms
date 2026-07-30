@@ -1,5 +1,6 @@
 import json
 import os
+import yaml
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -146,124 +147,208 @@ def update_install_metadata_status(status):
     with open(surface_cdms_install_metadata_path, "w") as metadata_file:
         json.dump(metadata, metadata_file, indent=2)
         metadata_file.write("\n")
-        
 
+
+# Mainly used for playbook execution.
 # mainly for used in the playbook execution
 def write_out_surface_variables(form):
-    # write out surface variables
-    # using 'a' instead of 'w' because the installer writes the SURFACE artifact path here. 
-    # Also the installer clears this file before every "surface install" run
-    with open(variable_file_path, 'a') as vf:
-        # write with_data
-        vf.write(f'\n"with_data": "{form.cleaned_data["with_data"]}"\n')
+    """
+        Append SURFACE installation variables to the Ansible extra-vars YAML file.
 
-        # User chooses the parent directory where SURFACE should be installed.
-        surface_install_parent_path = form.cleaned_data["surface_repo_path"].strip()
+        Append mode is used because the installer writes the SURFACE artifact path
+        to this file separately. The installer clears the file before each
+        `surface install` run.
+    """
 
-        if not surface_install_parent_path.endswith("/"):
-            surface_install_parent_path += "/"
+    # holds vars to be written out
+    surface_variables_dict = {}
 
-        # The artifact contains a top-level "surface/" folder, so after extraction
-        # the actual SURFACE repo/app path will be parent + "surface/".
-        surface_repo_path = f"{surface_install_parent_path}surface/"
+    # ------------------------------------------------------------------
+    # Installation path configuration
+    # ------------------------------------------------------------------
 
-        vf.write(f'"surface_install_parent_path": "{surface_install_parent_path}"\n')
-        vf.write(f'"surface_repo_path": "{surface_repo_path}"\n')
+    # User chooses the parent directory where SURFACE should be installed.
+    surface_install_parent_path = form.cleaned_data["surface_repo_path"].strip()
 
-        # Save install metadata for future CLI management commands.
-        write_install_metadata(surface_repo_path)
+    # User chooses the parent directory where SURFACE should be installed.
+    surface_install_parent_path = form.cleaned_data["surface_repo_path"].strip()
 
-        # get dumps via ftp
-        ftp_host = form.cleaned_data['dump_ftp_host']
-        ftp_port = form.cleaned_data['dump_ftp_port']
-        ftp_username = form.cleaned_data['dump_ftp_username']
-        ftp_password = form.cleaned_data['dump_ftp_password']
-        ftp_data_dump = form.cleaned_data['dump_ftp_dump_path']
-        
-        if ftp_host and ftp_port and ftp_username and ftp_password and ftp_data_dump:
-            vf.write('"dump_via_ftp": "true"\n')
+    if not surface_install_parent_path.endswith("/"):
+        surface_install_parent_path += "/"
 
-            vf.write(f'"ftp_host": "{ftp_host}"\n')
-            vf.write(f'"ftp_port": "{ftp_port}"\n')
-            vf.write(f'"ftp_username": "{ftp_username}"\n')
-            vf.write(f'"ftp_password": "{ftp_password}"\n')
-            vf.write(f'"ftp_data_dump": "{ftp_data_dump}"\n')
+    # The artifact contains a top-level "surface/" folder, so after extraction
+    # the actual SURFACE repo/app path will be parent + "surface/".
+    surface_repo_path = f"{surface_install_parent_path}surface/"
 
-            ##########################################################################################
+    # update the var dict
+    surface_variables_dict.update(
+        {
+            "with_data": str(form.cleaned_data["with_data"]),
+            "surface_install_parent_path": surface_install_parent_path,
+            "surface_repo_path": surface_repo_path,
+        }
+    )
 
-            # write data dump filename
-            data_dump_filename = ftp_data_dump.strip("/").split("/")[-1]
+    # Save install metadata for future CLI management commands.
+    write_install_metadata(surface_repo_path)
 
-            vf.write(f'"data_file_name": "{data_dump_filename}"\n')
+    # ------------------------------------------------------------------
+    # Data dump configuration
+    # ------------------------------------------------------------------
 
-            # write data dump file path
-            vf.write(f'"data_path": "{surface_repo_path}/surface/backup_restore_dumps/{data_dump_filename}"\n')
+    ftp_host = form.cleaned_data["dump_ftp_host"]
+    ftp_port = form.cleaned_data["dump_ftp_port"]
+    ftp_username = form.cleaned_data["dump_ftp_username"]
+    ftp_password = form.cleaned_data["dump_ftp_password"]
+    ftp_data_dump = form.cleaned_data["dump_ftp_dump_path"]
 
-        else:
-            vf.write('"dump_via_ftp": "false"\n')
-            
-            ##########################################################################################
-            
-            # write data dump filename
-            data_dump_filename = form.cleaned_data["data_path"].strip("/").split("/")[-1]
+    dump_via_ftp = all(
+        [
+            ftp_host,
+            ftp_port,
+            ftp_username,
+            ftp_password,
+            ftp_data_dump,
+        ]
+    )
 
-            vf.write(f'"data_file_name": "{data_dump_filename}"\n')
+    if dump_via_ftp:
+        data_dump_filename = ftp_data_dump.strip("/").split("/")[-1]
 
-            # write data dump file path
-            vf.write(f'"data_path": "{form.cleaned_data["data_path"]}"\n')
-        
-        
-        # write admin
-        vf.write(f'"admin": "{form.cleaned_data["admin"].strip()}"\n')
-        
-        # write admin_email
-        vf.write(f'"admin_email": "{form.cleaned_data["admin_email"].strip()}"\n')
-        
-        # write admin_password
-        vf.write(f'"admin_password": "{form.cleaned_data["admin_password"]}"\n')
-        
-        # path to production.env file
-        vf.write(f'"prod_env_path": "{prod_env_file_path}"\n')
+        surface_variables_dict.update(
+            {
+                "dump_via_ftp": "true",
+                "ftp_host": ftp_host,
+                "ftp_port": ftp_port,
+                "ftp_username": ftp_username,
+                "ftp_password": ftp_password,
+                "ftp_data_dump": ftp_data_dump,
+                "data_file_name": data_dump_filename,
+                "data_path": os.path.join(
+                    surface_repo_path,
+                    "backup_restore_dumps",
+                    data_dump_filename,
+                ),
+            }
+        )
+    else:
+        data_path = form.cleaned_data["data_path"]
+        data_dump_filename = data_path.strip("/").split("/")[-1]
 
-        # path to .env file
-        vf.write(f'"env_path": "{env_file_path}"\n')
+        surface_variables_dict.update(
+            {
+                "dump_via_ftp": "false",
+                "data_file_name": data_dump_filename,
+                "data_path": data_path,
+            }
+        )
 
-        iso3_code = form.cleaned_data["selected_country"]
+    # ------------------------------------------------------------------
+    # Administrator configuration
+    # ------------------------------------------------------------------
 
-        # write path to countries spatial analysis files
-        vf.write(f'"spatial_analysis_files_path": "{os.path.join(spatial_analysis_path, f"{iso3_code}_spatial_analysis")}"\n')
+    surface_variables_dict.update(
+        {
+            "admin": form.cleaned_data["admin"].strip(),
+            "admin_email": form.cleaned_data["admin_email"].strip(),
+            "admin_password": form.cleaned_data["admin_password"],
+        }
+    )
 
-        # write path to countries fixture files
-        vf.write(f'"fixtures_files_path": "{os.path.join(fixtures_path, f"{iso3_code}_fixtures")}"\n')
+    # ------------------------------------------------------------------
+    # Environment file paths
+    # ------------------------------------------------------------------
 
-        # writing a variable called enable_lrgs as true if the user entered appropriate LRGS details
-        lrgs_input_username = str(form.cleaned_data["lrgs_user"].strip())
-        lrgs_input_password = str(form.cleaned_data["lrgs_password"].strip())
+    surface_variables_dict.update(
+        {
+            "prod_env_path": prod_env_file_path,
+            "env_path": env_file_path,
+        }
+    )
 
-        # check if the user entered a value for LRGS username and password 
-        if lrgs_input_password and lrgs_input_username:
-            vf.write('"enable_lrgs": "true"\n')
+    # ------------------------------------------------------------------
+    # Country-specific files
+    # ------------------------------------------------------------------
 
-            # SETUP LRGS installation information
-            # writing to variable file path to LRGSClient folder and other neccessary files (on the machine recieving SURFACE)
-            LRGSClient_path = os.path.join(str(form.cleaned_data['surface_repo_path'].strip()), 'surface', 'api', 'LrgsClient',)
-            lrgs_decj = os.path.join(LRGSClient_path, 'bin', 'decj',)
-            lrgs_getDcpMessages = os.path.join(LRGSClient_path, 'bin', 'getDcpMessages',)
-            lrgs_msgaccess = os.path.join(LRGSClient_path, 'bin', 'msgaccess',)
-            lrgs_rtstat = os.path.join(LRGSClient_path, 'bin', 'rtstat',)
+    iso3_code = form.cleaned_data["selected_country"]
 
-            vf.write(f'"LRGSClient_path": "{LRGSClient_path}"\n')
-            vf.write(f'"lrgs_decj": "{lrgs_decj}"\n')
-            vf.write(f'"lrgs_getDcpMessages": "{lrgs_getDcpMessages}"\n')
-            vf.write(f'"lrgs_msgaccess": "{lrgs_msgaccess}"\n')
-            vf.write(f'"lrgs_rtstat": "{lrgs_rtstat}"\n')
+    surface_variables_dict.update(
+        {
+            "spatial_analysis_files_path": os.path.join(
+                spatial_analysis_path,
+                f"{iso3_code}_spatial_analysis",
+            ),
+            "fixtures_files_path": os.path.join(
+                fixtures_path,
+                f"{iso3_code}_fixtures",
+            ),
+        }
+    )
 
-            # writing the path to the lrgs  .jar file and the installation script on the host machine
-            vf.write(f'"lrgs_install_jar": "{lrgs_install_jar}"\n')
-            vf.write(f'"lrgs_installation_script": "{lrgs_installation_script}"\n')
+    # ------------------------------------------------------------------
+    # LRGS configuration
+    # ------------------------------------------------------------------
 
-        else:
-            vf.write('"enable_lrgs": "false"\n')
+    lrgs_input_username = str(form.cleaned_data["lrgs_user"]).strip()
+    lrgs_input_password = str(form.cleaned_data["lrgs_password"]).strip()
+
+    enable_lrgs = bool(
+        lrgs_input_username
+        and lrgs_input_password
+    )
+
+    surface_variables_dict["enable_lrgs"] = "true" if enable_lrgs else "false"
+
+    if enable_lrgs:
+        lrgs_client_path = os.path.join(
+            surface_repo_path,
+            "api",
+            "LrgsClient",
+        )
+
+        surface_variables_dict.update(
+            {
+                "LRGSClient_path": lrgs_client_path,
+                "lrgs_decj": os.path.join(
+                    lrgs_client_path,
+                    "bin",
+                    "decj",
+                ),
+                "lrgs_getDcpMessages": os.path.join(
+                    lrgs_client_path,
+                    "bin",
+                    "getDcpMessages",
+                ),
+                "lrgs_msgaccess": os.path.join(
+                    lrgs_client_path,
+                    "bin",
+                    "msgaccess",
+                ),
+                "lrgs_rtstat": os.path.join(
+                    lrgs_client_path,
+                    "bin",
+                    "rtstat",
+                ),
+                "lrgs_install_jar": lrgs_install_jar,
+                "lrgs_installation_script": lrgs_installation_script,
+            }
+        )
+
+
+    # ------------------------------------------------------------------
+    # Safely append the variables as valid YAML
+    # ------------------------------------------------------------------
+
+    with open(variable_file_path, "a", encoding="utf-8") as variable_file:
+        variable_file.write("\n")
+
+        yaml.safe_dump(
+            surface_variables_dict,
+            variable_file,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
 
 
 def write_out_production_variables(form):

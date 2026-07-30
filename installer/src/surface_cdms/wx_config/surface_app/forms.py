@@ -1,5 +1,9 @@
 from django import forms
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext as _
+
 from .models import InstallType
+
 import json
 
 class SurfaceConfigurationForm(forms.Form):
@@ -36,6 +40,18 @@ class SurfaceConfigurationForm(forms.Form):
                 widget=forms.TextInput(attrs={'class': 'form-control',})
             )
 
+    def clean(self):
+        cleaned_data = super().clean()
+
+        password = cleaned_data.get("admin_password")
+        confirm_password = cleaned_data.get("confirm_admin_password")
+
+        # ensure passwords match
+        if password and confirm_password and password != confirm_password:
+            raise ValidationError(_("Admin passwords do not match!"), code="invalid")
+
+        return cleaned_data
+
     # SURFACE port
     surface_port = forms.IntegerField(
         label="SURFACE Port:", 
@@ -71,7 +87,11 @@ class SurfaceConfigurationForm(forms.Form):
         required=True, 
         widget=forms.PasswordInput(attrs={'class': 'form-control',})
     )
-    
+    confirm_admin_password = forms.CharField(
+        label="Confirm Admin Password:", 
+        required=True, 
+        widget=forms.PasswordInput(attrs={'class': 'form-control',})
+    )
     # New form fields
     lrgs_user = forms.CharField(
         label="LRGS User:", 
