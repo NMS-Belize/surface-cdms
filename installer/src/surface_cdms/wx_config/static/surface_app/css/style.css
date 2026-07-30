@@ -830,3 +830,8 @@ input:checked + .slider:before {
 .version-label:hover .version-flag {
   opacity: 1;
 }
+
+/* password validation message */
+#password-match-message {
+  font-size: 13px;
+}

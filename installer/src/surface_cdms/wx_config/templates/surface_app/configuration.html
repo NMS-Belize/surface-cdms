@@ -189,6 +189,16 @@
                 {{ form.admin_password }} 
                 <span class="password-toggle-icon"><i class="fas fa-eye"> Show Password</i></span>
               </div>
+
+              <!-- admin password confirmation -->
+              <label for="{{ form.confirm_admin_password.id_for_label }}"><span class="required"></span>{{ form.confirm_admin_password.label }}</label>
+              <div class="password-field">
+                {{ form.confirm_admin_password }} 
+                <span class="password-toggle-icon"><i class="fas fa-eye"> Show Password</i></span>
+
+                <!-- passwords validation -->
+                <p id="password-match-message"></p>
+              </div>
               
               <!-- admin email -->
               <label for="{{ form.admin_email.id_for_label }}"><span class="required"></span>{{ form.admin_email.label }}</label>
@@ -525,9 +535,16 @@
     <!-- script information -->
     <script type="text/javascript">
       // Automatically populate surface_repo_path with users home directory only on local installs
-      "{% if install_type != 'remote'  %}"
+      {% if install_type != 'remote'  %}
         document.querySelector('[name="surface_repo_path"]').value = "{{ user_home_dir }}";
-      "{% endif %}"
+      {% endif %}
+
+      // log alert that an alert if passwords do not match
+      {% if form.non_field_errors %}
+          console.log("{{ form.non_field_errors.as_text|escapejs }}");
+
+          alert("{{ form.non_field_errors.as_text|escapejs }}");
+      {% endif %}
 
       // Async function to handle the loading and displaying of content
       async function handleLoading() {

@@ -1,5 +1,6 @@
 // Globals
 var map = null;
+var admin_passwords_match = false;
 
 // Automatically populate timezone based on the users location
 // document.addEventListener("DOMContentLoaded", function() {
@@ -249,6 +250,7 @@ function check_filled_fields() {
     var admin_name_entry = document.querySelector("#id_admin").value;
     var admin_email_entry = document.querySelector("#id_admin_email").value;
     var admin_password_entry = document.querySelector("#id_admin_password").value;
+    var admin_confirm_password_entry = document.querySelector("#id_confirm_admin_password").value;
     var timezone_name_entry = document.querySelector("#id_timezone_name").value;
     var timezone_offset_entry = document.querySelector("#id_timezone_offset").value;
     var map_lat_entry = document.querySelector("#id_map_latitude").value;
@@ -305,11 +307,11 @@ function check_filled_fields() {
 
 
     // Ensure all requred information is filled
-    if(encryption_key_entry && admin_name_entry && admin_email_entry && admin_password_entry && 
+    if(encryption_key_entry && admin_name_entry && admin_email_entry && admin_password_entry && admin_confirm_password_entry &&
         timezone_name_entry && timezone_offset_entry && map_lat_entry && map_lng_entry && 
         map_zoom_entry && spatial_init_lat_entry && spatial_init_lng_entry && spatial_fin_lat_entry && 
         spatial_fin_lng_entry && topic_hierarchy_entry && selected_country_entry && surface_install_path_entry &&
-        surface_database_password_entry && surface_port_entry && surface_secret_key_entry ) 
+        surface_database_password_entry && surface_port_entry && surface_secret_key_entry && admin_passwords_match) 
     {
         // check if lrgs option has been enabled. If it has, confirm the lrgs user name and lrgs password are filled
         if (enable_lrgs_toggle) {
@@ -609,3 +611,31 @@ document.addEventListener('click', (e) => {
     }
 });
   
+
+// Validate admin password
+const adminPasswordInput = document.getElementById("id_admin_password");
+const confirmAdminPasswordInput = document.getElementById("id_confirm_admin_password");
+const message = document.getElementById("password-match-message");
+
+function validatePasswords() {
+    const password = adminPasswordInput.value;
+    const confirmPassword = confirmAdminPasswordInput.value;
+
+    if (confirmPassword === "") {
+        message.textContent = "";
+        return;
+    }
+
+    if (password === confirmPassword) {
+        message.textContent = "Passwords match.";
+        message.style.color = "green";
+        admin_passwords_match = true; // one of the checks for the save config btn to show up
+    } else {
+        message.textContent = "Passwords do not match.";
+        message.style.color = "red";
+        admin_passwords_match = false; // one of the checks for the save config btn to show up
+    }
+}
+
+confirmAdminPasswordInput.addEventListener("input", validatePasswords);
+adminPasswordInput.addEventListener("input", validatePasswords);

@@ -402,10 +402,26 @@
 
         - name: Create Admin User
           become: true
-          ansible.builtin.shell: docker compose exec api sh -c "export DJANGO_SUPERUSER_USERNAME='{{ admin }}' && export DJANGO_SUPERUSER_EMAIL='{{ admin_email }}' && export DJANGO_SUPERUSER_PASSWORD='{{ admin_password }}' && python manage.py createsuperuser --noinput"
+          no_log: true
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - exec
+              - -T
+              - -e
+              - DJANGO_SUPERUSER_USERNAME={{ admin }}
+              - -e
+              - DJANGO_SUPERUSER_EMAIL={{ admin_email }}
+              - -e
+              - DJANGO_SUPERUSER_PASSWORD={{ admin_password }}
+              - api
+              - python
+              - manage.py
+              - createsuperuser
+              - --noinput
           args:
             chdir: "{{ surface_repo_path }}"
-
 
 
     # Restart all containers and services
