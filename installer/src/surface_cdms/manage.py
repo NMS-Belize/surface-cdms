@@ -212,7 +212,7 @@ def load_install_metadata() -> dict:
     return metadata
 
 
-def run_docker_compose(args: list[str]) -> int:
+def run_docker_compose(args: list[str], sudo: bool = False) -> int:
     """
     Run a docker compose command inside the installed SURFACE directory.
     """
@@ -258,10 +258,10 @@ def show_logs(service: str | None = None, follow: bool = False, tail: int | None
     return run_docker_compose(args)
 
 
-def start_services() -> int:
+def start_services(sudo: bool = False) -> int:
     """Start SURFACE services."""
 
-    return run_docker_compose(["up", "-d"])
+    return run_docker_compose(["up", "-d"], sudo)
 
 
 def stop_services() -> int:

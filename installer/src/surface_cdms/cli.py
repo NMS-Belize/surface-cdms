@@ -70,10 +70,15 @@ def doctor():
     
 
 @main.command()
-def up():
+@click.option(
+    "--sudo",
+    is_flag=True,
+    help="Run with escalated priviledges the command to start SURFACE Docker services.",
+)
+def up(sudo):
     """Start SURFACE Docker services."""
 
-    raise SystemExit(start_services())
+    raise SystemExit(start_services(sudo))
 
 
 @main.command()
