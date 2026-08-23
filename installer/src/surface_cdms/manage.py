@@ -11,7 +11,7 @@ import click
 METADATA_PATH = Path.home() / ".surface-cdms" / "install.json"
 
 
-def sudo_remove_directory(path: Path, sudo_password: str) -> int:
+def sudo_remove_directory(path: Path, sudo: str) -> int:
     """
     Remove a directory using sudo.
 
@@ -29,7 +29,7 @@ def sudo_remove_directory(path: Path, sudo_password: str) -> int:
 
     result = subprocess.run(
         command,
-        input=f"{sudo_password}\n",
+        input=f"{sudo}\n",
         text=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
@@ -79,7 +79,7 @@ def validate_surface_install_path(surface_repo_path: Path) -> None:
         )
 
 
-def uninstall_surface(sudo_password: str, remove_images: bool = True) -> int:
+def uninstall_surface(sudo: str, remove_images: bool = True) -> int:
     """
     Uninstall SURFACE CDMS from the local machine.
 
@@ -102,8 +102,8 @@ def uninstall_surface(sudo_password: str, remove_images: bool = True) -> int:
 
     click.echo(click.style("SURFACE CDMS uninstall", fg="red", bold=True))
     click.echo("")
-    click.echo("This will permanently remove SURFACE CDMS from:")
-    click.echo(str(surface_repo_path))
+    click.echo(click.style("This will permanently remove SURFACE CDMS from:", fg="red"))
+    click.echo(click.style(str(surface_repo_path), fg="blue"))
     click.echo("")
     click.echo("This will also stop containers and remove Docker Compose volumes.")
     click.echo("")
@@ -128,6 +128,8 @@ def uninstall_surface(sudo_password: str, remove_images: bool = True) -> int:
         compose_down_args.extend(["--rmi", "all"])
 
     command = [
+        "sudo",
+        "-S",
         "docker",
         "compose",
         "-f",
@@ -139,7 +141,14 @@ def uninstall_surface(sudo_password: str, remove_images: bool = True) -> int:
 
     click.echo(click.style("Stopping and removing Docker services...", fg="yellow"))
 
-    down_code = subprocess.call(command)
+    comand_exec_result = subprocess.run(
+            command,
+            input=f"{sudo}\n",
+            text=True,
+            check=False,
+        )
+
+    down_code = comand_exec_result.returncode
 
     if down_code != 0:
         raise click.ClickException(
@@ -148,7 +157,7 @@ def uninstall_surface(sudo_password: str, remove_images: bool = True) -> int:
 
     click.echo(click.style("Deleting SURFACE install directory...", fg="yellow"))
 
-    sudo_remove_directory(surface_repo_path, sudo_password)
+    sudo_remove_directory(surface_repo_path, sudo)
 
     if METADATA_PATH.exists():
         METADATA_PATH.unlink()
@@ -212,7 +221,7 @@ def load_install_metadata() -> dict:
     return metadata
 
 
-def run_docker_compose(args: list[str]) -> int:
+def run_docker_compose(args: list[str], sudo: str | None = None) -> int:
     """
     Run a docker compose command inside the installed SURFACE directory.
     """
@@ -222,26 +231,49 @@ def run_docker_compose(args: list[str]) -> int:
     surface_repo_path = Path(metadata["surface_repo_path"])
     compose_file = Path(metadata["compose_file"])
 
-    command = [
-        "docker",
-        "compose",
-        "-f",
-        str(compose_file),
-        "--project-directory",
-        str(surface_repo_path),
-        *args,
-    ]
+    if sudo:
+        command = [
+            "sudo",
+            "-S",
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "--project-directory",
+            str(surface_repo_path),
+            *args,
+        ]
 
-    return subprocess.call(command)
+        docker_compose_result = subprocess.run(
+                command,
+                input=f"{sudo}\n",
+                text=True,
+                check=False,
+            )
+
+        return docker_compose_result.returncode
+
+    else:
+        command = [
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "--project-directory",
+            str(surface_repo_path),
+            *args,
+        ]
+
+        return subprocess.call(command)
 
 
-def show_containers() -> int:
+def show_containers(sudo: str | None = None) -> int:
     """Show SURFACE containers."""
 
-    return run_docker_compose(["ps"])
+    return run_docker_compose(["ps"], sudo)
 
 
-def show_logs(service: str | None = None, follow: bool = False, tail: int | None = None) -> int:
+def show_logs(service: str | None = None, follow: bool = False, tail: int | None = None, sudo: str | None = None) -> int:
     """Show SURFACE Docker Compose logs."""
 
     args = ["logs"]
@@ -255,27 +287,28 @@ def show_logs(service: str | None = None, follow: bool = False, tail: int | None
     if service:
         args.append(service)
 
-    return run_docker_compose(args)
+    return run_docker_compose(args, sudo)
 
 
-def start_services() -> int:
+def start_services(sudo: str | None = None) -> int:
     """Start SURFACE services."""
 
-    return run_docker_compose(["up", "-d"])
+    return run_docker_compose(["up", "-d"], sudo)
 
 
-def stop_services() -> int:
+def stop_services(sudo: str | None = None) -> int:
     """Stop SURFACE services."""
 
-    return run_docker_compose(["down"])
+    return run_docker_compose(["down"], sudo)
 
 
-def restart_services() -> int:
+def restart_services(sudo: str | None = None) -> int:
     """Restart SURFACE services."""
 
-    stop_code = stop_services()
+    stop_code = stop_services(sudo)
 
+    # if stop does not return 0 do not proceed.
     if stop_code != 0:
         return stop_code
 
-    return start_services()
+    return start_services(sudo)

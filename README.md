@@ -128,6 +128,8 @@ surface containers
 
 This shows the Docker Compose containers for the installed SURFACE deployment.
 
+This command can be executed with escalated priviledges using the `--sudo` flag.
+
 ### View logs
 
 ```bash
@@ -136,11 +138,15 @@ surface logs api --tail 50
 surface logs api --follow
 ```
 
+This command can be executed with escalated priviledges using the `--sudo` flag.
+
 ### Start services
 
 ```bash
 surface up
 ```
+
+This command can be executed with escalated priviledges using the `--sudo` flag.
 
 ### Stop services
 
@@ -148,11 +154,15 @@ surface up
 surface down
 ```
 
+This command can be executed with escalated priviledges using the `--sudo` flag.
+
 ### Restart services
 
 ```bash
 surface restart
 ```
+
+This command can be executed with escalated priviledges using the `--sudo` flag.
 
 ### Uninstall SURFACE CDMS
 
