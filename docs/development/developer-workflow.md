@@ -325,17 +325,19 @@ surface/ changes = not reflected by editable install
 
 This distinction is very important.
 
+
+
 ## 7. SURFACE app development workflows
 
-There are two main ways to develop the SURFACE application itself.
+There are two main workflows for developing and testing the SURFACE application.
 
 ### Option A: Packaged artifact workflow
 
 This is the release-style workflow.
 
-Use this when you want to test the exact process that users will experience.
+Use this workflow when you want to test the same installation process that end users will experience.
 
-The packaged artifact workflow is:
+From the repository root:
 
 ```bash
 ./scripts/build_installer_wheel.sh
@@ -345,133 +347,76 @@ surface uninstall --keep-images
 surface install
 ```
 
-This workflow is slower, but it validates the real release behavior.
+This workflow is slower because both the installer and SURFACE application are used as packaged artifacts, but it validates the real release process.
 
 It tests:
 
 - the installer wheel
-- the packaged SURFACE app artifact
+- the packaged SURFACE application artifact
 - artifact extraction
-- generated environment/configuration files
+- generated environment and configuration files
 - Ansible playbook execution
 - Docker Compose startup
-- install metadata
-- the real user installation flow
+- installation metadata
+- the end-user installation flow
 
-Use this workflow before releases or when testing installer-related behavior.
+Use this workflow before releases or when testing installer, packaging, or installation-related behavior.
 
 ### Option B: Local Docker bind mount workflow
 
-This is the faster day-to-day SURFACE app development workflow.
+This is the recommended workflow for day-to-day SURFACE application development.
 
-In this workflow, developers run the Docker Compose project directly from:
+It allows the running SURFACE containers to use the `surface/` directory directly from your local repository instead of relying on the packaged SURFACE application artifact.
+
+1. Clone the repository and set up the `surface-cdms` package in editable mode by following **Section 6: Installer/CLI development setup**.
+
+2. Run:
+
+```bash
+surface install
+```
+
+During installation, set the SURFACE install path to the repository's local:
 
 ```text
 surface/
 ```
 
-Example:
+directory.
 
-```bash
-cd surface
-docker compose up -d --build
-```
+3. Complete the installation normally.
 
-The goal is to allow code changes in your local repository to be visible inside the running containers.
+4. The running Docker containers will now use the SURFACE application files from your local repository through bind mounts.
 
-This is usually done with Docker bind mounts.
-
-A bind mount maps a folder on your machine into a folder inside the container.
-
-For example:
-
-```yaml
-volumes:
-  - ./api:/app
-```
-
-This means:
+Changes made inside:
 
 ```text
-local machine: surface/api
-container:      /app
+surface/
 ```
 
-So when you edit files inside:
+will therefore be available to the running development environment without rebuilding and reinstalling the packaged SURFACE artifact.
+
+Depending on the type of change, a container or service restart may still be required.
+
+### Which workflow should I use?
+
+For normal SURFACE application development:
 
 ```text
-surface/api/
+Local Docker bind mount workflow
 ```
 
-the container sees those files at:
+For release testing, packaging changes, or installer-related testing:
 
 ```text
-/app
+Packaged artifact workflow
 ```
 
-This can make development much faster because you do not need to rebuild the installer package every time you change a Django view, template, decoder, or task.
-
-### Important warning about bind mounts
-
-Bind mounts are powerful, but they can also be confusing.
-
-A bind mount can override files that were copied into the Docker image during build time.
-
-For example, if the Docker image contains:
+The key distinction is:
 
 ```text
-/app
-```
-
-and you mount:
-
-```yaml
-volumes:
-  - ./api:/app
-```
-
-then the container will use your local `./api` folder instead of the `/app` folder that was built into the image.
-
-That is usually what you want during development, but developers should understand this behavior before changing Docker Compose volumes.
-
-### When to use bind mounts
-
-Use bind mounts when:
-
-- you are developing SURFACE app features
-- you are editing Django views, templates, or tasks
-- you are working on decoders
-- you need quick feedback
-- you are testing UI/backend behavior locally
-- you are not testing the final installer package
-
-### When not to use bind mounts
-
-Do not rely only on bind mounts when:
-
-- preparing a release
-- testing the installer
-- testing the packaged app artifact
-- testing `surface install`
-- testing PyPI/TestPyPI installation
-- validating that the release artifact contains the right code
-
-Before a release, always test the packaged artifact workflow.
-
-### Quick comparison
-
-```text
-Bind mount workflow:
-- Faster
-- Better for day-to-day app development
-- Runs from local source files
-- Good for feature work and debugging
-
-Packaged artifact workflow:
-- Slower
-- Better for release validation
-- Runs from the built artifact
-- Good for testing what users will install
+Packaged artifact workflow = test what users will install
+Local bind mount workflow   = develop directly from repository source
 ```
 
 ## 8. Making SURFACE application changes
