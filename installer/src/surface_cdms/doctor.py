@@ -198,7 +198,7 @@ def run_doctor() -> bool:
         _print_info("Install status", metadata.get("install_status", "unknown"))
 
         if metadata.get("surface_cdms_version"):
-            _print_info("Installed SURFACE version", metadata["surface_cdms_version"])
+            _print_info("Installed SURFACE-CDMS version", metadata["surface_cdms_version"])
 
         if metadata.get("surface_repo_path"):
             _print_info("SURFACE install path", metadata["surface_repo_path"])

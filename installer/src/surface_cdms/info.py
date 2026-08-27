@@ -86,7 +86,7 @@ def show_info() -> None:
     install_duration_minutes = metadata.get("install_duration_minutes")
 
     if surface_cdms_version:
-        click.echo(f"Installed SURFACE version: {surface_cdms_version}")
+        click.echo(f"Installed SURFACE-CDMS version: {surface_cdms_version}")
 
     if surface_repo_path:
         click.echo(f"SURFACE install path: {surface_repo_path}")
