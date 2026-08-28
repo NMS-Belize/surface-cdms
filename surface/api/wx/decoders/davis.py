@@ -2,10 +2,12 @@ import datetime
 import logging
 import os
 import time
+import re
 
 import pandas as pd
 import pytz
 from celery import shared_task
+from pathlib import Path
 from django.core.exceptions import ObjectDoesNotExist
 
 from tempestas_api import settings
@@ -13,6 +15,8 @@ from wx.decoders.insert_raw_data import insert
 from wx.decoders.insert_hf_data import insert as insert_hf
 from wx.decoders.insert_staged_raw_data import insert as insert_staged
 from wx.models import Station
+
+from wx.decoders.davis_wlk_to_txt import main as wlk_to_txt
 
 logger = logging.getLogger('surface.davis')
 db_logger = logging.getLogger('db')
@@ -69,6 +73,8 @@ COMPASS_DEGREES = {
     'W':   270.0, 'WNW': 292.5, 'NW':  315.0,  'NNW': 337.5,
 }
 
+# Note: The comment below only applies to wlk files which were converted to txt by SURFACE
+# THW and THSW values are calculated by the decoder and may differ slightly from values produced by Davis WeatherLink.
 variable_dict = {
     'temp_out':    12,   # TEMPAVG
     'hi_temp':     16,   # TEMPMAX
@@ -99,6 +105,17 @@ def station_code_from_filename(filename):
     if '.' in code:
         code = code.split('.')[0]
     return code
+
+
+def extract_davis_filename(text: str) -> str:
+    """
+    Extracts the Davis filename from a string and returns it as a single string.
+    Returns an empty string if no match is found.
+    """
+    pattern = r'davis_[A-Za-z0-9]+(?:_[A-Za-z0-9-]+)?\.(?:txt|wlk)'
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+
+    return match.group(0) if match else ""
 
 
 def parse_datetime(date_str, time_str, utc_offset):
@@ -161,12 +178,27 @@ def read_file(
     ):
     """Read a Davis WeatherLink text file and ingest minute-interval observations."""
 
-    logger.info('processing %s' % filename)
+    logger.info('processing %s' % origin_file_name)
 
     start = time.time()
     reads = []
 
     try:
+
+        # if file is .wlk convert to davis .txt format
+        input_path = Path(filename)
+
+        if input_path.suffix.lower() == ".wlk":
+            logger.info("Converting .wlk to .txt for decoding")
+
+            # meaning the file is coming in via ftp most likely. FTP transfers changes the name of the file (date is prepended to the filename)
+            if not origin_file_name:
+                origin_file_name = extract_davis_filename(filename)
+
+            wlk_to_txt(input_path, origin_file_name)
+
+            filename = str(input_path.with_suffix(".txt"))
+
         if station_object is None:
 
             if origin_file_name:
@@ -178,6 +210,7 @@ def read_file(
                 station_object = Station.objects.get(code=station_code)
             except ObjectDoesNotExist:
                 raise Exception(f"Station with code '{station_code}' not found.")
+
         station_id = station_object.id
 
         df = pd.read_csv(
@@ -197,7 +230,6 @@ def read_file(
 
     except FileNotFoundError as fnf:
         logger.error(repr(fnf))
-        print('No such file or directory {}.'.format(filename))
         raise
 
     except Exception as e:

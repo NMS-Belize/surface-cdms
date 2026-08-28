@@ -666,7 +666,7 @@ class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView
 
 # view to display manual upload page
 class ManualDataImportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    '''view for uploading daily data for manual station (file format is xlsx)'''
+    '''view for uploading daily data for manual station (file format is xlsx,txt,wlk)'''
 
     template_name = "wx/data/manual_data_import.html"
     
@@ -770,32 +770,40 @@ def CheckManualImportView(request):
     if decoder_format == "davis":
         allowed_file_types = {
             ".txt": ["text/tab-separated-values", "text/plain"],
+            ".wlk": ["application/octet-stream"],
         }
 
+    # loop through the files and conduct further checks
     for file_name, file_obj in request.FILES.items():
         safe_name = os.path.basename(file_name)
         ext = os.path.splitext(safe_name)[1].lower()
 
+        # check file types
         if ext not in allowed_file_types:
             unsupported_files += safe_name + ", "
             continue
 
+        # check file content type
         if file_obj.content_type not in allowed_file_types[ext]:
             unsupported_files += safe_name + ", "
             continue
 
+        # create file path
         file_path = os.path.join(UPLOAD_DIR, safe_name)
 
+        # check for duplicate files skip if there are
         if os.path.exists(file_path):
             duplicate_files += safe_name + ", "
             continue
 
+        # write the file to the the created file_path
         with open(file_path, "wb") as destination:
             for chunk in file_obj.chunks():
                 destination.write(chunk)
 
         missing_stations = []
 
+        # additional checks for the default decoder
         if decoder_format == "default":
             excel_df = pd.ExcelFile(file_path)
             for sheet in excel_df.sheet_names:
@@ -814,6 +822,7 @@ def CheckManualImportView(request):
                 )
                 continue
 
+        # additional checks for the f2000 decoder
         elif decoder_format == "f2000":
             wb = None
             file_f2000_errors = []
@@ -4562,7 +4571,7 @@ def create_reference_station(request):
     name = data.get('name')
     latitude = data.get('latitude')
     longitude = data.get('longitude')
-    is_active = False # set to False because the station is only for referencing
+    is_active = data.get('is_active', True)
     variable_ids = data.get('variable_ids', [])
 
     if not code:

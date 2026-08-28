@@ -191,7 +191,7 @@ def backup_create(file_path):
         # Compress the temporary backup directory into the final .tar.gz file.
         # arcname="." means the contents of the temp directory are stored
         # at the root of the archive instead of including the temp folder name.
-        with tarfile.open(file_path, "w:gz", compresslevel=3) as tar:
+        with tarfile.open(file_path, "w:gz") as tar:
             tar.add(temp_backup_dir, arcname=".")
 
     except subprocess.CalledProcessError as e:
@@ -483,7 +483,7 @@ def backup_free_orphaned_files(orphan_retention_days=30):
 def backup_postgres():
 
     lock_key = "backup_postgres_lock"
-    lock_timeout = 60 * 60 * 12  # 12 hours
+    lock_timeout = 60 * 60 * 6  # 6 hours
 
     # If lock already exists, another backup_postgres is still running.
     if not cache.add(lock_key, "running", timeout=lock_timeout):
