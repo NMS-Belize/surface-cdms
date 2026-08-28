@@ -666,7 +666,7 @@ class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView
 
 # view to display manual upload page
 class ManualDataImportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    '''view for uploading daily data for manual station (file format is xlsx,txt,wlk)'''
+    '''view for uploading daily data for manual station (file format is xlsx)'''
 
     template_name = "wx/data/manual_data_import.html"
     
@@ -4571,7 +4571,7 @@ def create_reference_station(request):
     name = data.get('name')
     latitude = data.get('latitude')
     longitude = data.get('longitude')
-    is_active = data.get('is_active', True)
+    is_active = False # set to False because the station is only for referencing
     variable_ids = data.get('variable_ids', [])
 
     if not code:
