@@ -34,14 +34,17 @@
                     :name="uploadFieldName" 
                     :disabled="isSaving" 
                     @change="handleFileChange" 
-                    accept=".xlsx, .txt, text/plain, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+                    accept=".xlsx, .txt, .wlk, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/plain, application/octet-stream" 
                     class="input-file"
                   >
 
                   <p v-if="!isSaving" style="font-size: small;">
                     <i class="material-icons-outlined">cloud_upload</i><br>
                     <span style="color: rgb(64, 130, 246); font-weight: bold;">Choose file</span> or <b>drag here</b><br>
-                    Supported file type(s): <span style="color: #2f8c59; font-weight: bolder;">XLSX</span> , <span style="color: #6a6a6a; font-weight: bolder;">TXT</span><br>
+                      Supported file type(s): 
+                      <span style="color: #2f8c59; font-weight: bolder;">XLSX</span> , 
+                      <span style="color: #9a1fff; font-weight: bolder;">WLK</span> , 
+                      <span style="color: #6a6a6a; font-weight: bolder;">TXT</span><br>
                     <span style="color: red;">Upload limit: Total files size not exceeding 15.00 MB</span>
                   </p>
 
@@ -119,15 +122,20 @@
                     <!-- Info Message -->
                     <v-col cols="auto">
                       <span class="custom_tooltip">
-                        File upload works <span style="color: red;">ONLY</span> for Manual stations
+                        <!-- File upload works <span style="color: red;">ONLY</span> for Manual stations -->
+                        
+                        <!-- <br /><br /> -->
+
+                        <span style="font-weight: bold; font-size: medium;">Decoder Format Expected File Types:</span>
                         
                         <br /><br />
 
-                        Files Types supported 
-                        <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span> 
-                        <span style="color: #6a6a6a; font-weight: bolder;">.TXT</span>
+                        Default - <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span><br />
+                        R Format - <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span><br />
+                        F2000 - <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span><br />
+                        DAVIS - <span style="color: #9a1fff; font-weight: bolder;">.WLK</span> <span style="color: #6a6a6a; font-weight: bolder;">.TXT</span>
 
-                        <br /><br />
+                        <!-- <br /><br /> -->
                       </span>
                     </v-col>
                   </div>
