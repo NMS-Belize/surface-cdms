@@ -666,7 +666,7 @@ class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView
 
 # view to display manual upload page
 class ManualDataImportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    '''view for uploading daily data for manual station (file format is xlsx)'''
+    '''view for uploading daily data for manual station (file format is xlsx, wlk, txt)'''
 
     template_name = "wx/data/manual_data_import.html"
     
