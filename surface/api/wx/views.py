@@ -77,7 +77,7 @@ from wx.models import AdministrativeRegion, StationFile, Decoder, QualityFlag, D
     DataFileVariable, StationImage, WMOStationType, WMORegion, WMOProgram, StationCommunication, CombineDataFile, ManualStationDataFile
 from wx.models import Country, Unit, Station, Variable, DataSource, StationVariable, StationDataFileStatus,\
     StationProfile, Document, Watershed, Interval, CountryISOCode, Wis2BoxPublish, Wis2PublishOffset, LocalWisCredentials, RegionalWisCredentials,  Wis2BoxPublishLogs, Crop, Soil
-from wx.utils import get_altitude, get_watershed, get_district, get_interpolation_image, parse_float_value, \
+from wx.utils import get_altitude, get_watershed, get_interpolation_image, parse_float_value, \
     parse_int_value
 from .utils import get_raw_data, get_station_raw_data
 from wx.models import MaintenanceReport, VisitType, Technician
@@ -656,7 +656,7 @@ class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView
 
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
-        context['station_district_list'] = AdministrativeRegion.objects.all()
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()
 
         interval_list = Interval.objects.filter(seconds__gte=2).order_by('seconds') # exclude 1 second interval
         context['interval_list'] = interval_list
@@ -2004,13 +2004,9 @@ def station_geo_features(request, lon, lat):
 
     watershed = get_watershed(longitude, latitude)
 
-    district = get_district(longitude, latitude)
-
     data = {
         'elevation': altitude,
         'watershed': watershed,
-        'country': 'Belize',
-        'administrative_region': district,
         'longitude': longitude,
         'latitude': latitude,
     }
@@ -4451,7 +4447,7 @@ class ProductCompareView(WxPermissionRequiredMixin, LoginRequiredMixin, Template
 
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
-        context['station_district_list'] = AdministrativeRegion.objects.all()
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()
 
         return context
 
@@ -4698,7 +4694,7 @@ def modify_reference_station(request, id):
     name = data.get('name')
     latitude = data.get('latitude')
     longitude = data.get('longitude')
-    is_active = data.get('is_active', station.is_active)
+    is_active = False # set to False because the station is only for referencing
     variable_ids = data.get('variable_ids', [])
 
     if not code:
@@ -4838,32 +4834,6 @@ def modify_reference_station(request, id):
             'longitude': station.longitude,
             'is_active': station.is_active,
             'variable_ids': valid_variable_ids,
-        }
-    })
-
-
-@require_http_methods(["PUT"])
-@wx_mapped_permission_required
-@transaction.atomic
-def toggle_reference_station_active(request, id):
-    """
-    Toggle a reference station between active and inactive.
-    """
-
-    station = get_object_or_404(
-        Station,
-        id=id,
-        is_reference=True
-    )
-
-    station.is_active = not station.is_active
-    station.save(update_fields=['is_active', 'updated_at'])
-
-    return JsonResponse({
-        'message': 'Reference station active status updated successfully.',
-        'station': {
-            'id': station.id,
-            'is_active': station.is_active,
         }
     })
 
@@ -5331,7 +5301,7 @@ class QualityControlView(WxPermissionRequiredMixin, LoginRequiredMixin, Template
 
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
-        context['station_district_list'] = AdministrativeRegion.objects.all()
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()
 
         return context
 
@@ -7211,7 +7181,7 @@ def get_maintenance_report_view(request, id, source): # Maintenance report view
         "latitude": station.latitude,
         "elevation": station.elevation,
         "longitude": station.longitude,
-        "district": station.region.name,
+        "admin_region": station.region.name,
         "transmission_type": "---",
         "transmission_ID": "---",
         "transmission_interval": "---",
@@ -7855,7 +7825,7 @@ def get_maintenance_report(request, id):
         "latitude": station.latitude,
         "elevation": station.elevation,
         "longitude": station.longitude,
-        "district": station.region.name,
+        "admin_region": station.region.name,
         "transmission_type": "---",
         "transmission_ID": "---",
         "transmission_interval": "---",
@@ -8283,7 +8253,7 @@ class get_range_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, Te
         context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
-        context['station_district_list'] = AdministrativeRegion.objects.all()  
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()  
 
         return context
 
@@ -8495,7 +8465,7 @@ class get_step_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, Tem
         context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
-        context['station_district_list'] = AdministrativeRegion.objects.all() 
+        ontext['station_admin_region_list'] = AdministrativeRegion.objects.all()  
 
         return context
 
@@ -8665,7 +8635,7 @@ class get_persist_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, 
         context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
-        context['station_district_list'] = AdministrativeRegion.objects.all() 
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all() 
 
         return context
 
@@ -9093,7 +9063,7 @@ def daily_means_data_view(request):
     station = Station.objects.get(pk=station_id)
     res['station'] = {
         "name": station.name,
-        "district": station.region.name,
+        "admin_region": station.region.name,
         "latitude": station.latitude,
         "longitude": station.longitude,
         "elevation": station.elevation,

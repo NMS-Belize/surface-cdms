@@ -203,7 +203,6 @@ urlpatterns = [
     path('wx/quality_control/reference_station/load/',views.load_reference_stations,name='load-reference-stations'), # Load reference stations
     path('wx/quality_control/reference_station/create/',views.create_reference_station,name='create-reference-station'), # Create reference station
     path('wx/quality_control/reference_station/update/<int:id>/',views.modify_reference_station,name='modify-reference-station'), # Update reference station
-    path('wx/quality_control/reference_station/toggle-active/<int:id>/',views.toggle_reference_station_active,name='toggle-reference-station-active'), # Toggle active/inactive
     path('wx/quality_control/reference_station/delete/<int:id>/', views.delete_reference_station, name='delete-reference-station'),
     path('wx/quality_control/reference_station/variables/load/', views.load_reference_station_variables, name='load-reference-station-variables'),
     path('wx/quality_control/reference_station/<int:id>/thresholds/load/', views.load_reference_station_thresholds, name='load-reference-station-thresholds'),
