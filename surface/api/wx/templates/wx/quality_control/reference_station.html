@@ -367,128 +367,135 @@
                         Select at least one variable to edit thresholds.
                     </v-alert>
 
-                    <!-- Threshold type tabs -->
-                    <v-tabs
-                        v-if="selectedThresholdVariableId"
-                        v-model="thresholdTypeTab"
-                    >
-                        <v-tab>Range</v-tab>
-                        <v-tab>Step</v-tab>
-                        <v-tab>Persist</v-tab>
-                    </v-tabs>
 
-                    <!-- Threshold tabs -->
-                    <v-tabs-items
-                        v-if="selectedThresholdVariableId"
-                        v-model="thresholdTypeTab"
+                    <!-- only show if a variable has been selected -->
+                    <template
+                      v-if="selectedThresholdVariableId != null"
                     >
 
-                        <!-- Range Thresholds -->
-                        <v-tab-item>
-                        <v-card flat class="mt-4 reference-station-dialog">
-                            <v-data-table
-                                :headers="rangeThresholdHeaders"
-                                :items="selectedVariableRangeThresholds"
-                                :items-per-page="12"
-                                :footer-props="{
-                                'items-per-page-options': [12, 24]
-                                }"
-                                class="elevation-1"
-                                dense
-                            >
+                      <!-- Threshold type tabs -->
+                      <v-tabs
+                        v-model="thresholdTypeTab"
+                      >
+                          <v-tab>Range</v-tab>
+                          <v-tab>Step</v-tab>
+                          <v-tab>Persist</v-tab>
+                      </v-tabs>
 
-                            <template v-slot:item.range_min="{ item }">
-                                <v-text-field
-                                    v-model="item.range_min"
-                                    type="number"
-                                    dense
-                                    outlined
-                                    hide-details
-                                ></v-text-field>
-                            </template>
+                      <!-- Threshold tabs -->
+                      <v-tabs-items
+                        v-model="thresholdTypeTab"
+                      >
 
-                            <template v-slot:item.range_max="{ item }">
-                                <v-text-field
-                                    v-model="item.range_max"
-                                    type="number"
-                                    dense
-                                    outlined
-                                    hide-details
-                                ></v-text-field>
-                            </template>
-                            </v-data-table>
-                        </v-card>
-                        </v-tab-item>
+                          <!-- Range Thresholds -->
+                          <v-tab-item>
+                          <v-card flat class="mt-4 reference-station-dialog">
+                              <v-data-table
+                                  :headers="rangeThresholdHeaders"
+                                  :items="selectedVariableRangeThresholds"
+                                  :items-per-page="12"
+                                  :footer-props="{
+                                  'items-per-page-options': [12, 24]
+                                  }"
+                                  class="elevation-1"
+                                  dense
+                              >
 
-                        <!-- Step Thresholds -->
-                        <v-tab-item>
-                        <v-card flat class="mt-4 reference-station-dialog">
-                            <v-data-table
-                            :headers="stepThresholdHeaders"
-                            :items="selectedVariableStepThresholds"
-                            hide-default-footer
-                            disable-pagination
-                            class="elevation-1"
-                            dense
-                            >
-                            <template v-slot:item.step_min="{ item }">
-                                <v-text-field
-                                v-model="item.step_min"
-                                type="number"
-                                dense
-                                outlined
-                                hide-details
-                                ></v-text-field>
-                            </template>
+                              <template v-slot:item.range_min="{ item }">
+                                  <v-text-field
+                                      v-model="item.range_min"
+                                      type="number"
+                                      dense
+                                      outlined
+                                      hide-details
+                                  ></v-text-field>
+                              </template>
 
-                            <template v-slot:item.step_max="{ item }">
-                                <v-text-field
-                                v-model="item.step_max"
-                                type="number"
-                                dense
-                                outlined
-                                hide-details
-                                ></v-text-field>
-                            </template>
-                            </v-data-table>
-                        </v-card>
-                        </v-tab-item>
+                              <template v-slot:item.range_max="{ item }">
+                                  <v-text-field
+                                      v-model="item.range_max"
+                                      type="number"
+                                      dense
+                                      outlined
+                                      hide-details
+                                  ></v-text-field>
+                              </template>
+                              </v-data-table>
+                          </v-card>
+                          </v-tab-item>
 
-                        <!-- Persist Thresholds -->
-                        <v-tab-item>
-                        <v-card flat class="mt-4 reference-station-dialog">
-                            <v-data-table
-                            :headers="persistThresholdHeaders"
-                            :items="selectedVariablePersistThresholds"
-                            hide-default-footer
-                            disable-pagination
-                            class="elevation-1"
-                            dense
-                            >
-                            <template v-slot:item.minimum_variance="{ item }">
-                                <v-text-field
-                                v-model="item.minimum_variance"
-                                type="number"
-                                dense
-                                outlined
-                                hide-details
-                                ></v-text-field>
-                            </template>
+                          <!-- Step Thresholds -->
+                          <v-tab-item>
+                          <v-card flat class="mt-4 reference-station-dialog">
+                              <v-data-table
+                              :headers="stepThresholdHeaders"
+                              :items="selectedVariableStepThresholds"
+                              hide-default-footer
+                              disable-pagination
+                              class="elevation-1"
+                              dense
+                              >
+                              <template v-slot:item.step_min="{ item }">
+                                  <v-text-field
+                                  v-model="item.step_min"
+                                  type="number"
+                                  dense
+                                  outlined
+                                  hide-details
+                                  ></v-text-field>
+                              </template>
 
-                            <template v-slot:item.window="{ item }">
-                                <v-text-field
-                                v-model="item.window"
-                                type="number"
-                                dense
-                                outlined
-                                hide-details
-                                ></v-text-field>
-                            </template>
-                            </v-data-table>
-                        </v-card>
-                        </v-tab-item>
+                              <template v-slot:item.step_max="{ item }">
+                                  <v-text-field
+                                  v-model="item.step_max"
+                                  type="number"
+                                  dense
+                                  outlined
+                                  hide-details
+                                  ></v-text-field>
+                              </template>
+                              </v-data-table>
+                          </v-card>
+                          </v-tab-item>
 
-                    </v-tabs-items>
+                          <!-- Persist Thresholds -->
+                          <v-tab-item>
+                          <v-card flat class="mt-4 reference-station-dialog">
+                              <v-data-table
+                              :headers="persistThresholdHeaders"
+                              :items="selectedVariablePersistThresholds"
+                              hide-default-footer
+                              disable-pagination
+                              class="elevation-1"
+                              dense
+                              >
+                              <template v-slot:item.minimum_variance="{ item }">
+                                  <v-text-field
+                                  v-model="item.minimum_variance"
+                                  type="number"
+                                  dense
+                                  outlined
+                                  hide-details
+                                  ></v-text-field>
+                              </template>
+
+                              <template v-slot:item.window="{ item }">
+                                  <v-text-field
+                                  v-model="item.window"
+                                  type="number"
+                                  dense
+                                  outlined
+                                  hide-details
+                                  ></v-text-field>
+                              </template>
+                              </v-data-table>
+                          </v-card>
+                          </v-tab-item>
+
+                      </v-tabs-items>
+
+                    </template>
+
 
                 </v-card-text>
 
