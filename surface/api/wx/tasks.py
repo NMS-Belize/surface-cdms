@@ -2606,7 +2606,7 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             cell = sheet.cell(row=5, column=1, value=f'Longitude:{station.longitude}')
             cell = sheet.cell(row=6, column=1, value=f'Passed AQC Checks:{aqc_checks}')
             cell = sheet.cell(row=7, column=1, value=f'Passed MQC Checks:{mqc_checks}')
-            cell = sheet.cell(row=8, column=1, value=f'Date of completion:{date_of_completion.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}')
+            cell = sheet.cell(row=8, column=1, value=f'Date of completion (calculated using default system timezone):{date_of_completion.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}')
             cell = sheet.cell(row=9, column=1, value=f'Prepared by:{prepared_by}')
 
             if displayUTC and data_source in ['raw_data','hourly_summary']:

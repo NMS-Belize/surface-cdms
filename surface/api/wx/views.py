@@ -163,15 +163,24 @@ def ScheduleDataExport(request):
         data_interval_seconds = 300
 
     created_data_file_ids = []
-    start_date_utc = pytz.UTC.localize(datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
-    end_date_utc = pytz.UTC.localize(datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
-    current_utc_datetime = datetime.datetime.now(pytz.utc)
 
-    if start_date_utc > end_date_utc:
+    # format start and end date NOTE: START and END dates are all understood to be in station local time.
+    start_date_formatted = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+    end_date_formatted = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
+
+    logger.info(f"This is the start date: {start_date}")
+    logger.info(f"type: {type(start_date)}")
+    logger.info(f"This is the end date: {end_date}")
+
+    logger.info(f"This is the start date formatted: {start_date_formatted}")
+    logger.info(f"type: {type(start_date_formatted)}")
+    logger.info(f"This is the end date formatted: {end_date_formatted}")
+
+    if start_date_formatted > end_date_formatted:
         message = 'The initial date must be greater than final date.'
         return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
 
-    days_interval = (end_date_utc - start_date_utc).days
+    days_interval = (end_date_formatted - start_date_formatted).days
 
     data_source_dict = {
         "raw_data": "Raw Data",
@@ -193,8 +202,8 @@ def ScheduleDataExport(request):
         if aggregation:
             for agg in aggregation:
                 newfile = DataFile.objects.create(ready=False, 
-                                                  initial_date=start_date_utc, 
-                                                  final_date=end_date_utc,
+                                                  initial_date=start_date_formatted, 
+                                                  final_date=end_date_formatted,
                                                   source=data_source_description, 
                                                   prepared_by=prepared_by,
                                                   interval_in_seconds=data_interval_seconds,
@@ -211,15 +220,17 @@ def ScheduleDataExport(request):
                     tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, agg, aqc_checks, mqc_checks, displayUTC)
                     created_data_file_ids.append(newfile.id)
                 except Exception as err:
+                    # NOTE: requested at and ready at etc... times should be in UTC
                     # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
                     # this shows that the operation failed
                     # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not"
                     # this prevents a possible error state from mascarading as a "processing" status
-                    newfile.ready_at = current_utc_datetime
+
+                    newfile.ready_at = datetime.datetime.now(pytz.utc)
         else:
             newfile = DataFile.objects.create(ready=False, 
-                                              initial_date=start_date_utc, 
-                                              final_date=end_date_utc,
+                                              initial_date=start_date_formatted, 
+                                              final_date=end_date_formatted,
                                               source=data_source_description, 
                                               prepared_by=prepared_by,
                                               interval_in_seconds=data_interval_seconds,
@@ -237,11 +248,13 @@ def ScheduleDataExport(request):
                 tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, aggregation, aqc_checks, mqc_checks, displayUTC)
                 created_data_file_ids.append(newfile.id)
             except Exception as err:
+                # NOTE: requested at and ready at etc... times should be in UTC
                 # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
                 # this shows that the operation failed
                 # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not
                 # this prevents a possible error state from mascarading as a "processing" status
-                newfile.ready_at = current_utc_datetime
+
+                newfile.ready_at = datetime.datetime.now(pytz.utc)
 
     return JsonResponse({'data': created_data_file_ids}, status=status.HTTP_200_OK)
 

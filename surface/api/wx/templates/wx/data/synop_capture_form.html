@@ -467,13 +467,15 @@
     // highchart for use with graph
     Vue.use(HighchartsVue.default);
 
-    // parse the offset string
+    // Parses offset strings like "11:00:00", "1 day, 11:00:00", or "-1 day, 11:00:00" into total minutes.
     function parseOffsetToMinutes(offsetStr) {
-        const match = offsetStr.match(/(-?\d+) day[s]?,\s*(\d{2}):(\d{2}):(\d{2})/);
+        if (!offsetStr || typeof offsetStr !== 'string') return 0;
+
+        const match = offsetStr.trim().match(/^(?:(-?\d+)\s*day[s]?,\s*)?(\d{1,2}):(\d{2}):(\d{2})/);
 
         if (!match) return 0;
 
-        const days = parseInt(match[1], 10);
+        const days = match[1] ? parseInt(match[1], 10) : 0;
         const hours = parseInt(match[2], 10);
         const minutes = parseInt(match[3], 10);
 
@@ -493,7 +495,7 @@
         if (['SUM', 'AVG', 'MAX', 'MIN', 'STDDEV', 'COUNT'].includes(hour)) {
             return hour;
         }
-        
+
         if(timezoneChange == false)
         {
             const hr = parseInt(hour);
@@ -505,9 +507,9 @@
 
         // Convert hour string to integer
         const localHour = parseInt(hour);
-        
-        // Parse the timezoneDetails.offsetStr: e.g. "-1 day, 18:00:00"
-        const offsetMatch = timezoneDetails.offsetStr.match(/(-?\d+)\sday[s]?,\s(\d+):(\d+):(\d+)/);
+
+        // Parse the timezoneDetails.offsetStr: e.g. "-1 day, 18:00:00" or "18:00:00"
+        const offsetMatch = timezoneDetails.offsetStr.match(/(?:(-?\d+)\s*day[s]?,\s*)?(\d+):(\d+):(\d+)/);
 
         if (!offsetMatch) {
             console.error("Invalid timezone offset format:", timezoneDetails.offsetStr);
@@ -515,7 +517,7 @@
         }
 
         // Extract the components
-        const dayOffset = parseInt(offsetMatch[1]);
+        const dayOffset = offsetMatch[1] ? parseInt(offsetMatch[1], 10) : 0; // If match[1] exists, parse it; otherwise default to 0
         const hourOffset = parseInt(offsetMatch[2]);
         const minuteOffset = parseInt(offsetMatch[3]);
         const secondOffset = parseInt(offsetMatch[4]);
