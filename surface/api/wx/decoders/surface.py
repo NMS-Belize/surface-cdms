@@ -61,7 +61,7 @@ def read_file(filename, highfrequency_data=False, process_in_chunks=False, stati
     variable_symbols = df.columns[1:]
 
     # get station utc offset if it is not passed
-    if not utc_offset:
+    if utc_offset is None:
         utc_offset = station_object.utc_offset_minutes
 
     if utc_offset is None:
