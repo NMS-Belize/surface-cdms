@@ -75,12 +75,25 @@
                 </div>
             </form>
 
+            <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
+            <div style="width: 50%;">
+                <v-alert
+                    color="orange"
+                    dismissible
+                    outlined
+                    dense
+                    text
+                >
+                    Note: All dates and times shown are in the selected station's local time.
+                </v-alert>
+            </div>
+
             <!-- The buttons -->
             <div class="mt-5">
                 <!-- save button -->
                 {% if request|has_any_feature_permission:"monthly-form:write" %}
                 <v-btn 
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     :disabled="!(draft && valid)" 
                     outlined @click="updateData()" 
@@ -96,7 +109,7 @@
                 <!-- delete rows btn -->
                 {% if request|has_any_feature_permission:"monthly-form:delete" %}
                 <v-btn
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     :disabled="!hasSelection || loading"
                     outlined 
@@ -112,7 +125,7 @@
 
                 <!-- theme switch button -->
                 <v-btn
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2"
                     outlined
                     @click="toggleTheme"
@@ -123,32 +136,10 @@
                     <v-icon right dark>sync</v-icon>
                 </v-btn>
 
-                <!-- show graph button -->
-                <!--
-                <v-btn 
-                    v-show="!hideTable && !isBack"
-                    class="ml-2" 
-                    outlined 
-                    @click="nextSlide"
-                    class="btn-outline-default" 
-                    color="black"
-                    style="margin-bottom: 10px;"
-                > 
-                    Show Graph
-
-                    <v-icon
-                        right
-                        dark
-                    >
-                        timeline
-                    </v-icon>
-                </v-btn>
-                -->
-
                 <!-- export csv button -->
                 {% if request|has_any_feature_permission:"monthly-form:write" %}
                 <v-btn 
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     outlined 
                     @click="exportToCSV()"
@@ -166,26 +157,6 @@
                     </v-icon>
                 </v-btn>
                 {% endif %}
-
-                <!-- show graph back button -->
-                <v-btn 
-                    v-show="isBack"
-                    class="ml-2" 
-                    outlined 
-                    @click="nextSlide"
-                    class="btn-outline-default" 
-                    color="black"
-                    style="margin-bottom: 10px;"
-                > 
-                    <v-icon
-                        left
-                        dark
-                    >
-                        arrow_back
-                    </v-icon>
-
-                    Back
-                </v-btn>
 
             </div>
 
@@ -216,98 +187,38 @@
                 </v-card>
             </v-dialog>
 
-            <!-- in production dialog -->
-            <v-dialog
-                v-model="inProduction"
-                max-width="400"
+
+            <!-- Monthly table grid container -->
+            <!-- Non Sticky header -->
+            <ag-grid-vue
+                v-show="!hideTable"
+                :row-data="rowData"
+                :column-defs="colDefs"
+                :default-col-def="defaultColDef"
+                :grid-options="gridOptions"
+                style="width: 100%;"
+                :class="tableTheme"
+                @grid-ready="onGridReady"
+                @cell-editing-started="onCellEditingStarted"
+                @cell-editing-stopped="onCellEditingStopped"
+                dom-layout="autoHeight"
             >
-                <v-card>
-                    <v-card-title class="headline"> Alert! </v-card-title>
-                    
-                    <v-card-text style="color: red;">
-                        This feature is in production...
-                    </v-card-text>
+            </ag-grid-vue>
 
-                    <v-card-actions>
-                        <v-spacer></v-spacer>
-
-                        <v-btn text color="grey" @click="inProduction = false">
-                            Cancel
-                        </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
-
-
-            <!-- control for publishing status and logs -->
-            <v-carousel 
-                v-model="currentSlide" 
-                hide-delimiters
-                :show-arrows="false"
-                height="100%" 
+            <!-- Sticky header -->
+            <!-- <ag-grid-vue
+                v-show="!hideTable"
+                :row-data="rowData"
+                :column-defs="colDefs"
+                :default-col-def="defaultColDef"
+                :grid-options="gridOptions"
+                style="height: 100%;"
+                :class="tableTheme"
+                @grid-ready="onGridReady"
+                @cell-editing-started="onCellEditingStarted"
+                @cell-editing-stopped="onCellEditingStopped"
             >
-                <!-- ag grid -->
-                <v-carousel-item>
-
-                    <!-- Monthly table grid container -->
-                    <!-- Non Sticky header -->
-                    <ag-grid-vue
-                        v-show="!hideTable"
-                        :row-data="rowData"
-                        :column-defs="colDefs"
-                        :default-col-def="defaultColDef"
-                        :grid-options="gridOptions"
-                        style="width: 100%;"
-                        :class="tableTheme"
-                        @grid-ready="onGridReady"
-                        @cell-editing-started="onCellEditingStarted"
-                        @cell-editing-stopped="onCellEditingStopped"
-                        dom-layout="autoHeight"
-                    >
-                    </ag-grid-vue>
-
-                    <!-- Sticky header -->
-                    <!-- <ag-grid-vue
-                        v-show="!hideTable"
-                        :row-data="rowData"
-                        :column-defs="colDefs"
-                        :default-col-def="defaultColDef"
-                        :grid-options="gridOptions"
-                        style="height: 100%;"
-                        :class="tableTheme"
-                        @grid-ready="onGridReady"
-                        @cell-editing-started="onCellEditingStarted"
-                        @cell-editing-stopped="onCellEditingStopped"
-                    >
-                    </ag-grid-vue> -->
-
-
-                </v-carousel-item>
-
-                <!-- graph -->
-                <v-carousel-item>
-                    <!-- Overlay with Spinner -->
-                    <v-overlay v-show="" absolute opacity="0.3" style="border-radius: 4px;">
-                        <v-progress-circular indeterminate size="70"></v-progress-circular>
-                    </v-overlay>
-
-                    <!-- tab header titles -->
-                    <v-tabs 
-                        v-model="activeTab"
-                        show-arrows
-                        centered
-                        center-active
-                    >
-                        {% for item in ag_grid_config %}
-                            {% if item.var_type == 'numeric' %}
-                                <v-tab key="{{ item.id }}">
-                                    {{ item.name }}
-                                </v-tab>
-                            {% endif %}
-                        {% endfor %}
-                    </v-tabs>
-                </v-carousel-item>
-            </v-carousel>
+            </ag-grid-vue> -->
 
         </v-app>
 
@@ -365,23 +276,19 @@
 </style>
 
 <script>
-    // parse the offset string
+    // Parses offset strings like "11:00:00", "1 day, 11:00:00", or "-1 day, 11:00:00" into total minutes.
     function parseOffsetToMinutes(offsetStr) {
-        const match = offsetStr.match(/(-?\d+) day[s]?,\s*(\d{2}):(\d{2}):(\d{2})/);
+        if (!offsetStr || typeof offsetStr !== 'string') return 0;
+
+        const match = offsetStr.trim().match(/^(?:(-?\d+)\s*day[s]?,\s*)?(\d{1,2}):(\d{2}):(\d{2})$/);
 
         if (!match) return 0;
 
-        const days = parseInt(match[1], 10);
+        const days = match[1] ? parseInt(match[1], 10) : 0;
         const hours = parseInt(match[2], 10);
         const minutes = parseInt(match[3], 10);
 
         return (days * 24 * 60) + (hours * 60) + minutes;
-    }
-
-    // initialize the timezone details
-    const timezoneDetails = {
-        offsetMinutes: parseOffsetToMinutes("{{ timezone_offset }}"), 
-        offsetStr: "{{ timezone_offset }}"
     }
 
     function formatMonthDay(day) {
@@ -580,8 +487,6 @@
                 return {
                     statistics: null,
                     activeTab: 0,
-                    isBack: false, // control for the carousel
-                    currentSlide: 0,
                     snackbar: { show: false, message: '', color: '' },
                     hideTable: true,
                     colDefs: columnDefinitions,
@@ -594,7 +499,11 @@
                     valid: false,
                     datepicker_menu: false,
                     textFieldsRules: [v => (v !== undefined && v !== "") || "This field is required"],
-                    now: moment.utc().add(timezoneDetails.offsetMinutes, 'minutes').format('YYYY-MM-DD'),
+                    // initialize the timezone details
+                    timezoneDetails: {
+                        offsetMinutes: parseOffsetToMinutes("{{ timezone_offset }}"), 
+                        offsetStr: "{{ timezone_offset }}"
+                    },
                     loading: false,
                     requestedData: {},
                     // AG GRID DATA
@@ -724,7 +633,6 @@
                     selectedCount: 0,
                     confirmDeleteDialog: false,
                     pendingDeleteDays: [],
-                    inProduction: false,
                     useUTC: false,
 
                     editorListeners: new Map(), // Map to track active editor listeners (keyed by "rowIndex-colId")
@@ -1002,8 +910,13 @@
 
 
                 // calculates allowed dates
-                allowedDates(date){
-                    return this.now >= date;
+                allowedDates(date) {
+                    const currentMonth = moment
+                        .utc()
+                        .utcOffset(this.timezoneDetails.offsetMinutes)
+                        .format('YYYY-MM');
+
+                    return date <= currentMonth;
                 },
 
 
@@ -1055,8 +968,8 @@
                         this.requestedData = Object.assign({}, this.requestData);
 
                         const response_data = response.data[0];
-                        timezoneDetails.offsetMinutes = response.data[1];
-                        timezoneDetails.offsetStr = response.data[2];
+                        this.timezoneDetails.offsetMinutes = response.data[1];
+                        this.timezoneDetails.offsetStr = response.data[2];
 
                         const daysInMonth = response.data[3];
 
@@ -1195,9 +1108,9 @@
                     const rowMoment = moment(
                         `${selectedMonth}-${String(day).padStart(2, '0')}`,
                         'YYYY-MM-DD'
-                    ).utcOffset(timezoneDetails.offsetMinutes, true);
+                    ).utcOffset(this.timezoneDetails.offsetMinutes, true);
 
-                    const nowMoment = moment.utc().utcOffset(timezoneDetails.offsetMinutes);
+                    const nowMoment = moment.utc().utcOffset(this.timezoneDetails.offsetMinutes);
 
                     if (rowMoment.isAfter(nowMoment, 'day')) {
                         return 'Cannot edit future days';
@@ -1254,18 +1167,6 @@
                     }
 
                     this.markAsDraft();
-                },
-
-
-                // next slide control for the carousel
-                nextSlide() {              
-                    this.isBack = !this.isBack; // update the control var
-                    this.currentSlide = (this.currentSlide + 1) % 2; // update the carousel
-
-                    // if the user hits the back button don't attempt to fetch station publish logs
-                    if (!this.isBack) {
-                        return
-                    }
                 },
 
 
@@ -1578,13 +1479,6 @@
                     this.tableTheme === 'ag-theme-quartz'
                         ? 'ag-theme-balham'
                         : 'ag-theme-quartz';
-                },
-
-
-                // for production show dialog
-                showProduction() {
-                    // open confirmation dialog
-                    this.inProduction = true;
                 },
 
 

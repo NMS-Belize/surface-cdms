@@ -3119,11 +3119,14 @@ def get_monthly_data(station, start_date, next_month, utc_offset_minutes=0):
                             measured,
                             remarks,
                             observer,
-                            datetime + (%(utc_offset_minutes)s * interval '1 minute') AS local_datetime
+                            (datetime AT TIME ZONE 'UTC')
+                                + (%(utc_offset_minutes)s * interval '1 minute')
+                                AS local_datetime
                         FROM raw_data
                         WHERE station_id = %(station_id)s
-                          AND datetime >= %(local_month_start)s
-                          AND datetime < %(local_next_month)s
+                        AND datetime >= %(local_month_start)s
+                        AND datetime < %(local_next_month)s
+                        AND is_daily = TRUE
                     )
                     SELECT DISTINCT ON (local_datetime::date, variable_id)
                         EXTRACT(DAY FROM local_datetime)::int AS day_of_month,
@@ -3171,7 +3174,8 @@ def MonthlyFormUpdate(request):
 
         variables = Variable.objects.in_bulk()
 
-        now_utc = datetime.datetime.now().astimezone(pytz.UTC)
+        now_utc = datetime.datetime.now(pytz.UTC)
+
         datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
 
         # Monthly form rows are daily observations.
@@ -3487,6 +3491,7 @@ def MonthlyFormDelete(request):
         "delete_raw_data": """
             DELETE FROM raw_data
             WHERE station_id = %s
+              AND is_daily = TRUE
               AND variable_id = ANY(%s)
               AND datetime >= %s
               AND datetime < %s
@@ -3675,7 +3680,7 @@ def monthly_capture_update_empty_col(request):
               AND variable_id = ANY(%s)
               AND datetime >= %s
               AND datetime < %s
-            RETURNING station_id, variable_id, datetime, measured, code
+              AND is_daily = TRUE
         """,
 
         # Queue daily summary recalculation for the affected day.
@@ -3690,16 +3695,24 @@ def monthly_capture_update_empty_col(request):
             ON CONFLICT DO NOTHING
         """,
 
-        # Check if StationVariable.last_data_datetime points to the deleted day.
-        # We check this before repairing last_data_*.
+        # Check if StationVariable.last_data_datetime points to a daily row
+        # that will be deleted by this operation.
         "get_affected_stationvariables": """
-            SELECT variable_id
-            FROM wx_stationvariable
-            WHERE station_id = %s
-              AND variable_id = ANY(%s)
-              AND last_data_datetime IS NOT NULL
-              AND last_data_datetime >= %s
-              AND last_data_datetime < %s
+            SELECT sv.variable_id
+            FROM wx_stationvariable sv
+            WHERE sv.station_id = %s
+            AND sv.variable_id = ANY(%s)
+            AND sv.last_data_datetime IS NOT NULL
+            AND EXISTS (
+                SELECT 1
+                FROM raw_data rd
+                WHERE rd.station_id = sv.station_id
+                    AND rd.variable_id = sv.variable_id
+                    AND rd.datetime = sv.last_data_datetime
+                    AND rd.datetime >= %s
+                    AND rd.datetime < %s
+                    AND rd.is_daily = TRUE
+            )
         """,
 
         # Repair StationVariable.last_data_* using the latest remaining raw_data row.
@@ -3862,8 +3875,7 @@ def monthly_capture_update_empty_col(request):
                         ]
                     )
 
-                    deleted_rows = cursor.fetchall()
-                    deleted_count = len(deleted_rows)
+                    deleted_count = cursor.rowcount
 
                     deleted_total += deleted_count
                     deleted_by_day[str(local_date)] = deleted_count
@@ -3878,12 +3890,13 @@ def monthly_capture_update_empty_col(request):
                     )
 
                     # -----------------------------------------------------
-                    # 9. Queue daily summary recalculation
+                    # 9. Queue daily summary recalculation (only something was deleted)
                     # -----------------------------------------------------
-                    cursor.execute(
-                        queries["create_daily_summary"],
-                        [station_id, local_date]
-                    )
+                    if deleted_count == 0:
+                        cursor.execute(
+                            queries["create_daily_summary"],
+                            [station_id, local_date]
+                        )
 
                     # -----------------------------------------------------
                     # 10. Repair StationVariable.last_data_* if needed
@@ -9730,15 +9743,20 @@ def synop_pressure_calc(request):
         date_value = data.get('date')
 
         station = Station.objects.get(pk=station_id[0]) 
-        # Invert the station's UTC offset (minutes) to convert its local time to UTC.
-        offset = datetime.timedelta(minutes=(-1 * station.utc_offset_minutes))
+
+        station_tz = pytz.FixedOffset(station.utc_offset_minutes)
 
         # Convert the string to a datetime object:
-        dt_object = datetime.datetime.strptime(date_value, "%Y-%m-%d %H:%M")
-        dt_object = dt_object + offset
+        dt_object = datetime.datetime.strptime(
+            date_value,
+            "%Y-%m-%d %H:%M"
+        )
 
-        # Subtract 24 hours:
-        dt_24_hours_ago = dt_object - timedelta(days=1)
+        local_datetime = station_tz.localize(dt_object)
+
+        utc_datetime = local_datetime.astimezone(pytz.UTC)
+
+        dt_24_hours_ago = utc_datetime - datetime.timedelta(days=1)
 
         # Format the resulting datetime object back into a string:
         formatted_date_string = dt_24_hours_ago.strftime("%Y-%m-%dT%H:%MZ")
@@ -9775,52 +9793,108 @@ def synop_pressure_calc(request):
 @csrf_exempt
 @wx_mapped_permission_required
 def synop_precip_calc(request):
+
     if request.method == 'POST':
+        # Get the station and request payload.
         station_id = int(request.GET['station_id'])
-        data = json.loads(request.body)  # Parse JSON data
-        # precip_value = float(data.get('precipitation_value')) 
-        precip_24_hr = 0
+        data = json.loads(request.body)
+
+        # Current precipitation value entered in the Synop form.
+        precip_value = float(data.get('precipitation_value'))
+
+        # Selected station-local datetime from the frontend.
+        # Expected format: YYYY-MM-DD HH:MM
         date_value = data.get('date')
 
-        station = Station.objects.get(pk=station_id) 
-        # Invert the station's UTC offset (minutes) to convert its local time to UTC.
-        offset = datetime.timedelta(minutes=(-1 * station.utc_offset_minutes))
+        # Fetch the station so we can use its configured UTC offset.
+        station = Station.objects.get(pk=station_id)
 
-        # Convert the string to a datetime object:
-        dt_object = datetime.datetime.strptime(date_value, "%Y-%m-%d %H:%M")
-        dt_object = dt_object + offset
+        # Build the station's fixed timezone from its UTC offset.
+        #
+        # Example:
+        #   station.utc_offset_minutes = -360
+        #   station_tz = UTC-06:00
+        station_tz = pytz.FixedOffset(station.utc_offset_minutes)
 
-        # Subtract 24 hours:
-        dt_24_hours_ago = dt_object - timedelta(days=1)
+        # Parse the incoming datetime.
+        #
+        # At this point it is still naive:
+        #   2026-09-06 13:00:00
+        local_datetime = datetime.datetime.strptime(
+            date_value,
+            "%Y-%m-%d %H:%M"
+        )
 
-        # Format the resulting datetime object back into a string:
-        formatted_dt_24_hours_ago = dt_24_hours_ago.strftime("%Y-%m-%dT%H:%MZ")
+        # Interpret the naive datetime as station-local time.
+        #
+        # Example:
+        #   2026-09-06 13:00:00
+        # becomes:
+        #   2026-09-06 13:00:00-06:00
+        local_datetime = station_tz.localize(local_datetime)
 
-        # Format the datetime object also
-        formatted_dt_object = dt_object.strftime("%Y-%m-%dT%H:%MZ")
+        # Convert the station-local datetime to UTC.
+        #
+        # Example:
+        #   2026-09-06 13:00:00-06:00
+        # becomes:
+        #   2026-09-06 19:00:00+00:00
+        utc_datetime = local_datetime.astimezone(pytz.UTC)
+
+        # Calculate the start of the previous 24-hour period.
+        dt_24_hours_ago = utc_datetime - datetime.timedelta(days=1)
 
         precipitation_variable_id = 0
 
+        # Retrieve non-daily precipitation observations from the
+        # previous 24-hour period.
+        #
+        # We intentionally use:
+        #
+        #   datetime >  dt_24_hours_ago
+        #   datetime <  utc_datetime
+        #
+        # The current observation is excluded because precip_value,
+        # which represents the value currently entered in the form,
+        # is added separately below.
+        #
+        # This prevents an existing value at the current hour from
+        # being counted twice when the user edits it.
         sql_string = """
             SELECT measured
             FROM raw_data
             WHERE station_id = %s
             AND variable_id = %s
-            AND datetime >= %s AND datetime < %s;
+            AND is_daily = FALSE
+            AND datetime > %s
+            AND datetime < %s
         """
 
-        if sql_string:
-            with connection.cursor() as cursor:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                sql_string,
+                [
+                    station_id,
+                    precipitation_variable_id,
+                    dt_24_hours_ago,
+                    utc_datetime,
+                ]
+            )
 
-                cursor.execute(sql_string, [station_id, precipitation_variable_id, formatted_dt_24_hours_ago, formatted_dt_object])
+            rows = cursor.fetchall()
 
-                rows = cursor.fetchall()
-            
-                # adding to get the total precipitation in 24 hours
-                precip_24_hr = sum(row[0] for row in rows if row[0] != -99.9)
-                # the below is leagacy code of the above
-                # precip_24_hr = sum(row[0] for row in rows if row[0] != -99.9) + precip_value
-        
+        # Sum the precipitation observations from the previous 24 hours,
+        # ignoring missing values, then add the current value entered
+        # in the Synop form.
+        precip_24_hr = (
+            sum(
+                row[0]
+                for row in rows
+                if row[0] != settings.MISSING_VALUE
+            )
+            + precip_value
+        )
+
     return JsonResponse({'dataset': precip_24_hr}, status=status.HTTP_200_OK)
 
 
@@ -9842,8 +9916,11 @@ def synop_update(request):
 
         variables = Variable.objects.in_bulk()
 
-        now_utc = datetime.datetime.now().astimezone(pytz.UTC)
-        now_utc += datetime.timedelta(hours=1)
+        now_utc = datetime.datetime.now(pytz.UTC)
+
+        # allow for saving 15 min before the intended time
+        # eg: data for 1400 can be saved at 1345
+        now_utc += datetime.timedelta(minutes=15)
 
         datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
         seconds = 3600
@@ -9897,7 +9974,8 @@ def synop_update(request):
 
     except Exception as e:
         logger.error(repr(e))
-        return JsonResponse({"error": "Failed to start task"}, status=500)
+        return JsonResponse({"error": "Failed to start synop update task"}, status=500)
+
 
 
 def get_synop_data(station, date, utc_offset_minutes=0):
@@ -9923,6 +10001,7 @@ def get_synop_data(station, date, utc_offset_minutes=0):
                 WHERE station_id = {station.id}
                     AND datetime >= '{start_datetime}'
                     AND datetime < '{end_datetime}'
+                    AND is_daily = FALSE
                 """
 
             cursor.execute(query)
@@ -9971,110 +10050,432 @@ def synop_load(request):
 @api_view(['POST'])
 @wx_mapped_permission_required
 def synop_delete(request):
-    # Extract data from the request
-    request_date_str = request.GET.get('date', None)
-    hour = request.GET.get('hour', None)
-    station_id = request.GET.get('station_id', None)
-    
-    hour = int(hour)
-
+    # ---------------------------------------------------------------------
+    # 1. Extract and validate request data
+    # ---------------------------------------------------------------------
+    request_date_str = request.GET.get('date')
+    hour = request.GET.get('hour')
+    station_id = request.GET.get('station_id')
     variable_id_list = request.data.get('variable_ids')
 
-    # Validate inputs
-    if (None in [request_date_str, hour, station_id, variable_id_list]):
-        message = "Invalid request. 'date', 'hour', 'station_id', and 'variable_ids' must be provided."
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+    if (
+        request_date_str is None
+        or hour is None
+        or station_id is None
+        or variable_id_list is None
+    ):
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid request. 'date', 'hour', 'station_id', "
+                    "and 'variable_ids' must be provided."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    # Validate date format
+    # Validate hour and station ID.
     try:
-        request_date = datetime.datetime.strptime(request_date_str, '%Y-%m-%d')
+        hour = int(hour)
+        station_id = int(station_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"message": "Invalid hour or station_id."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if hour < 0 or hour > 23:
+        return JsonResponse(
+            {"message": "Hour must be between 0 and 23."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate selected date.
+    try:
+        request_date = datetime.datetime.strptime(
+            request_date_str,
+            '%Y-%m-%d'
+        )
     except ValueError:
-        message = "Invalid date format. The expected date format is 'YYYY-MM-DD'"
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
-    
-    variable_id_list = [int(v) for v in tuple(variable_id_list)]
-    station = Station.objects.get(id=station_id)
-    datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
-    request_datetime = datetime_offset.localize(request_date.replace(hour=hour))
-    request_start_range_dt = request_datetime - timedelta(days=10)
-    request_end_range_dt = request_datetime + timedelta(days=10)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid date format. "
+                    "The expected date format is 'YYYY-MM-DD'"
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate variable IDs.
+    try:
+        variable_id_list = [int(v) for v in variable_id_list]
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"message": "All variable IDs must be integers."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not variable_id_list:
+        return JsonResponse(
+            {"message": "At least one variable ID must be provided."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ---------------------------------------------------------------------
+    # 2. Build the selected station-local datetime
+    # ---------------------------------------------------------------------
+    station = get_object_or_404(Station, id=station_id)
+
+    station_tz = pytz.FixedOffset(station.utc_offset_minutes)
+
+    # request_date is currently a naive local calendar date.
+    #
+    # Example:
+    #   request_date = 2026-09-06 00:00
+    #   hour         = 13
+    #
+    # becomes:
+    #   2026-09-06 13:00
+    local_datetime = request_date.replace(
+        hour=hour,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    # Interpret the datetime as station-local time.
+    #
+    # Example for Belize:
+    #   2026-09-06 13:00
+    # becomes:
+    #   2026-09-06 13:00-06:00
+    request_datetime = station_tz.localize(local_datetime)
+
+    # Daily summary tasks use the station's local calendar date,
+    # not the PostgreSQL/session representation of the timestamp.
+    local_date = request_date.date()
+
+    # ---------------------------------------------------------------------
+    # 3. Find only the Timescale chunks around the requested datetime
+    # ---------------------------------------------------------------------
+    # Keep the existing +/- 10 day window so that deletion and normal
+    # last_data_* repair operate only against nearby chunks instead of
+    # scanning the full raw_data hypertable.
+    request_start_range_dt = request_datetime - datetime.timedelta(days=10)
+    request_end_range_dt = request_datetime + datetime.timedelta(days=10)
 
     queries = {
         "grab_relevant_chunks": """
-            SELECT 
-            show_chunks('raw_data', newer_than => %s, older_than => %s)
+            SELECT show_chunks(
+                'raw_data',
+                newer_than => %s,
+                older_than => %s
+            )
         """,
-        "delete_raw_data": """
-            DELETE FROM {raw_data_chunk}
-            WHERE station_id = %s
-            AND variable_id = ANY(%s)
-            AND datetime = %s
-        """,
+
         "create_daily_summary": """
-            INSERT INTO wx_dailysummarytask (station_id, date, created_at, updated_at)
+            INSERT INTO wx_dailysummarytask (
+                station_id,
+                date,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
+
         "create_hourly_summary": """
-            INSERT INTO wx_hourlysummarytask (station_id, datetime, created_at, updated_at)
+            INSERT INTO wx_hourlysummarytask (
+                station_id,
+                datetime,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
-        "get_last_updated": """
-            SELECT max(last_data_datetime)
+
+        # After deletion, determine which StationVariable records actually
+        # pointed to one of the deleted observations.
+        "get_affected_stationvariables": """
+            SELECT variable_id
             FROM wx_stationvariable
             WHERE station_id = %s
               AND variable_id = ANY(%s)
-            ORDER BY 1 DESC
+              AND last_data_datetime = %s
         """,
-        "update_last_updated": """
-            WITH rd AS (
-                SELECT station_id, variable_id, measured, code, datetime,
-                       RANK() OVER (PARTITION BY station_id, variable_id ORDER BY datetime DESC) AS datetime_rank
-                FROM {raw_data_chunk}
-                WHERE station_id = %s
-                  AND variable_id = ANY(%s)
-            )
-            UPDATE wx_stationvariable sv
-            SET last_data_datetime = rd.datetime,
-                last_data_value = rd.measured,
-                last_data_code = rd.code
-            FROM rd
-            WHERE sv.station_id = rd.station_id
-              AND sv.variable_id = rd.variable_id
-              AND rd.datetime_rank = 1
-        """
+
+        # Used only as a fallback when no remaining observation for a
+        # variable exists inside the nearby chunks.
+        #
+        # At that point any remaining latest observation must be older
+        # than the chunk window, so this upper bound still gives Timescale
+        # useful chunk pruning.
+        "get_older_last_data": """
+            SELECT DISTINCT ON (variable_id)
+                variable_id,
+                measured,
+                code,
+                datetime
+            FROM raw_data
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+              AND datetime < %s
+            ORDER BY variable_id, datetime DESC
+        """,
+
+        "update_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = %s,
+                last_data_value = %s,
+                last_data_code = %s
+            WHERE station_id = %s
+              AND variable_id = %s
+        """,
+
+        "clear_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = NULL,
+                last_data_value = NULL,
+                last_data_code = NULL
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+        """,
     }
+
+    deleted_total = 0
+    deleted_variable_ids = set()
 
     with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
         with conn.cursor() as cursor:
-            # grab relevant chunks, holding data within 10 days of the request datetime
-            # this reduces the overhead of looking through the entire raw_data table
-            cursor.execute(queries['grab_relevant_chunks'], [request_start_range_dt, request_end_range_dt])
-            
+
+            # -------------------------------------------------------------
+            # 4. Find relevant chunks
+            # -------------------------------------------------------------
+            cursor.execute(
+                queries["grab_relevant_chunks"],
+                [
+                    request_start_range_dt,
+                    request_end_range_dt,
+                ]
+            )
+
             chunks = [row[0] for row in cursor.fetchall()]
 
+            # -------------------------------------------------------------
+            # 5. Delete the selected Synop observations
+            # -------------------------------------------------------------
+            # Work directly against the relevant chunks for efficiency.
+            #
+            # is_daily = FALSE is important because a daily/monthly
+            # observation can exist at the exact same timestamp,
+            # particularly at 00:00.
             for chunk in chunks:
-                cursor.execute(queries['delete_raw_data'].format(raw_data_chunk=chunk), [station_id, variable_id_list, request_datetime])
+                chunk_identifier = psycopg2.sql.Identifier(*chunk.split('.', 1))
 
-            # After deleting from raw_data, is necessary to update the daily and hourly summary tables.
-            cursor.execute(queries["create_daily_summary"], [station_id, request_datetime])
-            cursor.execute(queries["create_hourly_summary"], [station_id, request_datetime])
-            
-            # If succeed in inserting new data, it's necessary to update the 'last data' columns in wx_stationvariable tabl.
-            cursor.execute(queries["get_last_updated"], [station_id, variable_id_list])
-            
-            last_data_datetime_row = cursor.fetchone()
+                delete_query = psycopg2.sql.SQL("""
+                    DELETE FROM {raw_data_chunk}
+                    WHERE station_id = %s
+                      AND variable_id = ANY(%s)
+                      AND datetime = %s
+                      AND is_daily = FALSE
+                    RETURNING variable_id
+                """).format(
+                    raw_data_chunk=chunk_identifier
+                )
 
-            if last_data_datetime_row and last_data_datetime_row[0] == request_datetime:
-                # loop through relevant chunks instead of the entire raw_data
+                cursor.execute(
+                    delete_query,
+                    [
+                        station_id,
+                        variable_id_list,
+                        request_datetime,
+                    ]
+                )
+
+                deleted_rows = cursor.fetchall()
+
+                deleted_total += len(deleted_rows)
+                deleted_variable_ids.update(
+                    row[0] for row in deleted_rows
+                )
+
+            # Nothing was actually deleted, so there is no summary or
+            # StationVariable state that needs to be repaired.
+            if not deleted_variable_ids:
+                return Response(
+                    {
+                        "deleted_rows": 0,
+                        "message": "No matching Synop observations were found."
+                    },
+                    status=status.HTTP_200_OK
+                )
+
+            # -------------------------------------------------------------
+            # 6. Queue summary recalculation
+            # -------------------------------------------------------------
+
+            # Daily summaries operate on the station-local calendar date.
+            cursor.execute(
+                queries["create_daily_summary"],
+                [station_id, local_date]
+            )
+
+            # Hourly summaries operate on the actual aware datetime.
+            cursor.execute(
+                queries["create_hourly_summary"],
+                [station_id, request_datetime]
+            )
+
+            # -------------------------------------------------------------
+            # 7. Determine which last_data_* records were affected
+            # -------------------------------------------------------------
+            # Only variables for which we actually deleted data are checked.
+            cursor.execute(
+                queries["get_affected_stationvariables"],
+                [
+                    station_id,
+                    list(deleted_variable_ids),
+                    request_datetime,
+                ]
+            )
+
+            affected_variable_ids = {
+                row[0] for row in cursor.fetchall()
+            }
+
+            if affected_variable_ids:
+
+                # ---------------------------------------------------------
+                # 8. Find latest remaining values in the nearby chunks
+                # ---------------------------------------------------------
+                # Each chunk returns its latest observation for each
+                # affected variable. Python then chooses the newest result
+                # across all of those chunks.
+                latest_by_variable = {}
+
                 for chunk in chunks:
-                    cursor.execute(queries["update_last_updated"].format(raw_data_chunk=chunk), [station_id, variable_id_list])
+                    chunk_identifier = psycopg2.sql.Identifier(*chunk.split('.', 1))
+
+                    latest_query = psycopg2.sql.SQL("""
+                        SELECT DISTINCT ON (variable_id)
+                            variable_id,
+                            measured,
+                            code,
+                            datetime
+                        FROM {raw_data_chunk}
+                        WHERE station_id = %s
+                          AND variable_id = ANY(%s)
+                        ORDER BY variable_id, datetime DESC
+                    """).format(
+                        raw_data_chunk=chunk_identifier
+                    )
+
+                    cursor.execute(
+                        latest_query,
+                        [
+                            station_id,
+                            list(affected_variable_ids),
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+
+                        existing = latest_by_variable.get(variable_id)
+
+                        if (
+                            existing is None
+                            or data_datetime > existing["datetime"]
+                        ):
+                            latest_by_variable[variable_id] = {
+                                "measured": measured,
+                                "code": code,
+                                "datetime": data_datetime,
+                            }
+
+                # ---------------------------------------------------------
+                # 9. Fallback for variables with no nearby observations
+                # ---------------------------------------------------------
+                unresolved_variable_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                # Normally the latest remaining value will be found in the
+                # nearby chunks. If it is not, the previous observation may
+                # simply be older than 10 days.
+                #
+                # Only those unresolved variables fall back to raw_data,
+                # preserving the chunk-based fast path for normal deletes.
+                if unresolved_variable_ids:
+                    cursor.execute(
+                        queries["get_older_last_data"],
+                        [
+                            station_id,
+                            list(unresolved_variable_ids),
+                            request_start_range_dt,
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+                        latest_by_variable[variable_id] = {
+                            "measured": measured,
+                            "code": code,
+                            "datetime": data_datetime,
+                        }
+
+                # ---------------------------------------------------------
+                # 10. Update StationVariable.last_data_*
+                # ---------------------------------------------------------
+                for variable_id, latest in latest_by_variable.items():
+                    cursor.execute(
+                        queries["update_stationvariable"],
+                        [
+                            latest["datetime"],
+                            latest["measured"],
+                            latest["code"],
+                            station_id,
+                            variable_id,
+                        ]
+                    )
+
+                # ---------------------------------------------------------
+                # 11. Clear last_data_* when no raw_data remains
+                # ---------------------------------------------------------
+                no_remaining_data_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                if no_remaining_data_ids:
+                    cursor.execute(
+                        queries["clear_stationvariable"],
+                        [
+                            station_id,
+                            list(no_remaining_data_ids),
+                        ]
+                    )
 
         conn.commit()
 
-    return Response([], status=status.HTTP_200_OK)
-
+    return Response(
+        {
+            "deleted_rows": deleted_total,
+            "message": f"Deleted {deleted_total} database row(s).",
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 class MonthlyFormView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
@@ -10096,7 +10497,8 @@ class MonthlyFormView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateVie
 
         # changing the date so that if reflects that users timezone
         offset = datetime.timedelta(minutes=(settings.TIMEZONE_OFFSET))
-        dt_object = datetime.datetime.now() + offset
+        fixed_tz = pytz.FixedOffset(settings.TIMEZONE_OFFSET)
+        dt_object = datetime.datetime.now(pytz.UTC).astimezone(fixed_tz)
 
         # This will store it as a string like "2026-05"
         context['date'] = dt_object.strftime('%Y-%m')
@@ -10657,183 +11059,533 @@ def get_synop_capture_config():
     return context, num_validate_ids, variable_ids
 
 
-# recieve the coloumns which are empty and removes their entry from the database
-# similar to synop delete, except this handles multiple hours
+# Receive columns which were cleared in the Synop form and remove
+# their corresponding raw_data entries.
+#
+# Similar to synop_delete, except this can handle multiple hours
+# in a single request.
 @api_view(['POST'])
 @wx_mapped_permission_required
 def synop_capture_update_empty_col(request):
-    # Extract data from the request
+    # ---------------------------------------------------------------------
+    # 1. Extract request data
+    # ---------------------------------------------------------------------
     request_date_str = request.GET.get('date')
     station_id = request.GET.get('station_id')
     empty_cols_data = request.data.get('empty_cols_data')
 
-    # Basic validation
+    # Basic validation.
     if not request_date_str or not station_id or empty_cols_data is None:
-        message = "Invalid request. 'date', 'station_id', and 'empty_cols_data' must be provided."
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid request. 'date', 'station_id', and "
+                    "'empty_cols_data' must be provided."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if not isinstance(empty_cols_data, dict):
-        message = "Invalid request. 'empty_cols_data' must be an object keyed by hour."
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid request. 'empty_cols_data' must be "
+                    "an object keyed by hour."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Validate date format once
+    # ---------------------------------------------------------------------
+    # 2. Validate date and station
+    # ---------------------------------------------------------------------
     try:
-        request_date = datetime.datetime.strptime(request_date_str, '%Y-%m-%d')
+        request_date = datetime.datetime.strptime(
+            request_date_str,
+            '%Y-%m-%d'
+        )
     except ValueError:
-        message = "Invalid date format. The expected date format is 'YYYY-MM-DD'"
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid date format. "
+                    "The expected date format is 'YYYY-MM-DD'"
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Fetch station once
     try:
+        station_id = int(station_id)
         station = Station.objects.get(id=station_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"message": "Invalid station_id."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     except Station.DoesNotExist:
         return JsonResponse(
             {"message": "Station not found"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
+    station_tz = pytz.FixedOffset(station.utc_offset_minutes)
+
+    # Daily summary tasks use the station-local calendar date.
+    local_date = request_date.date()
+
+    # ---------------------------------------------------------------------
+    # 3. Validate every hour/variable list BEFORE touching the database
+    # ---------------------------------------------------------------------
+    delete_requests = []
+
+    for hour_key, variable_id_list in empty_cols_data.items():
+        try:
+            hour = int(hour_key)
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {"message": f"Invalid hour value: {hour_key}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if hour < 0 or hour > 23:
+            return JsonResponse(
+                {
+                    "message": (
+                        f"Hour must be between 0 and 23. "
+                        f"Received: {hour}"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if variable_id_list is None:
+            return JsonResponse(
+                {
+                    "message": (
+                        f"variable_ids must be provided for hour {hour}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(variable_id_list, (list, tuple)):
+            return JsonResponse(
+                {
+                    "message": (
+                        f"variable_ids for hour {hour} must be a list."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Nothing was cleared for this hour.
+        if not variable_id_list:
+            continue
+
+        try:
+            variable_id_list = [
+                int(v) for v in variable_id_list
+            ]
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {
+                    "message": (
+                        f"Invalid variable_ids for hour {hour}. "
+                        "All variable IDs must be integers."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build the station-local observation datetime.
+        #
+        # Example:
+        #   date = 2026-09-06
+        #   hour = 13
+        #   station offset = -360
+        #
+        # becomes:
+        #   2026-09-06 13:00:00-06:00
+        local_datetime = request_date.replace(
+            hour=hour,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+        request_datetime = station_tz.localize(local_datetime)
+
+        delete_requests.append({
+            "hour": hour,
+            "datetime": request_datetime,
+            "variable_ids": variable_id_list,
+        })
+
+    # Nothing was actually requested for deletion.
+    if not delete_requests:
+        return Response(
+            {
+                "deleted_rows": 0,
+                "message": "No cleared Synop values to delete."
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ---------------------------------------------------------------------
+    # 4. Determine the chunk search window ONCE
+    # ---------------------------------------------------------------------
+    # All observations belong to the same selected local date, so there is
+    # no need to call show_chunks() separately for every hour.
+    earliest_datetime = min(
+        item["datetime"] for item in delete_requests
+    )
+
+    latest_datetime = max(
+        item["datetime"] for item in delete_requests
+    )
+
+    request_start_range_dt = (
+        earliest_datetime - datetime.timedelta(days=10)
+    )
+
+    request_end_range_dt = (
+        latest_datetime + datetime.timedelta(days=10)
+    )
 
     queries = {
         "grab_relevant_chunks": """
-            SELECT 
-            show_chunks('raw_data', newer_than => %s, older_than => %s)
+            SELECT show_chunks(
+                'raw_data',
+                newer_than => %s,
+                older_than => %s
+            )
         """,
-        "delete_raw_data": """
-            DELETE FROM {raw_data_chunk}
-            WHERE station_id = %s
-            AND variable_id = ANY(%s)
-            AND datetime = %s
-        """,
+
         "create_daily_summary": """
-            INSERT INTO wx_dailysummarytask (station_id, date, created_at, updated_at)
+            INSERT INTO wx_dailysummarytask (
+                station_id,
+                date,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
+
         "create_hourly_summary": """
-            INSERT INTO wx_hourlysummarytask (station_id, datetime, created_at, updated_at)
+            INSERT INTO wx_hourlysummarytask (
+                station_id,
+                datetime,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
-        "get_last_updated": """
-            SELECT max(last_data_datetime)
+
+        # Get StationVariable metadata only for variables from which
+        # rows were actually deleted.
+        "get_stationvariables": """
+            SELECT variable_id, last_data_datetime
             FROM wx_stationvariable
             WHERE station_id = %s
               AND variable_id = ANY(%s)
-            ORDER BY 1 DESC
         """,
-        "update_last_updated": """
-            WITH rd AS (
-                SELECT station_id, variable_id, measured, code, datetime,
-                       RANK() OVER (PARTITION BY station_id, variable_id ORDER BY datetime DESC) AS datetime_rank
-                FROM {raw_data_chunk}
-                WHERE station_id = %s
-                  AND variable_id = ANY(%s)
-            )
-            UPDATE wx_stationvariable sv
-            SET last_data_datetime = rd.datetime,
-                last_data_value = rd.measured,
-                last_data_code = rd.code
-            FROM rd
-            WHERE sv.station_id = rd.station_id
-              AND sv.variable_id = rd.variable_id
-              AND rd.datetime_rank = 1
-        """
+
+        # Fallback for affected variables whose previous observation
+        # is older than the nearby chunk window.
+        "get_older_last_data": """
+            SELECT DISTINCT ON (variable_id)
+                variable_id,
+                measured,
+                code,
+                datetime
+            FROM raw_data
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+              AND datetime < %s
+            ORDER BY variable_id, datetime DESC
+        """,
+
+        "update_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = %s,
+                last_data_value = %s,
+                last_data_code = %s
+            WHERE station_id = %s
+              AND variable_id = %s
+        """,
+
+        "clear_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = NULL,
+                last_data_value = NULL,
+                last_data_code = NULL
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+        """,
     }
 
-    with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
+    deleted_total = 0
+
+    # Store exactly which datetime(s) were deleted for each variable.
+    #
+    # Example:
+    # {
+    #     61: {10:00, 11:00},
+    #     0:  {13:00}
+    # }
+    deleted_datetimes_by_variable = {}
+
+    with psycopg2.connect(
+        settings.SURFACE_CONNECTION_STRING
+    ) as conn:
         with conn.cursor() as cursor:
-            for col_data_key, variable_id_list in empty_cols_data.items():
-                # Validate hour
-                try:
-                    hour = int(col_data_key)
-                except (TypeError, ValueError):
-                    return JsonResponse(
-                        {"message": f"Invalid hour value: {col_data_key}"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
 
-                if hour < 0 or hour > 23:
-                    return JsonResponse(
-                        {"message": f"Hour must be between 0 and 23. Received: {hour}"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            # -------------------------------------------------------------
+            # 5. Grab relevant Timescale chunks once
+            # -------------------------------------------------------------
+            cursor.execute(
+                queries["grab_relevant_chunks"],
+                [
+                    request_start_range_dt,
+                    request_end_range_dt,
+                ]
+            )
 
-                # Validate variable list
-                if variable_id_list is None:
-                    return JsonResponse(
-                        {"message": f"Invalid request. variable_ids must be provided for hour {hour}."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            chunks = [row[0] for row in cursor.fetchall()]
 
-                if not isinstance(variable_id_list, (list, tuple)):
-                    return JsonResponse(
-                        {"message": f"Invalid request. variable_ids for hour {hour} must be a list."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            # -------------------------------------------------------------
+            # 6. Delete cleared Synop values
+            # -------------------------------------------------------------
+            for delete_request in delete_requests:
+                request_datetime = delete_request["datetime"]
+                variable_id_list = delete_request["variable_ids"]
 
-                # Nothing to delete for this hour
-                if not variable_id_list:
-                    continue
+                hour_deleted_count = 0
 
-                try:
-                    variable_id_list = [int(v) for v in variable_id_list]
-                except (TypeError, ValueError):
-                    return JsonResponse(
-                        {"message": f"Invalid variable_ids for hour {hour}. All variable IDs must be integers."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                request_datetime = datetime_offset.localize(
-                    request_date.replace(hour=hour)
-                )
-                request_start_range_dt = request_datetime - timedelta(days=10)
-                request_end_range_dt = request_datetime + timedelta(days=10)
-
-                # Grab relevant chunks, holding data within 10 days of the request datetime
-                # This reduces the overhead of looking through the entire raw_data table.
-                cursor.execute(
-                    queries["grab_relevant_chunks"],
-                    [request_start_range_dt, request_end_range_dt]
-                )
-                chunks = [row[0] for row in cursor.fetchall()]
-
-                # Delete matching raw_data rows from relevant chunks
                 for chunk in chunks:
-                    cursor.execute(
-                        queries["delete_raw_data"].format(raw_data_chunk=chunk),
-                        [station_id, variable_id_list, request_datetime]
+                    chunk_identifier = psycopg2.sql.Identifier(
+                        *chunk.split('.', 1)
                     )
 
-                # After deleting from raw_data, it is necessary to update the daily and hourly summary tables.
+                    delete_query = psycopg2.sql.SQL("""
+                        DELETE FROM {raw_data_chunk}
+                        WHERE station_id = %s
+                          AND variable_id = ANY(%s)
+                          AND datetime = %s
+                          AND is_daily = FALSE
+                        RETURNING variable_id
+                    """).format(
+                        raw_data_chunk=chunk_identifier
+                    )
+
+                    cursor.execute(
+                        delete_query,
+                        [
+                            station_id,
+                            variable_id_list,
+                            request_datetime,
+                        ]
+                    )
+
+                    deleted_rows = cursor.fetchall()
+
+                    hour_deleted_count += len(deleted_rows)
+                    deleted_total += len(deleted_rows)
+
+                    for row in deleted_rows:
+                        variable_id = row[0]
+
+                        deleted_datetimes_by_variable.setdefault(
+                            variable_id,
+                            set()
+                        ).add(request_datetime)
+
+                # Only queue the hourly summary if something was
+                # actually deleted for this hour.
+                if hour_deleted_count > 0:
+                    cursor.execute(
+                        queries["create_hourly_summary"],
+                        [
+                            station_id,
+                            request_datetime,
+                        ]
+                    )
+
+            # -------------------------------------------------------------
+            # 7. Queue daily summary recalculation
+            # -------------------------------------------------------------
+            # Only one daily-summary task is needed because every edited
+            # hour belongs to the same station-local date.
+            if deleted_total > 0:
                 cursor.execute(
                     queries["create_daily_summary"],
-                    [station_id, request_datetime]
-                )
-                cursor.execute(
-                    queries["create_hourly_summary"],
-                    [station_id, request_datetime]
+                    [
+                        station_id,
+                        local_date,
+                    ]
                 )
 
-                # If the deleted datetime was the last_data_datetime for any of these variables,
-                # update the last_data_* fields from the remaining raw_data.
-                cursor.execute(
-                    queries["get_last_updated"],
-                    [station_id, variable_id_list]
-                )
-                last_data_datetime_row = cursor.fetchone()
+            # -------------------------------------------------------------
+            # 8. Determine which StationVariable.last_data_* values
+            #    were actually deleted
+            # -------------------------------------------------------------
+            deleted_variable_ids = list(
+                deleted_datetimes_by_variable.keys()
+            )
 
-                if last_data_datetime_row and last_data_datetime_row[0] == request_datetime:
-                    for chunk in chunks:
-                        cursor.execute(
-                            queries["update_last_updated"].format(raw_data_chunk=chunk),
-                            [station_id, variable_id_list]
+            affected_variable_ids = set()
+
+            if deleted_variable_ids:
+                cursor.execute(
+                    queries["get_stationvariables"],
+                    [
+                        station_id,
+                        deleted_variable_ids,
+                    ]
+                )
+
+                for variable_id, last_data_datetime in cursor.fetchall():
+                    deleted_datetimes = (
+                        deleted_datetimes_by_variable.get(
+                            variable_id,
+                            set()
                         )
+                    )
+
+                    if last_data_datetime in deleted_datetimes:
+                        affected_variable_ids.add(variable_id)
+
+            # -------------------------------------------------------------
+            # 9. Repair StationVariable.last_data_* only when needed
+            # -------------------------------------------------------------
+            if affected_variable_ids:
+                latest_by_variable = {}
+
+                # Search the already-selected nearby chunks first.
+                for chunk in chunks:
+                    chunk_identifier = psycopg2.sql.Identifier(
+                        *chunk.split('.', 1)
+                    )
+
+                    latest_query = psycopg2.sql.SQL("""
+                        SELECT DISTINCT ON (variable_id)
+                            variable_id,
+                            measured,
+                            code,
+                            datetime
+                        FROM {raw_data_chunk}
+                        WHERE station_id = %s
+                          AND variable_id = ANY(%s)
+                        ORDER BY variable_id, datetime DESC
+                    """).format(
+                        raw_data_chunk=chunk_identifier
+                    )
+
+                    cursor.execute(
+                        latest_query,
+                        [
+                            station_id,
+                            list(affected_variable_ids),
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+
+                        current_latest = latest_by_variable.get(
+                            variable_id
+                        )
+
+                        if (
+                            current_latest is None
+                            or data_datetime >
+                            current_latest["datetime"]
+                        ):
+                            latest_by_variable[variable_id] = {
+                                "measured": measured,
+                                "code": code,
+                                "datetime": data_datetime,
+                            }
+
+                # ---------------------------------------------------------
+                # 10. Fallback for observations older than nearby chunks
+                # ---------------------------------------------------------
+                unresolved_variable_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                if unresolved_variable_ids:
+                    cursor.execute(
+                        queries["get_older_last_data"],
+                        [
+                            station_id,
+                            list(unresolved_variable_ids),
+                            request_start_range_dt,
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+
+                        latest_by_variable[variable_id] = {
+                            "measured": measured,
+                            "code": code,
+                            "datetime": data_datetime,
+                        }
+
+                # ---------------------------------------------------------
+                # 11. Update last_data_* from latest remaining observations
+                # ---------------------------------------------------------
+                for variable_id, latest in latest_by_variable.items():
+                    cursor.execute(
+                        queries["update_stationvariable"],
+                        [
+                            latest["datetime"],
+                            latest["measured"],
+                            latest["code"],
+                            station_id,
+                            variable_id,
+                        ]
+                    )
+
+                # If absolutely no raw_data remains for an affected
+                # variable, clear its last_data_* metadata.
+                no_remaining_data_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                if no_remaining_data_ids:
+                    cursor.execute(
+                        queries["clear_stationvariable"],
+                        [
+                            station_id,
+                            list(no_remaining_data_ids),
+                        ]
+                    )
 
         conn.commit()
 
-    return Response([], status=status.HTTP_200_OK)
-
+    return Response(
+        {
+            "deleted_rows": deleted_total,
+            "message": f"Deleted {deleted_total} database row(s).",
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 def get_static_assets_dir():

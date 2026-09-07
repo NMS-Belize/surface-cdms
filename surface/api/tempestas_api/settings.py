@@ -41,7 +41,7 @@ if len(SECRET_ENCRYPTION_KEY) != 44:
 CIPHER_SUITE = Fernet(SECRET_ENCRYPTION_KEY)  # Create a reusable cipher suite
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('SURFACE_DJANGO_DEBUG', 'False').lower() == 'true'
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
