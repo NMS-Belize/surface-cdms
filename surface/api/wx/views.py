@@ -2148,7 +2148,12 @@ def get_latest_data(station_id):
 def get_current_data(station_id):
     result = []
     max_date = None
-    parameter_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+
+    station = Station.objects.get(id=station_id)
+    station_offset = station.utc_offset_minutes
+
+    # detemining the day based on the stations time. The current installations date could be used but using the stations time would be more accurate.
+    parameter_timezone = pytz.FixedOffset(station_offset)
     today = datetime.datetime.now().astimezone(parameter_timezone).date()
 
     query = """
@@ -2216,8 +2221,10 @@ def livedata(request, code):
         station = Station.objects.get(code=code)
     except ObjectDoesNotExist as e:
         station = Station.objects.get(pk=code)
-    finally:
-        id = station.id
+    
+    id = station.id
+
+    station_offset = station.utc_offset_minutes # station offset
 
     past24h_data, past24h_max_date = get_last24_data(station_id=id)
     latest_data, latest_max_date = get_latest_data(station_id=id)
@@ -2231,13 +2238,20 @@ def livedata(request, code):
             'station_name': station.name,
             'station_id': station.id,
             'past24h': past24h_data,
-            'past24h_last_update': past24h_max_date,
+            'past24h_last_update': past24h_max_date, # in utc
             'latest': latest_data,
-            'latest_last_update': latest_max_date,
+            'latest_last_update': latest_max_date, # in utc
             'currentday': current_data,
-            'currentday_last_update': current_max_date,
+            'currentday_last_update': current_max_date, # in utc
+
+            # getting the last update time in Station Time (using stations utc offset in minutes)
+            'station_offset': station_offset,
+            'past24h_last_update_station_time': tasks.convert_utc_to_offset(past24h_max_date, station_offset),
+            'latest_last_update_station_time': tasks.convert_utc_to_offset(latest_max_date, station_offset),
+            'currentday_last_update_station_time': tasks.convert_utc_to_offset(current_max_date, station_offset),
         }
         , status=status.HTTP_200_OK)
+
 
 
 class WatershedList(generics.ListAPIView):
@@ -9124,7 +9138,7 @@ def get_data_inventory(request):
     result = []
 
     query = """
-        SELECT EXTRACT('YEAR' from station_data.datetime) AS year
+        SELECT EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') AS year
             ,station.id
             ,station.name
             ,station.code
@@ -9135,8 +9149,8 @@ def get_data_inventory(request):
         FROM wx_stationdataminimuminterval AS station_data
         JOIN wx_station AS station ON station.id = station_data.station_id
         JOIN wx_administrativeregion AS region ON region.id = station.region_id
-        WHERE EXTRACT('YEAR' from station_data.datetime) >= %(start_year)s
-        AND EXTRACT('YEAR' from station_data.datetime) <  %(end_year)s
+        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
+        AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') <  %(end_year)s
         AND station.is_automatic = %(is_automatic)s
         GROUP BY 1, station.id, region.name
         ORDER BY region.name, station.name
@@ -9188,15 +9202,15 @@ def get_data_inventory_by_station(request):
             ORDER BY variable.name
             {record_limit_lexical}
         )
-        SELECT EXTRACT('YEAR' from station_data.datetime)
+        SELECT EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC')
               ,limited_variable.id
               ,limited_variable.name
               ,TRUNC(AVG(station_data.record_count_percentage)::numeric, 2)
         FROM wx_stationdataminimuminterval AS station_data
         JOIN variable AS limited_variable ON limited_variable.id = station_data.variable_id
         JOIN wx_station station ON station_data.station_id = station.id
-        WHERE EXTRACT('YEAR' from station_data.datetime) >= %(start_year)s
-          AND EXTRACT('YEAR' from station_data.datetime) <  %(end_year)s
+        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
+          AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') <  %(end_year)s
           AND station_data.station_id = %(station_id)s
         GROUP BY 1, limited_variable.id, limited_variable.name
         ORDER BY 1, limited_variable.name
@@ -9231,7 +9245,7 @@ def get_station_variable_month_data_inventory(request):
 
     result = []
     query = """
-        SELECT EXTRACT('MONTH' FROM station_data.datetime) AS month
+        SELECT EXTRACT(MONTH FROM station_data.datetime AT TIME ZONE 'UTC') AS month
               ,variable.id
               ,variable.name
               ,measurementvariable.name
@@ -9239,7 +9253,7 @@ def get_station_variable_month_data_inventory(request):
         FROM wx_stationdataminimuminterval AS station_data
         JOIN wx_variable variable ON station_data.variable_id=variable.id
         LEFT JOIN wx_measurementvariable measurementvariable ON measurementvariable.id = variable.measurement_variable_id
-        WHERE EXTRACT('YEAR' from station_data.datetime) = %(year)s
+        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') = %(year)s
           AND station_data.station_id = %(station_id)s
         GROUP BY 1, variable.id, variable.name, measurementvariable.name
     """

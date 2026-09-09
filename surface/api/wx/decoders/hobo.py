@@ -125,7 +125,7 @@ def read_file(filename, highfrequency_data=False, process_in_chunks=False, stati
                 station_code = station.code
 
             # get station utc offset if it is not passed
-            if not utc_offset:
+            if utc_offset is None:
                 utc_offset = station.utc_offset_minutes
 
             lookup_table = parse_second_line_header(station, next(reader))

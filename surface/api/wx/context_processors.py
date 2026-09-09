@@ -11,6 +11,8 @@ logger = logging.getLogger('surface')
 def get_surface_context(req):
     return {
         'TIMEZONE_NAME': settings.TIMEZONE_NAME,
+        'DEFAULT_TIMEZONE_OFFSET': settings.TIMEZONE_OFFSET,
+        'DEFAULT_TIMEZONE_OFFSET_HRS_String': f"{settings.TIMEZONE_OFFSET // 60:+}", # default timezone offset hour in str format. eg +6, -6
         'MISSING_VALUE': settings.MISSING_VALUE,
         'MAP_LATITUDE': settings.MAP_LATITUDE,
         'MAP_LONGITUDE': settings.MAP_LONGITUDE,

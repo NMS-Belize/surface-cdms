@@ -235,7 +235,7 @@ def read_file(filename, highfrequency_data=False, process_in_chunks=False, stati
                     raise Exception(f"Failed to find station by code '{station_code}'. {repr(e)}")
                 
                 # get station utc offset if it is not passed
-                if not utc_offset:
+                if utc_offset is None:
                     utc_offset = Station.objects.values_list('utc_offset_minutes', flat=True).get(id=station_id)
 
                 # filter the sheet day

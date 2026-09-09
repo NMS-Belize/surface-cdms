@@ -1199,13 +1199,19 @@ def data_inventory_month_view(year, month, station_id, variable_id):
 
     IMPORTANT:
     ----------
-    This version intentionally keeps the original date behavior.
+    Inventory completeness records use UTC-midnight calendar labels,
+    but their counts represent station-local reporting days.
 
-    We are still using Python date objects:
-        query_start_datetime = date(year, month, 1)
-        query_end_datetime   = first day of next month
+    This task preserves that convention:
+        - Inventory labels are interpreted in UTC.
+        - Raw observations are queried using the station's configured
+        UTC offset.
+        - Reporting days use start < datetime <= end.
+        - An observation exactly at local midnight belongs to the
+        reporting day that just ended.
 
-    So this does NOT intentionally change timezone handling.
+    This ensures the QC percentage is calculated from the same
+    reporting-day window as the stored completeness percentage.
 
     Performance design:
     -------------------
@@ -1249,6 +1255,33 @@ def data_inventory_month_view(year, month, station_id, variable_id):
         query_end_datetime = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
     # ---------------------------------------------------------------------
+    # Build the station-local month boundaries.
+    #
+    # Inventory labels are stored at UTC midnight, but the observations
+    # contributing to each reporting day are selected using the station's
+    # configured UTC offset.
+    # ---------------------------------------------------------------------
+    station = Station.objects.only(
+        "utc_offset_minutes"
+    ).get(id=station_id)
+
+    station_tz = pytz.FixedOffset(station.utc_offset_minutes)
+
+    # Convert the selected calendar midnights into actual station-local
+    # midnights, then convert those instants to UTC for querying raw_data.
+    raw_start = station_tz.localize(
+        query_start_datetime.replace(tzinfo=None)
+    ).astimezone(pytz.UTC)
+
+    raw_end = station_tz.localize(
+        query_end_datetime.replace(tzinfo=None)
+    ).astimezone(pytz.UTC)
+
+    # Calendar dates used to generate the days of the selected month.
+    month_start_date = query_start_datetime.date()
+    next_month_date = query_end_datetime.date()
+
+    # ---------------------------------------------------------------------
     # Optimized SQL.
     #
     # available_days:
@@ -1256,10 +1289,22 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     #
     # station_days:
     #   Gets the monthly inventory rows from wx_stationdataminimuminterval.
+    #   Inventory datetime values are interpreted as UTC-midnight
+    #   calendar labels.
+    #
+    # raw_local:
+    #   Retrieves raw_data once for the station + variable + month,
+    #   using the station's local reporting-period boundaries.
+    #   Converts observation timestamps to station-local wall-clock time.
+    #
+    # raw_reporting_days:
+    #   Assigns observations to their reporting day.
+    #   An observation exactly at local midnight belongs to the
+    #   reporting day that just ended.
     #
     # raw_qc:
-    #   Gets all raw_data rows for this station + variable + month once,
-    #   groups them by day, and calculates QC counts.
+    #   Aggregates the retrieved observations by reporting day and
+    #   calculates QC counts.
     #
     # Final SELECT:
     #   Joins available_days to station_days and raw_qc so every day appears,
@@ -1267,55 +1312,90 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     # ---------------------------------------------------------------------
     query = """
         WITH available_days AS (
-            SELECT 
+            -- Generate every calendar day in the selected month.
+            -- Use timestamp without time zone so the calendar is not
+            -- affected by the PostgreSQL session timezone.
+            SELECT
                 gs::date AS day_date,
                 EXTRACT(DAY FROM gs)::int AS custom_day,
                 EXTRACT(DOW FROM gs)::int AS dow
             FROM generate_series(
-                %(query_start_datetime)s::date,
-                (%(query_end_datetime)s::date - INTERVAL '1 day'),
+                %(month_start_date)s::date::timestamp,
+                (%(next_month_date)s::date - 1)::timestamp,
                 INTERVAL '1 day'
             ) AS gs
         ),
 
         station_days AS (
-            SELECT 
-                EXTRACT(DAY FROM station_data.datetime)::int AS day,
+            -- Inventory datetime is a UTC-midnight calendar label.
+            -- Interpret it in UTC before extracting the calendar date.
+            SELECT
+                (station_data.datetime AT TIME ZONE 'UTC')::date AS day_date,
                 TRUNC(station_data.record_count_percentage::numeric, 2) AS percentage,
                 station_data.record_count,
                 station_data.ideal_record_count
             FROM wx_stationdataminimuminterval AS station_data
             WHERE station_data.station_id = %(station_id)s
-                AND station_data.variable_id = %(variable_id)s
-                AND station_data.datetime >= %(query_start_datetime)s
-                AND station_data.datetime < %(query_end_datetime)s
+            AND station_data.variable_id = %(variable_id)s
+            AND station_data.datetime >= %(query_start_datetime)s
+            AND station_data.datetime < %(query_end_datetime)s
+        ),
+
+        raw_local AS (
+            -- Retrieve the month's raw observations once.
+            --
+            -- Preserve the producer's reporting-period convention:
+            --     start < datetime <= end
+            --
+            -- Convert each observation to the station's local wall clock
+            -- without depending on the PostgreSQL session timezone.
+            SELECT
+                (
+                    (rd.datetime AT TIME ZONE 'UTC')
+                    + (%(utc_offset_minutes)s * INTERVAL '1 minute')
+                ) AS local_datetime,
+                rd.manual_flag,
+                rd.quality_flag
+            FROM raw_data rd
+            WHERE rd.station_id = %(station_id)s
+            AND rd.variable_id = %(variable_id)s
+            AND rd.datetime > %(raw_start)s
+            AND rd.datetime <= %(raw_end)s
+        ),
+
+        raw_reporting_days AS (
+            -- Assign observations to their reporting day.
+            --
+            -- An observation exactly at local midnight belongs to the
+            -- reporting day that just ended.
+            --
+            -- Example:
+            --   Sep 2 00:00 local -> Sep 1 reporting day
+            --   Sep 2 01:00 local -> Sep 2 reporting day
+            SELECT
+                CASE
+                    WHEN local_datetime::time = TIME '00:00:00'
+                        THEN local_datetime::date - 1
+                    ELSE local_datetime::date
+                END AS day_date,
+                manual_flag,
+                quality_flag
+            FROM raw_local
         ),
 
         raw_qc AS (
+            -- Aggregate QC once for the entire month.
             SELECT
-                EXTRACT(DAY FROM rd.datetime)::int AS day,
-
-                -- Count all raw_data records for the day.
-                -- raw_data does not have an id column, so we count datetime.
-                COUNT(rd.datetime) AS qc_amount,
-
-                -- Count only records whose effective QC flag is considered passed.
-                -- COALESCE means manual_flag is used when it exists;
-                -- otherwise quality_flag is used.
-                COUNT(rd.datetime) FILTER (
-                    WHERE COALESCE(rd.manual_flag, rd.quality_flag) IN (1, 4)
+                day_date,
+                COUNT(*) AS qc_amount,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(manual_flag, quality_flag) IN (1, 4)
                 ) AS qc_passed_amount
-
-            FROM raw_data rd
-            WHERE rd.station_id = %(station_id)s
-                AND rd.variable_id = %(variable_id)s
-                AND rd.datetime >= %(query_start_datetime)s
-                AND rd.datetime < %(query_end_datetime)s
-
-            GROUP BY EXTRACT(DAY FROM rd.datetime)::int
+            FROM raw_reporting_days
+            GROUP BY day_date
         )
 
-        SELECT 
+        SELECT
             available_days.custom_day,
             available_days.dow,
 
@@ -1323,7 +1403,7 @@ def data_inventory_month_view(year, month, station_id, variable_id):
             COALESCE(station_days.record_count, 0) AS record_count,
             COALESCE(station_days.ideal_record_count, 0) AS ideal_record_count,
 
-            CASE 
+            CASE
                 WHEN COALESCE(raw_qc.qc_amount, 0) = 0 THEN 0
                 ELSE TRUNC(
                     (raw_qc.qc_passed_amount / raw_qc.qc_amount::numeric) * 100,
@@ -1334,10 +1414,10 @@ def data_inventory_month_view(year, month, station_id, variable_id):
         FROM available_days
 
         LEFT JOIN station_days
-            ON station_days.day = available_days.custom_day
+            ON station_days.day_date = available_days.day_date
 
         LEFT JOIN raw_qc
-            ON raw_qc.day = available_days.custom_day
+            ON raw_qc.day_date = available_days.day_date
 
         ORDER BY available_days.custom_day;
     """
@@ -1345,6 +1425,11 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     query_params = {
         "query_start_datetime": query_start_datetime,
         "query_end_datetime": query_end_datetime,
+        "month_start_date": month_start_date,
+        "next_month_date": next_month_date,
+        "raw_start": raw_start,
+        "raw_end": raw_end,
+        "utc_offset_minutes": station.utc_offset_minutes,
         "station_id": station_id,
         "variable_id": variable_id,
     }
@@ -1455,7 +1540,6 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     )
 
     return days
-
 
 
 
@@ -7262,3 +7346,47 @@ def save_synop_form(self, records_list, day, station_id, station_utc_offset):
     except Exception as e:
         logger.error(f"Task failed: {repr(e)}")
         raise e
+
+
+def convert_utc_to_offset(utc_dt, offset_minutes):
+    """
+    Convert a UTC datetime to a station's fixed UTC offset.
+
+    Accepts:
+        - A timezone-aware Python datetime
+        - An ISO 8601 datetime string
+        - None
+
+    Returns:
+        An ISO 8601 string in the station's local time,
+        or None if no datetime was provided.
+    """
+
+    print(utc_dt)
+    print("THIS IS WHAT WE ARE GETTING")
+
+    # Handle missing datetime values gracefully.
+    if utc_dt is None:
+        return None
+
+    # If the input is a string, parse it into a Python datetime.
+    if isinstance(utc_dt, str):
+        utc_dt = datetime.fromisoformat(
+            utc_dt.replace("Z", "+00:00")
+        )
+
+    # Ensure the input is now a datetime object.
+    if not isinstance(utc_dt, datetime):
+        raise TypeError("utc_dt must be a datetime, ISO string, or None")
+
+    # If the datetime is naive, assume it represents UTC.
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+
+    # Create the station's fixed timezone offset.
+    target_tz = timezone(
+        timedelta(minutes=int(offset_minutes))
+    )
+
+    # Convert to station-local time and return an ISO string.
+    return utc_dt.astimezone(target_tz).isoformat()

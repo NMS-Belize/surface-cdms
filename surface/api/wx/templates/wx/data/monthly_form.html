@@ -9,6 +9,18 @@
 
     <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
         <v-app>
+            <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
+            <div style="width: 50%;" class="mb-5">
+                <v-alert
+                    type="info"
+                    dense
+                    outlined
+                    text
+                >
+                    Note: All dates and times shown are in the selected station's local time.
+                </v-alert>
+            </div>
+
             <!-- station and date picker -->
             <form enctype="multipart/form-data" method="POST" class="mb-10">
                 {% csrf_token %}
@@ -74,19 +86,6 @@
                     </v-row>
                 </div>
             </form>
-
-            <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
-            <div style="width: 50%;">
-                <v-alert
-                    color="orange"
-                    dismissible
-                    outlined
-                    dense
-                    text
-                >
-                    Note: All dates and times shown are in the selected station's local time.
-                </v-alert>
-            </div>
 
             <!-- The buttons -->
             <div class="mt-5">

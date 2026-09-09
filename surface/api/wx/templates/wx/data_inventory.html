@@ -1,21 +1,35 @@
 {% extends "base.html" %} {% block content %} {% load wx_filters%}
 <div class="srf-container">
 
-  <div id="app" v-cloak>
+  <!-- Heading -->
+  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
+      <span class="srf-display-1 text-uppercase">Data</span><br /><br />
+      <span class="srf-display-2 text-uppercase">Inventory</span>
+  </div>
 
+  <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
     <v-app>
 
       <v-content fluid fill-height style="background: white">
 
         <v-layout column>
-          <!-- Page title -->
-          <v-flex>
-            <h1 class="display-1 text-uppercase">Data Inventory</h1>
-          </v-flex>
+          <!-- datetime info -->
+          <div style="width: 65%;" class="mb-3">
+            <v-alert
+                type="info"
+                dense
+                outlined
+                text
+            >
+                Inventory dates and completeness percentages are based on each
+                station's local reporting day, using its configured UTC offset.
+            </v-alert>
+          </div>
 
           <!-- page options -->
           <v-layout column fluid>
 
+            <!-- search options -->
             <v-layout mt-3 mb-5>
               <!-- start year option  -->
               <v-flex lg2 mr-10 class="d-flex justify-between">
@@ -101,12 +115,12 @@
             <v-layout mt-3 :hidden="regionSet == null" column fluid>
 
               <!-- "search result" title -->
-              <v-layout>
+              <!-- <v-layout>
                 <v-flex justify-center>
                   Search Result
                   <v-divider style="margin-top: 5px"></v-divider>
                 </v-flex>
-              </v-layout>
+              </v-layout> -->
 
               <!-- inventory container -->
               <v-layout ml-3 mt-3 column>
@@ -117,8 +131,10 @@
                   <v-layout mt-3 w-100>
                     <!-- station output description -->
                     <v-layout column fluid w-50>
-                      <div> Total Stations: [[stations.length]]</div>
-                      <div> Date: [[ display_start_year ]] to [[ display_end_year ]]</div>
+                      <div class="info_box">
+                        <div> Total Stations: [[stations.length]]</div>
+                        <div> Date: [[ display_start_year ]] to [[ display_end_year ]]</div>
+                      </div>
                     </v-layout>
                     
                     <!-- search bar -->
@@ -255,12 +271,14 @@
                   <v-layout mt-3 w-100>
                     <!-- station metadata, search year -->
                     <v-layout column fluid w-50>
-                      <div>[[this.currentData.station.name]] - [[this.currentData.station.code]]</div>
-                      <div>Date: [[this.currentData.year]]</div>
-                      <div class="surface-station-details">
-                        <div>Local station ID: [[this.currentData.station.id]]</div>
-                        <div>Station Begin date: [[this.currentData.station.begin_date_formatted]]</div>
-                        <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
+                      <div class="info_box">
+                        <div>[[this.currentData.station.name]] - [[this.currentData.station.code]]</div>
+                        <div>Date: [[this.currentData.year]]</div>
+                        <div class="surface-station-details">
+                          <div>Local station ID: [[this.currentData.station.id]]</div>
+                          <div>Station Begin date: [[this.currentData.station.begin_date_formatted]]</div>
+                          <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
+                        </div>
                       </div>
                     </v-layout>
 
@@ -318,12 +336,14 @@
                   <!--  -->
                   <v-layout mt-3 w-100>
                     <v-layout column fluid w-50>
-                      <div>[[this.currentData.station.name]] - [[this.currentData.station.code]] - [[this.currentData.variable.name]]</div>
-                      <div>Date: [[ this.availableMonthNames[this.currentData.month - 1] ]] [[this.currentData.year]]</div>
-                      <div class="surface-station-details">
-                        <div>Local station ID: [[this.currentData.station.id]]</div>
-                        <div>Begin date: [[this.currentData.station.begin_date_formatted]]</div>
-                        <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
+                      <div class="info_box">
+                        <div>[[this.currentData.station.name]] - [[this.currentData.station.code]] - [[this.currentData.variable.name]]</div>
+                        <div>Date: [[ this.availableMonthNames[this.currentData.month - 1] ]] [[this.currentData.year]]</div>
+                        <div class="surface-station-details">
+                          <div>Local station ID: [[this.currentData.station.id]]</div>
+                          <div>Begin date: [[this.currentData.station.begin_date_formatted]]</div>
+                          <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
+                        </div>
                       </div>
                     </v-layout>
                     <v-layout pl-5 column fluid align-end w-25>
@@ -516,19 +536,34 @@
 
       methods: {
         goToStationReport(day) {
-          const initial_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-          const final_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${(day + 1).toString().padStart(2, "0")}`;
+            const { startDate, endDate } = this.getInventoryDayRange(day);
 
-          const url = `/wx/products/station_report/?start_date=${initial_datetime}&end_date=${final_datetime}&station_id=${this.currentData.station.id}&measurement_variable=${this.currentData.variable.measurement_variable_name}`;
-          window.open(url, '_blank');
+            const url = `/wx/products/station_report/?start_date=${startDate}&end_date=${endDate}&station_id=${this.currentData.station.id}&measurement_variable=${this.currentData.variable.measurement_variable_name}`;
+
+            window.open(url, '_blank');
         },
+
         goToDataValidation(day) {
-          const initial_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-          const final_datetime = `${this.currentData.year.toString().padStart(2, "0")}-${this.currentData.month.toString().padStart(2, "0")}-${(day + 1).toString().padStart(2, "0")}`;
+            const { startDate, endDate } = this.getInventoryDayRange(day);
 
-          const url = `/wx/quality_control/validation?start_date=${initial_datetime}&end_date=${final_datetime}&station_id=${this.currentData.station.id}&variable_id=${this.currentData.variable.id}`;
-          window.open(url, '_blank');
+            const url = `/wx/quality_control/validation?start_date=${startDate}&end_date=${endDate}&station_id=${this.currentData.station.id}&variable_id=${this.currentData.variable.id}`;
+
+            window.open(url, '_blank');
         },
+
+        getInventoryDayRange(day) {
+            const start = moment(
+                `${this.currentData.year}-${this.currentData.month}-${day}`,
+                'YYYY-M-D',
+                true
+            );
+
+            return {
+                startDate: start.format('YYYY-MM-DD'),
+                endDate: start.clone().add(1, 'day').format('YYYY-MM-DD')
+            };
+        },
+
         getPercentageColor(percentage) {
           return this.colorGradient(percentage/100).toString();
         },
@@ -778,7 +813,6 @@
           this.progress = 0;
         },
 
-
         setParamsAndRunQuery() {
           const queryString = window.location.search;
           const urlParams = new URLSearchParams(queryString);
@@ -811,6 +845,19 @@
   </script>
 
   <style>
+        .info_box {
+          width: 100%;
+          max-width: 250px;
+          padding: 8px 16px;
+          
+          border: 1px solid #2196f3;
+          border-radius: 4px;
+          
+          background-color: rgba(33, 150, 243, 0.075); 
+          color: #0890ff;
+
+        }
+
         .v-expansion-panel-content__wrap {
           padding: 0;
         }
