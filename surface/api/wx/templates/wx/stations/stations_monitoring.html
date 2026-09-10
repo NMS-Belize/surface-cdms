@@ -49,19 +49,75 @@
                     solo
                     append-icon="search"
                   ></v-text-field>
-              </l-control>               
+              </l-control>    
+
               <l-control position="bottomright">
                 <template>
+
+                  <!-- Info Card -->
+                  <v-card
+                    v-if="['Communication', 'Quality Control'].includes(data_type)"
+                    style="max-width: 200px;"
+                    class="mb-2"
+                  >
+                    <!-- title -->
+                    <v-card-title
+                      class="px-2 pt-1 pb-1"
+                      style="font-size: 12px; line-height: 1.2; color: #444;"
+                    >
+                      <v-btn
+                        class="mr-1"
+                        x-small
+                        icon
+                        @click="dialog_info=true"
+                        :disabled="true"
+                      >
+                        <v-icon>mdi-information</v-icon>
+                      </v-btn>
+
+                      <span class="mr-2">Note</span>
+                    </v-card-title>
+
+                    <!-- text/body -->
+                    <v-card-text
+                      class="px-2 pb-2"
+                      style="font-size: 12px; line-height: 1.4;"
+                    >
+                      <hr class="my-0 mb-1">
+
+                      <span
+                        v-if="data_type === 'Communication'"
+                        style="display: block; white-space: normal;"
+                      >
+                        Station color is based on the worst-performing configured variable.
+                        The lowest communication-hour count determines the station status.
+                      </span>
+
+                      <span
+                        v-else-if="data_type === 'Quality Control'"
+                        style="display: block; white-space: normal;"
+                      >
+                        Station color is based on the worst QC status detected.
+                        Bad takes priority over Suspicious, followed by Good.
+                        Not Checked is used when no QC status is available.
+                      </span>
+                    </v-card-text>
+                  </v-card>
+
+                  <!-- map observations -->
                   <v-card>
+                    <!-- title -->
                     <v-card-title class="px-2 pt-1 pb-1" style="font-size: 12px; line-height: 1.2; color: #444;">
                       <v-btn class="mr-1" x-small icon @click="dialog_info=true" :disabled=true>
                           <v-icon>mdi-information</v-icon>
                       </v-btn>
-                      <span v-if="['Communication', 'Quality Control'].includes(data_type)" class="mr-2 "> Observations from <br/>the pass 24 hours </span>
+                      <span v-if="['Communication', 'Quality Control'].includes(data_type)" class="mr-2 ">Map Observations</span>
                       <span v-if="data_type=='Visits'" class="mr-2"> Next visit </span>
                       <span v-if="data_type=='Equipment'" class="mr-2"> Equipment classification </span>
 
                     </v-card-title>
+
+                    <!-- text -->
                     <v-card-text class="px-2 pb-2">
                       <hr class="my-0 mb-1">
                       <div class="legend-item" style="display: flex; justify-content: space-between;">
@@ -107,7 +163,9 @@
                     </v-card-text>
                   </v-card>
                 </template>
-              </l-control>            
+
+              </l-control>      
+
               <l-control-zoom position="topleft"></l-control-zoom>
 
               <l-control position="topright">
@@ -126,16 +184,31 @@
                               [[ data_type ]]
                             </span>
                           </strong>
+
+                          <!-- time / type tag -->
                           <small class="d-flex justify-center">
-                            <span v-if="time_type==='Last 24h'"> [[time_type]]</span>
-                            <span v-if="time_type==='Pick a day'"> [[date]]</span>
+                            <span v-if="!['Visits', 'Equipment'].includes(data_type)">
+                              <span v-if="time_type==='Last 24h'">[[time_type]]</span>
+                              <span v-if="time_type==='Pick a day'">[[date]]</span>
+                            </span>
+                            <span v-else>Latest</span>
+                          </small>
+
+                          <!-- Offset tag -->
+                          <small class="d-flex justify-center pt-1">
+                            <span v-if="time_type==='Pick a day' || ['Visits', 'Equipment'].includes(data_type)" style="color: orange;">
+                              Offset UTC [[surface_offset_hrs]]
+                            </span>
+                            <span v-else style="color: orange;">
+                              Offset UTC +0
+                            </span>
                           </small>
                         </div>
                       </v-btn>
 
                       <v-expand-transition v-if="reveal">
 
-                        <v-card>
+                        <v-card class="mt-2">
 
                           <div  class="d-flex justify-center align-center">
                             <v-btn-toggle v-if="!isMaintenance(data_type)" mandatory v-model="time_type" @change="changeTimeType()">
@@ -183,6 +256,7 @@
 
                                 <v-radio label="Communication" value="Communication"></v-radio>
                                 <v-radio label="Quality Control" value="Quality Control"></v-radio>
+
                                 <span class="mb-1"> Maintenance </span>
                                 <v-radio class="ml-5" label="Visits" value="Visits"></v-radio>
                                 <v-radio class="ml-5" label="Equipment" value="Equipment"></v-radio>
@@ -235,6 +309,24 @@
 
           <div v-if="!loading_station" class="station-content"> 
 
+            <!-- displaying the date of the current data being displayed -->
+            <div class="mt-2 ml-2 mr-2">
+                <v-alert
+                    v-if="!['Visits', 'Equipment'].includes(data_type)"
+                    type="info"
+                    dense
+                    outlined
+                    text
+                    color="purple"
+                >
+                    All records and metrics displayed below are filtered for 
+                    
+                    <span v-if="time_type == 'Last 24h'"> the <b>Last 24 Hours (UTC +0)</b></span>
+                    <span v-else><b>[[ this.date ]] (UTC [[surface_offset_hrs]])</b></span>
+
+                </v-alert>
+            </div>
+
             <!-- communication tab -->
             <v-tabs
               v-if="data_type=='Communication'"
@@ -252,21 +344,22 @@
               <v-tab-item class="tab-item-fill">
                 <v-layout column class="ma-2 fill-height">
 
+                   <!-- station metadata section -->
                   <v-layout class="ma-2" shrink>
+
                     <span v-if="selected.station.lastupdate">
                       <h5>
-                        [[selected.station.name]] Station
+                        <span style="color: #1976D2;">[[selected.station.name]]</span> Station
                       </h5>
-                      <b>Last update date:</b> [[selected.station.lastupdate]]
+
+                      <span style="color: orange;">Station Local Time (STL), [[ selected.station.offset_hr_string ]]</span><br/>
+
+                      Last updated (STL): [[selected.station.lastupdate]]
                     </span>
 
-                    <!-- <v-btn icon @click="goTo()">
-                      <v-icon color="blue">
-                        mdi-open-in-new
-                      </v-icon>
-                    </v-btn>   -->
                   </v-layout>
 
+                  <!-- communication control tab table -->
                   <v-layout class="ma-2 table-area">
                     <v-data-table
                       style="width: 100%;"
@@ -305,9 +398,12 @@
                   <v-layout class="ma-2" shrink>              
                     <span v-if="selected.station.lastupdate">
                       <h5>
-                        [[selected.station.name]] Station
+                        <span style="color: #1976D2;">[[selected.station.name]]</span> Station
                       </h5>
-                      <b>Last update date:</b> [[selected.station.lastupdate]]
+
+                      <span style="color: orange;">Station Local Time (STL), [[ selected.station.offset_hr_string ]]</span><br/>
+
+                      Last updated (STL): [[selected.station.lastupdate]]
                     </span>
                   </v-layout>  
 
@@ -356,12 +452,17 @@
 
               <v-tab-item class="tab-item-fill">
                 <v-layout column class="ma-2 fill-height">
+                  
+                  <!-- station metadata -->
                   <v-layout class="ma-2" shrink>
                     <span v-if="selected.station.lastupdate">
                       <h5>
-                        [[selected.station.name]] Station
+                        <span style="color: #1976D2;">[[selected.station.name]]</span> Station
                       </h5>
-                      <b>Last update date:</b> [[selected.station.lastupdate]]
+
+                      <span style="color: orange;">Station Local Time (STL), [[ selected.station.offset_hr_string ]]</span><br/>
+
+                      Last updated (STL): [[selected.station.lastupdate]]
                     </span>
                   </v-layout>
 
@@ -554,7 +655,9 @@
             data: [4, 5, 6]
           }]
         },        
-        date: moment().format('YYYY-MM-DD'),
+        timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        surface_offset_hrs: "{{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }}",
+        date: null,
         date_menu: false,
         data_type: 'Communication',
         time_type: "Last 24h",
@@ -563,11 +666,10 @@
         dialog_chart: false,
         dialog_info: false,
         selected: {
-          station: {name: null, lastupdate: null, color: null},
+          station: {name: null, lastupdate: null, color: null, offset_hr_string: null},
           data: [],
         },
         station_list: [],
-        timezone: "{{ TIMEZONE_NAME|escapejs }}",
         zoom: {{ MAP_ZOOM|safe }},
         center: L.latLng("{{ MAP_LATITUDE|safe }}", "{{ MAP_LONGITUDE|safe }}"),
         url: "https://{s}.tile.osm.org/{z}/{x}/{y}.png",
@@ -589,8 +691,15 @@
         axios.defaults.xsrfHeaderName = "X-CSRFToken";
         axios.defaults.xsrfCookieName = "csrftoken";      
 
+        // format date based on timezone.
+        // 'en-CA' locale formats the date natively as YYYY-MM-DD
+        this.date = new Intl.DateTimeFormat('en-CA', { 
+          timeZone: this.timezone 
+        }).format(new Date());
+
         this.getGlobalData();
     },
+
     computed: {
       filteredStations() {
         return this.station_list.filter(station =>
@@ -598,6 +707,16 @@
         )
       },    
     },
+
+    watch: {
+      data_type: function (val) {
+        // reset selected tab to zero when Quality control radio btn is selected
+        if (val=='Quality Control') {
+          this.selectedTab = 0;
+        }
+      }
+    },
+
     methods: {
       goTo(selected_station_id = null, item_var_id = null){
         if (this.data_type=="Communication"){
@@ -613,31 +732,61 @@
           this.goToEquipmentInventory();
         }                
       },
+
       goToDataValidation(selected_station_id = null, item_var_id = null) {
-        const [year, month, day] = this.date.split('-');
+          let initial_datetime;
+          let final_datetime;
 
-        const initial_datetime = `${year.padStart(2, "0")}-${month.padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
-        const final_datetime = `${year.padStart(2, "0")}-${month.padStart(2, "0")}-${(String(Number(day) + 1)).padStart(2, "0")}`;
+          if (this.time_type === 'Last 24h') {
+              // Data Validation accepts dates rather than exact datetimes.
+              // Open the calendar days covered by the rolling last-24h period.
+              const now = moment();
 
-        const url = `/wx/quality_control/validation?start_date=${initial_datetime}&end_date=${final_datetime}&station_id=${selected_station_id}&variable_id=${item_var_id}`;
-        
-        window.open(url, '_blank');
-      },      
+              initial_datetime = now.clone().subtract(24, 'hours').startOf('day');
+              final_datetime = now.clone().add(1, 'day').startOf('day');
+          }
+          else {
+              // Pick-a-day represents exactly one selected calendar day.
+              initial_datetime = moment(
+                  this.date,
+                  'YYYY-MM-DD',
+                  true
+              );
+
+              final_datetime = initial_datetime.clone().add(1, 'day');
+          }
+
+          const url =
+              `/wx/quality_control/validation?` +
+              `start_date=${initial_datetime.format('YYYY-MM-DD')}` +
+              `&end_date=${final_datetime.format('YYYY-MM-DD')}` +
+              `&station_id=${selected_station_id}` +
+              `&variable_id=${item_var_id}`;
+
+          window.open(url, '_blank');
+      },
+            
       goToDataInventory(){
         const url = `/wx/data/inventory`;
         window.open(url, '_blank');
       },
+      
       goToEquipmentInventory(){
         const url = `/wx/maintenance_reports/equipment_inventory/`;
         window.open(url, '_blank');
       },
+      
       goToMaintenanceReports(){
         const url = `/wx/maintenance_report/`;
         window.open(url, '_blank');
       },          
+      
       changeTimeType(){
-        this.getGlobalData()
+        // this.getGlobalData();
+
+        this.changeRadio();
       },
+      
       updateLegendData(){
         if (this.data_type === 'Communication'){
           this.legend_data.information = 'Information of communication'
@@ -676,6 +825,7 @@
           }
         } 
       },
+
       headers(){
         if (this.isMaintenance(this.data_type)){
           return [
@@ -695,12 +845,17 @@
           else{
             return [
               { text: 'Variable', align: 'start', sortable: false, value: 'name'},
-              { text: 'Amout', align: 'center', sortable: false, value: 'amount'},
+              { text: 'Amount', align: 'center', sortable: false, value: 'amount'},
               { text: 'Chart', align: 'center', sortable: false, value: 'chart'}
             ]  
           }
         }
       },
+      
+      formatDatetime(datetime){
+        return datetime ? moment(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
+      },
+
       getPercentageColor(color){
         if (this.station_list.length == 0){
           return 0
@@ -712,6 +867,7 @@
 
         return p.toFixed(2)
       },
+      
       getGlobalData(){
         this.loading_map = true
         axios({
@@ -731,6 +887,7 @@
           console.log(error);
         });        
       },
+      
       getStationData(station){
         this.loading_station = true        
         axios({
@@ -744,7 +901,8 @@
         }) 
         .then(response => {
           this.loading_station = false;          
-          this.selected.station.lastupdate = response.data['lastupdate'];
+          this.selected.station.lastupdate = this.formatDatetime(response.data['lastupdate']);
+          this.selected.station.offset_hr_string = response.data['station_hr_offset_str'];
           this.selected.data = response.data['station_data'];
           this.selected.color = station.color
         })
@@ -752,6 +910,7 @@
           console.log(error);
         });           
       },
+      
       getChartData(station, variable){
         this.loading_chart = true;
         axios({
@@ -777,24 +936,31 @@
           console.log(error);
         });           
       },      
+      
       isMaintenance(data_type){
         return ['Visits', 'Equipment'].includes(data_type)
       },
+      
       changeRadio(){
-        console.log('Debug:', this.legend_data)
         if (this.isMaintenance(this.data_type)){
+          // for maintenance and equipment this is overridden and 'Latest' is show instead
           this.time_type = 'Last 24h';
         }
+
         this.updateLegendData();
+
         this.getGlobalData();
+
         if (this.selected.station.name !== null){
           this.getStationData(this.selected.station);
         }
       },
+      
       selectStation(station){
         this.selected.station = station;
         this.getStationData(station);
       },
+    
     },
   });
 </script>

@@ -23,8 +23,8 @@
           </div>
 
           <div class="truncate-text">
-            <span class="pl-2 pt-2">[[ lastUpdateMessage ]]</span>
             <span class="pl-2 pt-2" style="color: orange;">[[ lastUpdateStationMessage ]]</span>
+            <span class="pl-2 pt-2">Last updated (STL): [[ lastUpdateMessage ]]</span>
           </div>
 
           <v-btn
@@ -1637,10 +1637,10 @@
       
       handleTabUpdate(selectedTab) {
         const lastUpdateDate = this.sandbox[this.tabsLastUpdate[selectedTab]];
-        this.lastUpdateMessage = `Last updated: ${lastUpdateDate}`;
+        this.lastUpdateMessage = `${lastUpdateDate}`;
 
         // display offset in hours
-        this.lastUpdateStationMessage = `Station Local Time, UTC 
+        this.lastUpdateStationMessage = `Station Local Time (STL), UTC 
                                           ${this.selected_station_utc_offset/60 >= 0 
                                           ?
                                           `+${this.selected_station_utc_offset/60}` 

@@ -510,7 +510,20 @@ def backup_postgres():
 
 @shared_task
 def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_list=None):
-    # IMPORTANT: Hourly summaries are ran on SUSPICIOUS, GOOD and NOT CHECKED
+    """
+        IMPORTANT: Hourly summaries are ran on SUSPICIOUS, GOOD and NOT CHECKED
+        
+        Hourly SUMMARIES include the top of the next hour and exclude the top of the current hour
+        eg: (1300,1400]
+
+        13:00:00.000000  → previous 12:00 summary
+        13:00:00.000001  → 13:00 summary
+        13:30:00         → 13:00 summary
+        14:00:00         → 13:00 summary
+
+        is_daily data is also not included in the hourly summaries.
+    """
+
     start_at = time()
 
     if not start_datetime:
@@ -575,11 +588,7 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
             now()
         FROM
             (SELECT 
-                CASE
-                  WHEN rd.datetime = rd.datetime::date
-                  THEN date_trunc('hour', rd.datetime - '1 second'::interval)
-                  ELSE date_trunc('hour', rd.datetime)
-                END as datetime,
+                date_trunc('hour', rd.datetime - INTERVAL '1 microsecond') AS datetime,
                 station_id,
                 variable_id,
                 min(calc.value) AS min_value,
@@ -590,44 +599,10 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
             FROM 
                 raw_data rd
                 ,LATERAL (SELECT CASE WHEN rd.consisted IS NOT NULL THEN rd.consisted ELSE rd.measured END as value) AS calc
-            WHERE rd.datetime >= %(hour_start)s
-              AND rd.datetime <  %(hour_end)s
+            WHERE rd.datetime > %(hour_start)s
+              AND rd.datetime <=  %(hour_end)s
               AND (rd.manual_flag in (1,4) OR (rd.manual_flag IS NULL AND rd.quality_flag in (1,2,4)))
               AND NOT rd.is_daily
-              AND calc.value != %(MISSING_VALUE)s
-              AND station_id = ANY(%(station_ids)s) 
-            GROUP BY 1,2,3) values
-        WHERE values.datetime = %(hour_start)s
-
-        UNION ALL
-
-        SELECT 
-            values.datetime,
-            values.station_id,
-            values.variable_id,
-            values.min_value,
-            values.max_value,
-            values.avg_value,
-            values.sum_value,
-            values.num_records,
-            now(),
-            now()
-        FROM
-            (SELECT date_trunc('hour', rd.datetime) as datetime,
-                station_id,
-                variable_id,
-                min(calc.value) AS min_value,
-                max(calc.value) AS max_value,
-                avg(calc.value) AS avg_value,
-                sum(calc.value) AS sum_value,
-                count(calc.value) AS num_records
-            FROM 
-                raw_data rd
-                ,LATERAL (SELECT CASE WHEN rd.consisted IS NOT NULL THEN rd.consisted ELSE rd.measured END as value) AS calc
-            WHERE rd.datetime >= %(hour_start)s
-              AND rd.datetime <  %(hour_end)s
-              AND (rd.manual_flag in (1,4) OR (rd.manual_flag IS NULL AND rd.quality_flag in (1,2,4)))
-              AND rd.is_daily
               AND calc.value != %(MISSING_VALUE)s
               AND station_id = ANY(%(station_ids)s) 
             GROUP BY 1,2,3) values
@@ -655,116 +630,41 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
 
 @shared_task
 def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None):
-    # IMPORTANT: Daily summaries are run on SUSPICIOUS, GOOD and NOT CHECKED.
-    #
-    # IMPORTANT DAILY WINDOW BEHAVIOR:
-    # This function intentionally uses:
-    #
-    #     rd.datetime >  datetime_start
-    #     rd.datetime <= datetime_end
-
-
     """
     Calculate (or recalculate) DAILY summaries.
 
-    IMPORTANT DESIGN RULES (DO NOT BREAK):
-    --------------------------------------
-    1. DAILY summaries are keyed by a *logical local DATE* (daily_summary.day).
+    IMPORTANT DESIGN RULES
+    ----------------------
+    1. daily_summary.day is a logical station-local DATE.
 
-    2. DELETES must ALWAYS be done using DATE equality, NEVER datetime ranges.
+    2. Summary rows are deleted using DATE equality, not datetime ranges.
 
-    This is important because daily_summary.day is a DATE column, while raw_data
-    selection uses timezone-adjusted datetime ranges.
+    3. Raw-data selection uses each station's configured UTC offset.
 
-    3. Datetime ranges are ONLY for selecting raw_data, NOT for deleting summaries.
+    4. Non-daily observations use the reporting-day convention:
 
-    4. This function may be called:
-    - as a normal scheduled daily run
-    - as a QC-triggered recalculation for past dates
+           datetime_start < rd.datetime <= datetime_end
 
-    Therefore it MUST be safe to run repeatedly and out-of-order.
+       Therefore, an observation exactly at next-day 00:00 belongs
+       to the day that just ended.
 
-    =======================================================================================
+    5. Daily observations use the calendar-day convention:
 
-    DAILY SUMMARY TIME WINDOW BEHAVIOR (READ CAREFULLY):
-    ----------------------------------------------------
+           datetime_start <= rd.datetime < datetime_end
 
-    This function intentionally uses this raw_data selection window:
+       Therefore, a daily observation at 00:00 belongs to the
+       current calendar day.
 
-        rd.datetime >  datetime_start
-        rd.datetime <= datetime_end
+    Example for 2026-05-08:
 
-    Where:
+        NON-DAILY:
+            (May 8 00:00, May 9 00:00]
+            May 9 00:00 -> May 8
 
-        datetime_start = local DATE at 00:00 converted to UTC
-        datetime_end   = datetime_start + 1 day
-
-    This is a non-standard window. It is effectively:
-
-        (datetime_start, datetime_end]
-
-    instead of the more common:
-
-        [datetime_start, datetime_end)
-
-    EFFECTS:
-    --------
-
-    1. A raw_data record exactly at local 00:00:00 of the target date
-    (rd.datetime == datetime_start) is EXCLUDED.
-
-    2. A raw_data record exactly at local 00:00:00 of the next day
-    (rd.datetime == datetime_end) is INCLUDED.
-
-    3. For NON-DAILY records:
-
-    The logical date is calculated using:
-
-        local_datetime - 1 second
-
-    This means a non-daily record exactly at local midnight of the next day
-    is assigned to the PREVIOUS logical date.
-
-    Example:
-        2026-05-09 00:00:00 local
-        minus 1 second
-        -> 2026-05-08 23:59:59 local
-        -> daily_summary.day = 2026-05-08
-
-    4. For DAILY records:
-
-    The logical date is calculated WITHOUT subtracting 1 second.
-
-    This means a daily record exactly at local midnight of the next day
-    is assigned to the NEXT logical date.
-
-    Example:
-        2026-05-09 00:00:00 local
-        -> daily_summary.day = 2026-05-09
-
-    5. This behavior is intentional based on the current system logic and should
-    not be changed casually, because it affects how midnight-boundary records
-    are assigned to daily summaries.
-
-    WARNING:
-    --------
-
-    Do NOT change the inequality operators:
-
-        rd.datetime >  datetime_start
-        rd.datetime <= datetime_end
-
-    or the non-daily '- 1 second' adjustment unless you also update the logical
-    definition of what "daily" means for this system.
-
-    If you want the standard behavior where:
-
-        [datetime_start, datetime_end)
-
-    is used instead, then BOTH the WHERE clause and the date-casting logic must
-    be reviewed and changed together.
+        DAILY:
+            [May 8 00:00, May 9 00:00)
+            May 8 00:00 -> May 8
     """
-
 
     logger.info(
         f'DAILY SUMMARY started at {datetime.now(tz=pytz.UTC)} with parameters: '
@@ -779,7 +679,7 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
         start_date = datetime.now(pytz.UTC).date()
         end_date = start_date + timedelta(days=1)
 
-    # end_date is treated as exclusive in the Python loop.
+    # end_date is exclusive in the Python loop.
     if start_date >= end_date:
         logger.error("Invalid date range: start_date must be < end_date")
         return
@@ -788,17 +688,24 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
 
     try:
         with conn.cursor() as cursor:
+
             # Determine which stations should be processed.
             if station_id_list is None:
                 stations = Station.objects.filter(is_active=True)
             else:
                 stations = Station.objects.filter(id__in=station_id_list)
 
-            # Group stations by UTC offset.
-            # This is necessary because "daily" is based on each station's local day.
-            offsets = set(stations.values_list("utc_offset_minutes", flat=True))
+            # Group stations by UTC offset because each station's daily
+            # boundaries are based on its local time.
+            offsets = set(
+                stations.values_list(
+                    "utc_offset_minutes",
+                    flat=True
+                )
+            )
 
             for offset in offsets:
+
                 station_ids = list(
                     stations
                     .filter(utc_offset_minutes=offset)
@@ -813,18 +720,16 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                 current_date = start_date
 
                 # Process one logical date at a time.
-                # This keeps each transaction smaller and safer.
                 while current_date < end_date:
-                    # Convert the station-local date window to UTC.
-                    #
-                    # Example:
-                    # If station local day starts at 2026-05-08 00:00 local,
-                    # this converts that local midnight into UTC.
+
+                    # Build station-local midnight and convert the instant to UTC.
                     datetime_start = datetime(
                         current_date.year,
                         current_date.month,
                         current_date.day,
-                        0, 0, 0,
+                        0,
+                        0,
+                        0,
                         tzinfo=fixed_offset
                     ).astimezone(pytz.UTC)
 
@@ -832,7 +737,7 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
 
                     logger.info(
                         "Daily Summary | date=%s offset=%s stations=%d "
-                        "utc_window=(%s, %s]",
+                        "utc_boundaries=(%s, %s)",
                         current_date,
                         offset,
                         len(station_ids),
@@ -840,11 +745,12 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                         datetime_end,
                     )
 
-                    # Delete only the current logical date for the selected stations.
+                    # ---------------------------------------------------------
+                    # Delete the existing summary only for this logical date.
                     #
-                    # Important:
-                    # daily_summary.day is a DATE column, so we delete by date equality.
-                    # Do not delete using datetime ranges here.
+                    # daily_summary.day is a DATE column, so deletion should
+                    # always use date equality.
+                    # ---------------------------------------------------------
                     delete_sql = """
                         DELETE FROM daily_summary
                         WHERE station_id = ANY(%(station_ids)s)
@@ -859,19 +765,24 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                         }
                     )
 
-                    # Optimized insert:
+                    # ---------------------------------------------------------
+                    # Calculate the summary.
                     #
-                    # The old version scanned raw_data twice:
-                    #   1. once for NOT rd.is_daily
-                    #   2. once for rd.is_daily
+                    # Non-daily observations:
                     #
-                    # This version scans the target raw_data window once and uses
-                    # CASE to calculate the correct logical day.
+                    #     datetime_start < datetime <= datetime_end
                     #
-                    # Non-daily records subtract 1 second before casting to DATE.
-                    # Daily records do not subtract 1 second.
+                    # Exact next-day midnight belongs to the reporting day
+                    # that just ended.
                     #
-                    # This preserves the midnight-boundary behavior from the old query.
+                    # Daily observations:
+                    #
+                    #     datetime_start <= datetime < datetime_end
+                    #
+                    # Exact midnight belongs to the current calendar day.
+                    #
+                    # raw_data is still handled in a single SQL statement.
+                    # ---------------------------------------------------------
                     insert_sql = """
                         INSERT INTO daily_summary (
                             "day",
@@ -885,40 +796,45 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                             created_at,
                             updated_at
                         )
-                        WITH filtered AS (
-                            SELECT
-                                CASE
-                                    WHEN rd.is_daily THEN
-                                        CAST(
-                                            (rd.datetime + interval '%(offset)s minutes')
-                                            AT TIME ZONE 'utc'
-                                            AS DATE
-                                        )
-                                    ELSE
-                                        CAST(
-                                            (rd.datetime + interval '%(offset)s minutes')
-                                            AT TIME ZONE 'utc'
-                                            - '1 second'::interval
-                                            AS DATE
-                                        )
-                                END AS day,
 
+                        WITH source_data AS (
+                            SELECT
+                                (
+                                    (rd.datetime AT TIME ZONE 'UTC')
+                                    + (
+                                        %(offset)s
+                                        * INTERVAL '1 minute'
+                                    )
+                                ) AS local_datetime,
+
+                                rd.is_daily,
                                 rd.station_id,
                                 rd.variable_id,
 
                                 CASE
-                                    WHEN rd.consisted IS NOT NULL THEN rd.consisted
+                                    WHEN rd.consisted IS NOT NULL
+                                        THEN rd.consisted
                                     ELSE rd.measured
                                 END AS value
 
                             FROM raw_data rd
-                            WHERE rd.datetime > %(datetime_start)s
-                              AND rd.datetime <= %(datetime_end)s
-                              AND rd.station_id = ANY(%(station_ids)s)
 
-                              -- Daily summaries are calculated using:
-                              -- GOOD, SUSPICIOUS, and NOT CHECKED values,
-                              -- while also respecting accepted manual flags.
+                            WHERE rd.station_id = ANY(%(station_ids)s)
+
+                              AND (
+                                  (
+                                      NOT rd.is_daily
+                                      AND rd.datetime > %(datetime_start)s
+                                      AND rd.datetime <= %(datetime_end)s
+                                  )
+                                  OR
+                                  (
+                                      rd.is_daily
+                                      AND rd.datetime >= %(datetime_start)s
+                                      AND rd.datetime < %(datetime_end)s
+                                  )
+                              )
+
                               AND (
                                   rd.manual_flag IN (1, 4)
                                   OR (
@@ -926,7 +842,35 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                                       AND rd.quality_flag IN (1, 2, 4)
                                   )
                               )
+                        ),
+
+                        filtered AS (
+                            SELECT
+                                CASE
+                                    -- Daily observations use their actual
+                                    -- station-local calendar date.
+                                    WHEN is_daily THEN
+                                        local_datetime::date
+
+                                    -- Non-daily observations exactly at
+                                    -- midnight belong to the previous
+                                    -- reporting day.
+                                    WHEN local_datetime::time = TIME '00:00:00'
+                                        THEN local_datetime::date - 1
+
+                                    -- Every other non-daily observation
+                                    -- belongs to its normal local date.
+                                    ELSE
+                                        local_datetime::date
+                                END AS day,
+
+                                station_id,
+                                variable_id,
+                                value
+
+                            FROM source_data
                         )
+
                         SELECT
                             day,
                             station_id,
@@ -938,20 +882,29 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                             COUNT(value),
                             now(),
                             now()
+
                         FROM filtered
+
                         WHERE value != %(MISSING_VALUE)s
+
+                          -- Safety check: this iteration should only ever
+                          -- create the summary date currently being rebuilt.
+                          AND day = %(target_date)s
+
                         GROUP BY
                             day,
                             station_id,
                             variable_id
 
-                        ON CONFLICT (day, station_id, variable_id) DO UPDATE
-                        SET min_value   = EXCLUDED.min_value,
-                            max_value   = EXCLUDED.max_value,
-                            avg_value   = EXCLUDED.avg_value,
-                            sum_value   = EXCLUDED.sum_value,
+                        ON CONFLICT (day, station_id, variable_id)
+                        DO UPDATE
+                        SET
+                            min_value = EXCLUDED.min_value,
+                            max_value = EXCLUDED.max_value,
+                            avg_value = EXCLUDED.avg_value,
+                            sum_value = EXCLUDED.sum_value,
                             num_records = EXCLUDED.num_records,
-                            updated_at  = now();
+                            updated_at = now();
                     """
 
                     cursor.execute(
@@ -959,14 +912,14 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                         {
                             "datetime_start": datetime_start,
                             "datetime_end": datetime_end,
+                            "target_date": current_date,
                             "station_ids": station_ids,
                             "offset": offset,
                             "MISSING_VALUE": settings.MISSING_VALUE,
                         }
                     )
 
-                    # Commit after each logical date.
-                    # This keeps transactions smaller and reduces how long locks are held.
+                    # Keep transactions limited to one logical reporting day.
                     conn.commit()
 
                     current_date += timedelta(days=1)
@@ -979,13 +932,16 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
     finally:
         conn.close()
 
-    cache.set("daily_summary_last_run", datetime.now(pytz.UTC), None)
+    cache.set(
+        "daily_summary_last_run",
+        datetime.now(pytz.UTC),
+        None
+    )
 
     logger.info(
         f'Daily summary finished at {datetime.now(pytz.UTC)}. '
         f'Took {time() - start_at:.2f} seconds.'
     )
-
 
 
 @shared_task
@@ -7390,3 +7346,11 @@ def convert_utc_to_offset(utc_dt, offset_minutes):
 
     # Convert to station-local time and return an ISO string.
     return utc_dt.astimezone(target_tz).isoformat()
+
+
+# convert offset minutes to hours in the str format UTC +4
+def convert_offset_min_to_hrs(offset_minutes):
+    hours = offset_minutes / 60
+    # Use :g format to drop unnecessary trailing zeros (e.g., +6 instead of +6.0, but +9.5 for floats)
+    sign = "+" if hours >= 0 else "-"
+    return f"UTC {sign}{abs(hours):g}"

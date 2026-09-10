@@ -5488,52 +5488,128 @@ def last24_summary_list(request):
     return JsonResponse(data={"message": "No data found."}, status=status.HTTP_404_NOT_FOUND)
 
 
-def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime_picked):
+def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_type, datetime_picked):
     station = Station.objects.get(id=station_id)
     variable = Variable.objects.get(id=variable_id)
 
-    date_start = str((datetime_picked - datetime.timedelta(days=6)).date())
-    date_end = str(datetime_picked.date())
+    # Last 24h is handled in UTC.
+    # Pick-a-day is based on the configured SURFACE timezone.
+    if time_type == 'Last 24h':
+        chart_timezone = pytz.UTC
+        timezone_name = 'UTC'
+        chart_time_label = 'UTC calendar days'
+    else:
+        chart_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+        timezone_name = settings.TIMEZONE_NAME
+        chart_time_label = 'SURFACE local calendar days'
 
-    if data_type=='Communication':
+    # Convert datetime_picked into the timezone whose calendar dates
+    # should be displayed/grouped on the chart.
+    datetime_picked_local = datetime_picked.astimezone(chart_timezone)
+
+    chart_end_date = datetime_picked_local.date()
+    chart_start_date = chart_end_date - datetime.timedelta(days=6)
+    chart_next_date = chart_end_date + datetime.timedelta(days=1)
+
+    # Build the actual datetime boundaries represented by those
+    # calendar dates, then convert them to UTC for comparison with
+    # timestamptz columns.
+    query_start_datetime = chart_timezone.localize(
+        datetime.datetime.combine(
+            chart_start_date,
+            datetime.time.min
+        )
+    ).astimezone(pytz.UTC)
+
+    query_end_datetime = chart_timezone.localize(
+        datetime.datetime.combine(
+            chart_next_date,
+            datetime.time.min
+        )
+    ).astimezone(pytz.UTC)
+
+    date_start = str(chart_start_date)
+    date_end = str(chart_end_date)
+
+    query_params = {
+        "chart_start_date": chart_start_date,
+        "chart_end_date": chart_end_date,
+        "query_start_datetime": query_start_datetime,
+        "query_end_datetime": query_end_datetime,
+        "timezone_name": timezone_name,
+        "station_id": station_id,
+        "variable_id": variable_id,
+    }
+
+    if data_type == 'Communication':
+
         query = """
-            WITH
-                date_range AS (
-                    SELECT GENERATE_SERIES(%s::DATE - '6 day'::INTERVAL, %s::DATE, '1 day')::DATE AS date
-                ),
-                hs AS (
-                    SELECT
-                        datetime::date AS date,
-                        COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS amount
-                    FROM
-                        hourly_summary
-                    WHERE
-                        datetime >= %s::DATE - '7 day'::INTERVAL AND datetime < %s::DATE + '1 day'::INTERVAL
-                        AND station_id = %s
-                        AND variable_id = %s
-                    GROUP BY 1
-                )
+            WITH date_range AS (
+                SELECT
+                    generate_series(
+                        %(chart_start_date)s::date,
+                        %(chart_end_date)s::date,
+                        INTERVAL '1 day'
+                    )::date AS date
+            ),
+
+            hs AS (
+                SELECT
+                    (
+                        datetime AT TIME ZONE %(timezone_name)s
+                    )::date AS date,
+
+                    COUNT(
+                        DISTINCT date_trunc('hour', datetime)
+                    ) AS amount
+
+                FROM hourly_summary
+
+                WHERE datetime >= %(query_start_datetime)s
+                  AND datetime < %(query_end_datetime)s
+                  AND station_id = %(station_id)s
+                  AND variable_id = %(variable_id)s
+
+                GROUP BY 1
+            )
+
             SELECT
                 date_range.date,
                 COALESCE(hs.amount, 0) AS amount,
-                COALESCE((
-                    SELECT color FROM wx_qualityflag
-                    WHERE 
-                        CASE 
-                            WHEN COALESCE(hs.amount, 0) >= 20 THEN name = 'Good'
-                            WHEN COALESCE(hs.amount, 0) >= 8 AND COALESCE(hs.amount, 0) <= 19 THEN name = 'Suspicious'
-                            WHEN COALESCE(hs.amount, 0) >= 1 AND COALESCE(hs.amount, 0) <= 7 THEN name = 'Bad'
-                            ELSE name = 'Not checked'
-                        END
-                ), '') AS color
-            FROM
-                date_range
-                LEFT JOIN hs ON date_range.date = hs.date
+
+                COALESCE(
+                    (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE
+                            CASE
+                                WHEN COALESCE(hs.amount, 0) >= 20
+                                    THEN name = 'Good'
+
+                                WHEN COALESCE(hs.amount, 0) >= 8
+                                     AND COALESCE(hs.amount, 0) <= 19
+                                    THEN name = 'Suspicious'
+
+                                WHEN COALESCE(hs.amount, 0) >= 1
+                                     AND COALESCE(hs.amount, 0) <= 7
+                                    THEN name = 'Bad'
+
+                                ELSE name = 'Not checked'
+                            END
+                    ),
+                    ''
+                ) AS color
+
+            FROM date_range
+
+            LEFT JOIN hs
+                ON date_range.date = hs.date
+
             ORDER BY date_range.date
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, datetime_picked, datetime_picked, station_id, variable_id,))
+            cursor.execute(query, query_params)
             results = cursor.fetchall()
 
         chart_options = {
@@ -5541,17 +5617,28 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
                 'type': 'column'
             },
             'title': {
-                'text': " ".join(['Delay Data Track -',date_start,'to',date_end]) 
+                'text': " ".join([
+                    'Daily Communication Hours -',
+                    date_start,
+                    'to',
+                    date_end
+                ])
             },
             'subtitle': {
-                'text': " ".join([station.name, station.code, '-', variable.name])
-            },  
+                'text': " ".join([
+                    station.name,
+                    station.code,
+                    '-',
+                    variable.name,
+                    f'({chart_time_label})'
+                ])
+            },
             'xAxis': {
                 'categories': [r[0] for r in results]
             },
             'yAxis': {
                 'title': None,
-                'categories': [str(i)+'h' for i in range(25)],      
+                'categories': [str(i) + 'h' for i in range(25)],
                 'tickInterval': 2,
                 'min': 0,
                 'max': 24,
@@ -5559,7 +5646,13 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
             'series': [
                 {
                     'name': 'Max comunication',
-                    'data': [{'y': r[1], 'color': r[2]} for r in results],
+                    'data': [
+                        {
+                            'y': r[1],
+                            'color': r[2]
+                        }
+                        for r in results
+                    ],
                     'showInLegend': False
                 }
             ],
@@ -5569,78 +5662,141 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
                     'pointPadding': 0.01,
                     'groupPadding': 0.05
                 }
-            }            
+            }
         }
 
-    elif data_type=='Quality Control':
+    elif data_type == 'Quality Control':
+
         flags = {
-          'good': QualityFlag.objects.get(name='Good').color,
-          'suspicious': QualityFlag.objects.get(name='Suspicious').color,
-          'bad': QualityFlag.objects.get(name='Bad').color,
-          'not_checked': QualityFlag.objects.get(name='Not checked').color,
-        }        
+            'good': QualityFlag.objects.get(name='Good').color,
+            'suspicious': QualityFlag.objects.get(name='Suspicious').color,
+            'bad': QualityFlag.objects.get(name='Bad').color,
+            'not_checked': QualityFlag.objects.get(name='Not checked').color,
+        }
 
         query = """
-            WITH
-              date_range AS (
-                SELECT GENERATE_SERIES(%s::DATE - '6 day'::INTERVAL, %s::DATE, '1 day')::DATE AS date
-              ),
-              hs AS(              
-                SELECT 
-                    rd.datetime::DATE AS date
-                    ,EXTRACT(hour FROM rd.datetime) AS hour
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN('Bad')
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN('Suspicious')
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN('Good')
-                      ELSE ('Not checked')
+            WITH date_range AS (
+                SELECT
+                    generate_series(
+                        %(chart_start_date)s::date,
+                        %(chart_end_date)s::date,
+                        INTERVAL '1 day'
+                    )::date AS date
+            ),
+
+            hs AS (
+                SELECT
+                    (
+                        rd.datetime AT TIME ZONE %(timezone_name)s
+                    )::date AS date,
+
+                    date_trunc(
+                        'hour',
+                        rd.datetime AT TIME ZONE %(timezone_name)s
+                    ) AS hour,
+
+                    CASE
+                        WHEN COUNT(
+                            CASE WHEN name = 'Bad' THEN 1 END
+                        ) > 0
+                            THEN 'Bad'
+
+                        WHEN COUNT(
+                            CASE WHEN name = 'Suspicious' THEN 1 END
+                        ) > 0
+                            THEN 'Suspicious'
+
+                        WHEN COUNT(
+                            CASE WHEN name = 'Good' THEN 1 END
+                        ) > 0
+                            THEN 'Good'
+
+                        ELSE 'Not checked'
                     END AS quality_flag
+
                 FROM raw_data AS rd
-                    LEFT JOIN wx_qualityflag qf ON rd.quality_flag = qf.id
-                WHERE 
-                    datetime >= %s::DATE - '7 day'::INTERVAL AND datetime < %s::DATE + '1 day'::INTERVAL
-                    AND rd.station_id = %s
-                    AND rd.variable_id = %s
-                GROUP BY 1,2
-                ORDER BY 1,2
-              )
+
+                LEFT JOIN wx_qualityflag qf
+                    ON COALESCE(rd.manual_flag, rd.quality_flag) = qf.id
+
+                WHERE rd.datetime >= %(query_start_datetime)s
+                  AND rd.datetime < %(query_end_datetime)s
+                  AND rd.station_id = %(station_id)s
+                  AND rd.variable_id = %(variable_id)s
+
+                GROUP BY 1, 2
+                ORDER BY 1, 2
+            )
+
             SELECT
-                date_range.date
-                ,COUNT(CASE WHEN hs.quality_flag='Good' THEN 1 END) AS good
-                ,COUNT(CASE WHEN hs.quality_flag='Suspicious' THEN 1 END) AS suspicious
-                ,COUNT(CASE WHEN hs.quality_flag='Bad' THEN 1 END) AS bad
-                ,COUNT(CASE WHEN hs.quality_flag='Not checked' THEN 1 END) AS not_checked
+                date_range.date,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Good' THEN 1 END
+                ) AS good,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Suspicious' THEN 1 END
+                ) AS suspicious,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Bad' THEN 1 END
+                ) AS bad,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Not checked' THEN 1 END
+                ) AS not_checked
+
             FROM date_range
-                LEFT JOIN hs ON date_range.date = hs.date
-            GROUP BY 1
-            ORDER BY 1
+
+            LEFT JOIN hs
+                ON date_range.date = hs.date
+
+            GROUP BY date_range.date
+            ORDER BY date_range.date
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, datetime_picked, datetime_picked, station_id, variable_id,))
+            cursor.execute(query, query_params)
             results = cursor.fetchall()
 
-        series = [] 
+        series = []
+
         for i, flag in enumerate(flags):
-            data = [r[i+1] for r in results]
-            series.append({'name': flag.capitalize(), 'data': data, 'color': flags[flag]})
+            data = [r[i + 1] for r in results]
+
+            series.append({
+                'name': flag.capitalize(),
+                'data': data,
+                'color': flags[flag]
+            })
 
         chart_options = {
             'chart': {
                 'type': 'column'
             },
             'title': {
-                'text': " ".join(['Amount of Flags - ',date_start,'to',date_end]) 
+                'text': " ".join([
+                    'Amount of Flags -',
+                    date_start,
+                    'to',
+                    date_end
+                ])
             },
             'subtitle': {
-                'text': " ".join([station.name, station.code, '-', variable.name])
-            },            
+                'text': " ".join([
+                    station.name,
+                    station.code,
+                    '-',
+                    variable.name
+                ])
+            },
             'xAxis': {
                 'categories': [r[0] for r in results]
             },
             'yAxis': {
                 'title': None,
-                'categories': [str(i)+'h' for i in range(25)],      
+                'categories': [str(i) + 'h' for i in range(25)],
                 'tickInterval': 2,
                 'min': 0,
                 'max': 24,
@@ -5648,12 +5804,12 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
             'series': series,
             'plotOptions': {
                 'column': {
-                    'minPointLength': 10, 
+                    'minPointLength': 10,
                     'pointPadding': 0.01,
                     'groupPadding': 0.05
                 }
-            }            
-        }            
+            }
+        }
 
     return chart_options
 
@@ -5665,15 +5821,32 @@ def get_stationsmonitoring_chart_data(request, station_id, variable_id):
     data_type = request.GET.get('data_type', 'Communication')
     date_picked = request.GET.get('date_picked', None)
 
-    if time_type=='Last 24h':
-        datetime_picked = datetime.datetime.now()
+    if time_type == 'Last 24h':
+        # Get the current time directly in UTC.
+        # This returns a timezone-aware datetime.
+        datetime_picked = datetime.datetime.now(pytz.UTC)
+
     else:
-        datetime_picked = datetime.datetime.strptime(date_picked, '%Y-%m-%d')    
+        # Parse the user-selected date.
+        # At this point the datetime is naive and represents
+        # midnight in the SURFACE default timezone.
+        datetime_picked = datetime.datetime.strptime(
+            date_picked,
+            '%Y-%m-%d'
+        )
 
-    # Fix a date to test
-    # datetime_picked = datetime.datetime.strptime('2023-01-01', '%Y-%m-%d')
+        # Get the timezone configured in Django's TIMEZONE_NAME setting.
+        default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
 
-    chart_data = query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime_picked)
+        # Tell Python that the selected datetime belongs to
+        # the application's default timezone.
+        datetime_picked = default_timezone.localize(datetime_picked)
+
+        # Convert that local datetime to UTC before sending it
+        # to PostgreSQL.
+        datetime_picked = datetime_picked.astimezone(pytz.UTC)
+
+    chart_data = query_stationsmonintoring_chart(station_id, variable_id, data_type, time_type, datetime_picked)
 
     response = {
         "chartOptions": chart_data
@@ -5697,224 +5870,474 @@ def get_station_lastupdate(station_id):
 
 
 def query_stationsmonitoring_station(data_type, time_type, date_picked, station_id):
-    if time_type=='Last 24h':
-        datetime_picked = datetime.datetime.now()
-    else:
-        datetime_picked = datetime.datetime.strptime(date_picked, '%Y-%m-%d')
+    if time_type == 'Last 24h':
+        # True rolling 24-hour UTC window.
+        query_end = datetime.datetime.now(pytz.UTC)
+        query_start = query_end - datetime.timedelta(hours=24)
 
+    else:
+        # Pick-a-day represents a calendar day in the SURFACE timezone.
+        selected_date = datetime.datetime.strptime(
+            date_picked,
+            '%Y-%m-%d'
+        ).date()
+
+        default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+
+        local_start = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date,
+                datetime.time.min
+            )
+        )
+
+        local_end = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date + datetime.timedelta(days=1),
+                datetime.time.min
+            )
+        )
+
+        query_start = local_start.astimezone(pytz.UTC)
+        query_end = local_end.astimezone(pytz.UTC)
 
     station_data = []
 
-    if data_type=='Communication':
+    # ------------------------------------------------------------
+    # Communication
+    # ------------------------------------------------------------
+    if data_type == 'Communication':
         query = """
             WITH hs AS (
                 SELECT
                     station_id,
                     variable_id,
-                    COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS number_hours
-                FROM
-                    hourly_summary
+
+                    COUNT(
+                        DISTINCT date_trunc('hour', datetime)
+                    ) AS number_hours
+
+                FROM hourly_summary
+
                 WHERE
-                    datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL AND station_id = %s
-                GROUP BY 1, 2
+                    datetime >= %s
+                    AND datetime < %s
+                    AND station_id = %s
+
+                GROUP BY
+                    station_id,
+                    variable_id
             )
+
             SELECT
                 v.id,
                 v.name,
                 hs.number_hours,
                 ls.latest_value,
-                u.symbol,                    
+                u.symbol,
+
                 CASE
                     WHEN hs.number_hours >= 20 THEN (
-                        SELECT color FROM wx_qualityflag WHERE name = 'Good'
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Good'
                     )
-                    WHEN hs.number_hours >= 8 AND hs.number_hours <= 19 THEN(
-                        SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
+
+                    WHEN hs.number_hours >= 8
+                         AND hs.number_hours <= 19 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Suspicious'
                     )
-                    WHEN hs.number_hours >= 1 AND hs.number_hours <= 7 THEN(
-                        SELECT color FROM wx_qualityflag WHERE name = 'Bad'
+
+                    WHEN hs.number_hours >= 1
+                         AND hs.number_hours <= 7 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Bad'
                     )
+
                     ELSE (
-                        SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Not checked'
                     )
-                END AS color                     
-            FROM
-                wx_stationvariable sv
-                LEFT JOIN hs ON sv.station_id = hs.station_id AND sv.variable_id = hs.variable_id
-                LEFT JOIN last24h_summary ls ON sv.station_id = ls.station_id AND sv.variable_id = ls.variable_id
-                LEFT JOIN wx_variable v ON sv.variable_id = v.id
-                LEFT JOIN wx_unit u ON v.unit_id = u.id
+                END AS color
+
+            FROM wx_stationvariable AS sv
+
+            LEFT JOIN hs
+                ON sv.station_id = hs.station_id
+                AND sv.variable_id = hs.variable_id
+
+            LEFT JOIN last24h_summary AS ls
+                ON sv.station_id = ls.station_id
+                AND sv.variable_id = ls.variable_id
+
+            LEFT JOIN wx_variable AS v
+                ON sv.variable_id = v.id
+
+            LEFT JOIN wx_unit AS u
+                ON v.unit_id = u.id
+
             WHERE
                 sv.station_id = %s
-            ORDER BY 1
-        """
 
-        with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, station_id, station_id))
-            results = cursor.fetchall()
-
-        station_data = [{'id': r[0], 
-                         'name': r[1], 
-                         'amount': r[2] if r[2] is not None else 0, 
-                         'latestvalue': " ".join([str(r[3]), str(r[4])]) if r[3] is not None else '---', 
-                         'color': r[5]} for r in results]
-
-    elif data_type=='Quality Control':
-        query = """
-            WITH h AS(
-                SELECT 
-                    rd.station_id
-                    ,rd.variable_id
-                    ,EXTRACT(hour FROM rd.datetime) AS hour
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN('Bad')
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN('Suspicious')
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN('Good')
-                      ELSE ('Not checked')
-                    END AS quality_flag
-                FROM raw_data AS rd
-                    LEFT JOIN wx_qualityflag qf ON rd.quality_flag = qf.id
-                WHERE 
-                    datetime <= %s
-                    AND datetime >= %s - '24 hour'::INTERVAL
-                    AND rd.station_id = %s
-                GROUP BY 1,2,3
-                ORDER BY 1,2,3
-            )
-            SELECT
+            ORDER BY
                 v.id
-                ,v.name
-                ,COUNT(CASE WHEN h.quality_flag='Good' THEN 1 END) AS good
-                ,COUNT(CASE WHEN h.quality_flag='Suspicious' THEN 1 END) AS suspicious
-                ,COUNT(CASE WHEN h.quality_flag='Bad' THEN 1 END) AS bad
-                ,COUNT(CASE WHEN h.quality_flag='Not checked' THEN 1 END) AS not_checked
-            FROM wx_stationvariable AS sv
-                LEFT JOIN wx_variable AS v ON sv.variable_id = v.id
-                LEFT JOIN h ON sv.station_id = h.station_id AND sv.variable_id = h.variable_id
-            WHERE sv.station_id = %s
-            GROUP BY 1,2
-            ORDER BY 1,2
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, station_id, station_id))
+            cursor.execute(
+                query,
+                (
+                    query_start,
+                    query_end,
+                    station_id,
+                    station_id
+                )
+            )
             results = cursor.fetchall()
 
-        station_data = [{'id': r[0], 
-                         'name': r[1], 
-                         'good': r[2],
-                         'suspicious': r[3],
-                         'bad': r[4],
-                         'not_checked': r[5]} for r in results]
-    elif data_type=='Visits':
+        station_data = [
+            {
+                'id': r[0],
+                'name': r[1],
+                'amount': r[2] if r[2] is not None else 0,
+                'latestvalue': (
+                    " ".join([str(r[3]), str(r[4])])
+                    if r[3] is not None
+                    else '---'
+                ),
+                'color': r[5]
+            }
+            for r in results
+        ]
+
+    # ------------------------------------------------------------
+    # Quality Control
+    # ------------------------------------------------------------
+    elif data_type == 'Quality Control':
+        query = """
+            WITH h AS (
+                SELECT
+                    rd.station_id,
+                    rd.variable_id,
+
+                    -- Anchor hourly buckets to the start of the requested
+                    -- period. A rolling 24h window therefore has 24 buckets.
+                    FLOOR(
+                        EXTRACT(
+                            EPOCH FROM (
+                                rd.datetime - %s
+                            )
+                        ) / 3600
+                    ) AS hour,
+
+                    -- Worst QC status inside each one-hour bucket.
+                    CASE
+                        WHEN COUNT(
+                            CASE
+                                WHEN qf.name = 'Bad' THEN 1
+                            END
+                        ) > 0 THEN 'Bad'
+
+                        WHEN COUNT(
+                            CASE
+                                WHEN qf.name = 'Suspicious' THEN 1
+                            END
+                        ) > 0 THEN 'Suspicious'
+
+                        WHEN COUNT(
+                            CASE
+                                WHEN qf.name = 'Good' THEN 1
+                            END
+                        ) > 0 THEN 'Good'
+
+                        ELSE 'Not checked'
+                    END AS quality_flag
+
+                FROM raw_data AS rd
+
+                -- Manual QC overrides the automatic QC flag.
+                LEFT JOIN wx_qualityflag AS qf
+                    ON COALESCE(
+                        rd.manual_flag,
+                        rd.quality_flag
+                    ) = qf.id
+
+                WHERE
+                    rd.datetime >= %s
+                    AND rd.datetime < %s
+                    AND rd.station_id = %s
+
+                GROUP BY
+                    rd.station_id,
+                    rd.variable_id,
+                    hour
+
+                ORDER BY
+                    rd.station_id,
+                    rd.variable_id,
+                    hour
+            )
+
+            SELECT
+                v.id,
+                v.name,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Good' THEN 1
+                    END
+                ) AS good,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Suspicious' THEN 1
+                    END
+                ) AS suspicious,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Bad' THEN 1
+                    END
+                ) AS bad,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Not checked' THEN 1
+                    END
+                ) AS not_checked
+
+            FROM wx_stationvariable AS sv
+
+            LEFT JOIN wx_variable AS v
+                ON sv.variable_id = v.id
+
+            LEFT JOIN h
+                ON sv.station_id = h.station_id
+                AND sv.variable_id = h.variable_id
+
+            WHERE
+                sv.station_id = %s
+
+            GROUP BY
+                v.id,
+                v.name
+
+            ORDER BY
+                v.id,
+                v.name
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                query,
+                (
+                    query_start,  # origin of the hourly buckets
+                    query_start,  # requested period start
+                    query_end,    # requested period end
+                    station_id,
+                    station_id
+                )
+            )
+            results = cursor.fetchall()
+
+        station_data = [
+            {
+                'id': r[0],
+                'name': r[1],
+                'good': r[2],
+                'suspicious': r[3],
+                'bad': r[4],
+                'not_checked': r[5]
+            }
+            for r in results
+        ]
+
+    # ------------------------------------------------------------
+    # Visits
+    # ------------------------------------------------------------
+    elif data_type == 'Visits':
         query = """
             WITH ordered_reports AS (
-                SELECT 
-                    id
-                    ,station_id
-                    ,visit_type_id
-                    ,visit_date
-                    ,initial_time
-                    ,end_time
-                    ,responsible_technician_id
-                    ,next_visit_date
-                    ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
+                SELECT
+                    id,
+                    station_id,
+                    visit_type_id,
+                    visit_date,
+                    initial_time,
+                    end_time,
+                    responsible_technician_id,
+                    next_visit_date,
+
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+
                 FROM wx_maintenancereport
-                WHERE status='A'AND station_id=%s
-            )
-            ,latest_report AS(
-                SELECT 
-                    *
+
+                WHERE
+                    status = 'A'
+                    AND station_id = %s
+            ),
+
+            latest_report AS (
+                SELECT *
                 FROM ordered_reports
-                WHERE rn=1    
+                WHERE rn = 1
             )
-            SELECT 
-                r.id
-                ,p.name
-                ,s.is_automatic
-                ,r.visit_date
-                ,v.name
-                ,r.initial_time
-                ,r.end_time
-                ,t.name
-                ,r.next_visit_date
-            FROM latest_report r
-            LEFT JOIN wx_station s ON r.station_id = s.id
-            LEFT JOIN wx_stationprofile p ON p.id=s.profile_id
-            LEFT JOIN wx_technician t ON r.responsible_technician_id = t.id
-            LEFT JOIN wx_visittype v ON r.visit_type_id = v.id
+
+            SELECT
+                r.id,
+                p.name,
+                s.is_automatic,
+                r.visit_date,
+                v.name,
+                r.initial_time,
+                r.end_time,
+                t.name,
+                r.next_visit_date
+
+            FROM latest_report AS r
+
+            LEFT JOIN wx_station AS s
+                ON r.station_id = s.id
+
+            LEFT JOIN wx_stationprofile AS p
+                ON p.id = s.profile_id
+
+            LEFT JOIN wx_technician AS t
+                ON r.responsible_technician_id = t.id
+
+            LEFT JOIN wx_visittype AS v
+                ON r.visit_type_id = v.id
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (station_id,))
+            cursor.execute(
+                query,
+                (station_id,)
+            )
             results = cursor.fetchall()
-        
-        station_data = [{'Maintenance Report ID': r[0],
-                         'Station Profile': r[1],
-                         'Station Type': 'Automatic' if r[2] else 'Manual',
-                         'Visit Date': r[3],
-                         'Visit Type': r[4],
-                         'Initial Time': r[5],
-                         'End Time': r[6],
-                         'Responsible Technician': r[7],
-                         'Next Visit Date': r[8]} for r in results]
-        
-        if len(station_data)>0:
+
+        station_data = [
+            {
+                'Maintenance Report ID': r[0],
+                'Station Profile': r[1],
+                'Station Type': (
+                    'Automatic'
+                    if r[2]
+                    else 'Manual'
+                ),
+                'Visit Date': r[3],
+                'Visit Type': r[4],
+                'Initial Time': r[5],
+                'End Time': r[6],
+                'Responsible Technician': r[7],
+                'Next Visit Date': r[8]
+            }
+            for r in results
+        ]
+
+        if len(station_data) > 0:
             station_data = station_data[0]
         else:
             station_data = {}
-    elif data_type=='Equipment':
+
+    # ------------------------------------------------------------
+    # Equipment
+    # ------------------------------------------------------------
+    elif data_type == 'Equipment':
         query = """
             WITH ordered_reports AS (
-                SELECT 
-                    id
-                    ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
+                SELECT
+                    id,
+
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+
                 FROM wx_maintenancereport
-                WHERE status='A'AND station_id=%s
-            )
-            ,latest_report AS(
-                SELECT 
-                    id
+
+                WHERE
+                    status = 'A'
+                    AND station_id = %s
+            ),
+
+            latest_report AS (
+                SELECT id
                 FROM ordered_reports
-                WHERE rn=1    
+                WHERE rn = 1
             )
-            SELECT 
-                em.name
-                ,e.serial_number
-                ,et.name
-                ,se.classification
-                ,q.color
-            FROM latest_report r
-            LEFT JOIN wx_maintenancereportequipment se ON se.maintenance_report_id=r.id
-            LEFT JOIN wx_equipment e ON e.id = se.new_equipment_id
-            LEFT JOIN wx_equipmenttype et ON et.id = se.equipment_type_id
-            LEFT JOIN wx_equipmentmodel em ON e.model_id = em.id
-            LEFT JOIN
-                    wx_qualityflag q ON 
-                    CASE
-                        WHEN se.classification='N' THEN q.symbol = 'B'
-                        WHEN se.classification='P' THEN q.symbol = 'S'
-                        WHEN se.classification='F' THEN q.symbol = 'G'
-                        ELSE q.symbol = '-'
-                    END
-            ORDER BY se.equipment_type_id, se.equipment_order
+
+            SELECT
+                em.name,
+                e.serial_number,
+                et.name,
+                se.classification,
+                q.color
+
+            FROM latest_report AS r
+
+            LEFT JOIN wx_maintenancereportequipment AS se
+                ON se.maintenance_report_id = r.id
+
+            LEFT JOIN wx_equipment AS e
+                ON e.id = se.new_equipment_id
+
+            LEFT JOIN wx_equipmenttype AS et
+                ON et.id = se.equipment_type_id
+
+            LEFT JOIN wx_equipmentmodel AS em
+                ON e.model_id = em.id
+
+            LEFT JOIN wx_qualityflag AS q ON
+                CASE
+                    WHEN se.classification = 'N'
+                        THEN q.symbol = 'B'
+
+                    WHEN se.classification = 'P'
+                        THEN q.symbol = 'S'
+
+                    WHEN se.classification = 'F'
+                        THEN q.symbol = 'G'
+
+                    ELSE q.symbol = '-'
+                END
+
+            ORDER BY
+                se.equipment_type_id,
+                se.equipment_order
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (station_id,))
+            cursor.execute(
+                query,
+                (station_id,)
+            )
             results = cursor.fetchall()
 
         classification_dict = {
-            'F':  'Fully Functional',
-            'P':  'Partially Functional',
-            'N':  'Not Functional'
+            'F': 'Fully Functional',
+            'P': 'Partially Functional',
+            'N': 'Not Functional'
         }
-        
-        station_data = [{'model': r[0],
-                         'serial_number': r[1],
-                         'equipment_type': r[2],
-                         'classification': classification_dict[r[3]],
-                         'color': r[4]} for r in results]        
+
+        station_data = [
+            {
+                'model': r[0],
+                'serial_number': r[1],
+                'equipment_type': r[2],
+                'classification': classification_dict[r[3]],
+                'color': r[4]
+            }
+            for r in results
+        ]
+
     return station_data
 
 
@@ -5925,8 +6348,12 @@ def get_stationsmonitoring_station_data(request, id):
     time_type = request.GET.get('time_type', 'Last 24h')
     date_picked = request.GET.get('date_picked', None)
 
+    station = Station.objects.get(id=id)
+    station_offset = station.utc_offset_minutes
+
     response = {
-        'lastupdate': get_station_lastupdate(id),
+        'lastupdate': tasks.convert_utc_to_offset(get_station_lastupdate(id), station_offset),
+        'station_hr_offset_str': tasks.convert_offset_min_to_hrs(station_offset),
         'station_data': query_stationsmonitoring_station(data_type, time_type, date_picked, id),
     }
 
@@ -5934,278 +6361,393 @@ def get_stationsmonitoring_station_data(request, id):
 
 
 def query_stationsmonitoring_map(data_type, time_type, date_picked):
-    if time_type=='Last 24h':
-        datetime_picked = datetime.datetime.now()
+
+    selected_date = None
+
+    # Determine the datetime window used by Communication and QC.
+    if time_type == 'Last 24h':
+        query_end = datetime.datetime.now(pytz.UTC)
+        query_start = query_end - datetime.timedelta(hours=24)
+
     else:
-        datetime_picked = datetime.datetime.strptime(date_picked, '%Y-%m-%d')
+        selected_date = datetime.datetime.strptime(
+            date_picked,
+            '%Y-%m-%d'
+        ).date()
+
+        default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+
+        local_start = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date,
+                datetime.time.min
+            )
+        )
+
+        local_end = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date + datetime.timedelta(days=1),
+                datetime.time.min
+            )
+        )
+
+        query_start = local_start.astimezone(pytz.UTC)
+        query_end = local_end.astimezone(pytz.UTC)
 
     results = []
 
-    if time_type=='Last 24h':
-        if data_type=='Communication':
-            query = """
-                WITH hs AS (
-                    SELECT
-                        station_id
-                        ,variable_id
-                        ,COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS number_hours
-                    FROM
-                        hourly_summary
-                    WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL
-                    GROUP BY 1, 2
-                )
-                SELECT
-                    s.id
-                    ,s.name
-                    ,s.code
-                    ,s.latitude
-                    ,s.longitude
-                    ,CASE
-                        WHEN MAX(number_hours) >= 20 THEN (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                        )
-                        WHEN MAX(number_hours) >= 8 AND MAX(number_hours) <= 19 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                        )
-                        WHEN MAX(number_hours) >= 1 AND MAX(number_hours) <= 7 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                        )
-                        ELSE (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                        )
-                    END AS color    
-                FROM wx_station AS s
-                    LEFT JOIN wx_stationvariable AS sv ON s.id = sv.station_id
-                    LEFT JOIN hs ON sv.station_id = hs.station_id AND sv.variable_id = hs.variable_id
-                WHERE s.is_active
-                GROUP BY 1, 2, 3, 4, 5
-            """
-        elif data_type=='Quality Control':
-            query = """
-                WITH qf AS (
-                  SELECT
-                    station_id
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                      )
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                      )   
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                      )
-                      ELSE (
-                          SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                      )
-                    END AS color
-                  FROM
-                    raw_data AS rd
-                    LEFT JOIN wx_qualityflag AS qf ON rd.quality_flag = qf.id
-                  WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL                
-                  GROUP BY 1
-                )
-                SELECT
-                  s.id
-                  ,s.name
-                  ,s.code
-                  ,s.latitude
-                  ,s.longitude
-                  ,COALESCE(qf.color, (SELECT color FROM wx_qualityflag WHERE name = 'Not checked')) AS color
-                FROM wx_station AS s
-                LEFT JOIN qf ON s.id = qf.station_id
-                WHERE s.is_active
-            """
-        elif data_type=='Visits':
-            query = """
-                WITH ordered_reports AS (
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
-                    FROM wx_maintenancereport
-                    WHERE status='A'
-                )
-                ,latest_reports AS(
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,rn
-                    FROM ordered_reports
-                    WHERE rn=1    
-                )
-                SELECT 
-                    s.id
-                    ,s.name
-                    ,s.code
-                    ,s.latitude
-                    ,s.longitude                    
-                    ,q.color AS color
-                FROM wx_station s
-                LEFT JOIN latest_reports l ON l.station_id = s.id
-                LEFT JOIN wx_qualityflag q ON
-                    CASE
-                        WHEN l.next_visit_date IS NULL THEN q.symbol = '-'
-                        WHEN l.next_visit_date > NOW() THEN q.symbol = 'G'
-                        WHEN l.next_visit_date >= NOW() - INTERVAL '1 month' AND l.next_visit_date <= NOW() THEN q.symbol = 'S'
-                        WHEN l.next_visit_date < NOW() - INTERVAL '1 month' THEN q.symbol = 'B'
-                    END
-                WHERE s.is_active
-            """
-        elif data_type == 'Equipment':
-            query = """
-                WITH ordered_reports AS (
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
-                    FROM wx_maintenancereport
-                    WHERE status='A'
-                )
-                ,latest_reports AS(
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,rn
-                    FROM ordered_reports
-                    WHERE rn=1    
-                )
-                ,station_equipment AS (
-                    SELECT 
-                        r.station_id
-                        ,COUNT(*) AS count_eq
-                        ,SUM(CASE WHEN re.classification = 'F' THEN 1 ELSE 0 END) AS count_f
-                        ,SUM(CASE WHEN re.classification = 'P' THEN 1 ELSE 0 END) AS count_p
-                        ,SUM(CASE WHEN re.classification = 'N' THEN 1 ELSE 0 END) AS count_n
-                    FROM latest_reports r
-                    LEFT JOIN wx_maintenancereportequipment re 
-                        ON  re.maintenance_report_id = r.id
-                    GROUP BY r.station_id
-                )
-                SELECT
-                    s.id,
-                    s.name,
-                    s.code,
-                    s.latitude,
-                    s.longitude,
-                    q.color AS color
-                FROM
-                    wx_station s
-                LEFT JOIN
-                    station_equipment se ON se.station_id = s.id
-                LEFT JOIN
-                    wx_qualityflag q ON 
-                    CASE
-                        WHEN se.count_eq IS NULL THEN q.symbol = '-'
-                        WHEN se.count_n > 0 THEN q.symbol = 'B'
-                        WHEN se.count_p > 0 THEN q.symbol = 'S'
-                        ELSE q.symbol = 'G'
-                    END
-                WHERE
-                    s.is_active
-            """            
-            
-
-        if data_type in ['Communication', 'Quality Control']:
-            with connection.cursor() as cursor:
-                cursor.execute(query, (datetime_picked, datetime_picked, ))
-                results = cursor.fetchall()
-        elif data_type in ['Visits', 'Equipment']:
-            with connection.cursor() as cursor:
-                cursor.execute(query)
-                results = cursor.fetchall()
+    # Current mode shows active stations.
+    # Pick-a-day shows stations that existed on the selected date.
+    if time_type == 'Last 24h':
+        station_filter = "s.is_active"
+        station_filter_params = []
     else:
-        if data_type=='Communication':
-            query = """
-                WITH hs AS (
-                    SELECT
-                        station_id
-                        ,variable_id
-                        ,COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS number_hours
-                    FROM
-                        hourly_summary
-                    WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL
-                    GROUP BY 1, 2
-                )
-                SELECT
-                    s.id
-                    ,s.name
-                    ,s.code
-                    ,s.latitude
-                    ,s.longitude
-                    ,CASE
-                        WHEN MAX(number_hours) >= 20 THEN (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                        )
-                        WHEN MAX(number_hours) >= 8 AND MAX(number_hours) <= 19 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                        )
-                        WHEN MAX(number_hours) >= 1 AND MAX(number_hours) <= 7 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                        )
-                        ELSE (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                        )
-                    END AS color    
-                FROM wx_station AS s
-                    LEFT JOIN wx_stationvariable AS sv ON s.id = sv.station_id
-                    LEFT JOIN hs ON sv.station_id = hs.station_id AND sv.variable_id = hs.variable_id
-                WHERE s.begin_date <= %s AND (s.end_date IS NULL OR s.end_date >= %s)
-                GROUP BY 1, 2, 3, 4, 5
-            """
-        elif data_type=='Quality Control':
-            query = """
-                WITH qf AS (
-                  SELECT
-                    station_id
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                      )
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                      )   
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                      )
-                      ELSE (
-                          SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                      )
-                    END AS color
-                  FROM
-                    raw_data AS rd
-                    LEFT JOIN wx_qualityflag AS qf ON rd.quality_flag = qf.id
-                  WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL                
-                  GROUP BY 1
-                )
-                SELECT
-                  s.id
-                  ,s.name
-                  ,s.code
-                  ,s.latitude
-                  ,s.longitude
-                  ,COALESCE(qf.color, (SELECT color FROM wx_qualityflag WHERE name = 'Not checked')) AS color
-                FROM wx_station AS s
-                LEFT JOIN qf ON s.id = qf.station_id
-                WHERE s.begin_date <= %s AND (s.end_date IS NULL OR s.end_date >= %s)
-            """
+        station_filter = """
+            s.begin_date <= %s
+            AND (s.end_date IS NULL OR s.end_date >= %s)
+        """
+        station_filter_params = [
+            selected_date,
+            selected_date
+        ]
 
-        if data_type in ['Communication', 'Quality Control']:
-            with connection.cursor() as cursor:
-                cursor.execute(query, (datetime_picked, datetime_picked, datetime_picked, datetime_picked, ))
-                results = cursor.fetchall()
+    if data_type == 'Communication':
+
+        query = f"""
+            WITH hs AS (
+                SELECT
+                    station_id,
+                    variable_id,
+                    COUNT(
+                        DISTINCT date_trunc('hour', datetime)
+                    ) AS number_hours
+                FROM hourly_summary
+                WHERE
+                    datetime >= %s
+                    AND datetime < %s
+                GROUP BY
+                    station_id,
+                    variable_id
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+
+                -- Station color is based on the worst-performing variable.
+                CASE
+                    WHEN MIN(
+                        COALESCE(hs.number_hours, 0)
+                    ) >= 20 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Good'
+                    )
+
+                    WHEN MIN(
+                        COALESCE(hs.number_hours, 0)
+                    ) >= 8 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Suspicious'
+                    )
+
+                    WHEN MIN(
+                        COALESCE(hs.number_hours, 0)
+                    ) >= 1 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Bad'
+                    )
+
+                    ELSE (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Not checked'
+                    )
+                END AS color
+
+            FROM wx_station AS s
+
+            LEFT JOIN wx_stationvariable AS sv
+                ON s.id = sv.station_id
+
+            LEFT JOIN hs
+                ON sv.station_id = hs.station_id
+                AND sv.variable_id = hs.variable_id
+
+            WHERE {station_filter}
+
+            GROUP BY
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude
+        """
+
+        query_params = [
+            query_start,
+            query_end,
+            *station_filter_params
+        ]
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, query_params)
+            results = cursor.fetchall()
+
+    elif data_type == 'Quality Control':
+
+        query = f"""
+            WITH qf AS (
+                SELECT
+                    rd.station_id,
+
+                    CASE
+                        WHEN COUNT(
+                            CASE WHEN qf.name = 'Bad' THEN 1 END
+                        ) > 0 THEN (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Bad'
+                        )
+
+                        WHEN COUNT(
+                            CASE WHEN qf.name = 'Suspicious' THEN 1 END
+                        ) > 0 THEN (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Suspicious'
+                        )
+
+                        WHEN COUNT(
+                            CASE WHEN qf.name = 'Good' THEN 1 END
+                        ) > 0 THEN (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Good'
+                        )
+
+                        ELSE (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Not checked'
+                        )
+                    END AS color
+
+                FROM raw_data AS rd
+
+                INNER JOIN wx_stationvariable AS sv
+                    ON sv.station_id = rd.station_id
+                    AND sv.variable_id = rd.variable_id
+
+                LEFT JOIN wx_qualityflag AS qf
+                    ON COALESCE(
+                        rd.manual_flag,
+                        rd.quality_flag
+                    ) = qf.id
+
+                WHERE
+                    rd.datetime >= %s
+                    AND rd.datetime < %s
+
+                GROUP BY
+                    rd.station_id
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+
+                COALESCE(
+                    qf.color,
+                    (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Not checked'
+                    )
+                ) AS color
+
+            FROM wx_station AS s
+
+            LEFT JOIN qf
+                ON s.id = qf.station_id
+
+            WHERE {station_filter}
+        """
+
+        query_params = [
+            query_start,
+            query_end,
+            *station_filter_params
+        ]
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, query_params)
+            results = cursor.fetchall()
+
+    elif data_type == 'Visits':
+
+        query = """
+            WITH ordered_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+                FROM wx_maintenancereport
+                WHERE status = 'A'
+            ),
+
+            latest_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    rn
+                FROM ordered_reports
+                WHERE rn = 1
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+                q.color AS color
+
+            FROM wx_station s
+
+            LEFT JOIN latest_reports l
+                ON l.station_id = s.id
+
+            LEFT JOIN wx_qualityflag q ON
+                CASE
+                    WHEN l.next_visit_date IS NULL
+                        THEN q.symbol = '-'
+
+                    WHEN l.next_visit_date > NOW()
+                        THEN q.symbol = 'G'
+
+                    WHEN l.next_visit_date >= NOW() - INTERVAL '1 month'
+                         AND l.next_visit_date <= NOW()
+                        THEN q.symbol = 'S'
+
+                    WHEN l.next_visit_date < NOW() - INTERVAL '1 month'
+                        THEN q.symbol = 'B'
+                END
+
+            WHERE s.is_active
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+    elif data_type == 'Equipment':
+
+        query = """
+            WITH ordered_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+                FROM wx_maintenancereport
+                WHERE status = 'A'
+            ),
+
+            latest_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    rn
+                FROM ordered_reports
+                WHERE rn = 1
+            ),
+
+            station_equipment AS (
+                SELECT
+                    r.station_id,
+                    COUNT(*) AS count_eq,
+                    SUM(
+                        CASE
+                            WHEN re.classification = 'F' THEN 1
+                            ELSE 0
+                        END
+                    ) AS count_f,
+                    SUM(
+                        CASE
+                            WHEN re.classification = 'P' THEN 1
+                            ELSE 0
+                        END
+                    ) AS count_p,
+                    SUM(
+                        CASE
+                            WHEN re.classification = 'N' THEN 1
+                            ELSE 0
+                        END
+                    ) AS count_n
+
+                FROM latest_reports r
+
+                LEFT JOIN wx_maintenancereportequipment re
+                    ON re.maintenance_report_id = r.id
+
+                GROUP BY r.station_id
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+                q.color AS color
+
+            FROM wx_station s
+
+            LEFT JOIN station_equipment se
+                ON se.station_id = s.id
+
+            LEFT JOIN wx_qualityflag q ON
+                CASE
+                    WHEN se.count_eq IS NULL
+                        THEN q.symbol = '-'
+
+                    WHEN se.count_n > 0
+                        THEN q.symbol = 'B'
+
+                    WHEN se.count_p > 0
+                        THEN q.symbol = 'S'
+
+                    ELSE q.symbol = 'G'
+                END
+
+            WHERE s.is_active
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            results = cursor.fetchall()
 
     return results
 

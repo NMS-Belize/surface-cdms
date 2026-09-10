@@ -89,7 +89,7 @@ urlpatterns = [
     path('not-auth', views.NotAuthView.as_view(), name='not-auth'),
 
 
-    # Station Create Page
+    # Stations Page
     path('wx/stations/', views.StationListView.as_view(), name='stations-list'),
     path('wx/stations/create/', views.StationCreate.as_view(), name='station-create'),
     path('wx/stations/<int:pk>/', views.StationDetailView.as_view(), name='station-detail'),
