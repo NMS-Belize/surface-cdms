@@ -214,9 +214,10 @@ urlpatterns = [
 
     # Data Validation Page
     path('wx/quality_control/validation/', views.QualityControlView.as_view(), name='quality-control'),
-    path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
     path('api/quality_control/', views.qc_list, name='get-update-quality-control'),
+    path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
     path('api/quality_control/bulksave/', views.qc_validate_bulk, name='bulk-update-quality-control'),
+    
     path('wx/quality_control/update_reference_station/', views.update_reference_station, name='update-threshold-reference-station'), # this is used for Range, Step & Persist Threshold   
     path('wx/quality_control/global_threshold/update/', views.update_global_threshold, name='update-global-threshold'), # this is used for Range, Step & Persist Threshold  
 

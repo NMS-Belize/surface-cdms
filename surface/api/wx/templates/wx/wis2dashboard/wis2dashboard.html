@@ -870,6 +870,8 @@
             
                                     <h6 class="pt-4 pl-3">Error: [[ publish_logs_station_metadata.publish_fail ]]</h6>
 
+                                    <p class="pt-4 pl-3" style="color: rgba(255, 0, 0, 0.685);">Note: Logs timestamp are in UTC</p>
+
                                 </v-card-text>
 
                                 <v-divider class="mx-4"></v-divider>
@@ -935,7 +937,7 @@
                                         
                                     </template>
 
-                                    <!-- created at column -->
+                                    <!-- last modified column -->
                                     <template v-slot:item.last_modified="{ item }">
 
                                         <!-- formatting the date and the time -->
@@ -1049,8 +1051,8 @@
                         { text: "Status", value: "status", align: "center"}
                     ],
                     publish_logs_headers: [
-                        { text: "Created At", value: "created_at" },
-                        { text: "Last Modified", value: "last_modified" },
+                        { text: "Created At (Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "created_at" },
+                        { text: "Last Modified (Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "last_modified" },
                         // { text: "Publish Station", value: "publish_station" },
                         { text: "Status", value: "success_log", align: "center" },
                         // { text: "Log", value: "log" },

@@ -6,8 +6,22 @@
   >
     <span class="srf-display-1 text-uppercase">Data Export</span><br /><br />
   </div>
+  
   <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
     <v-app>
+      <!-- Notifying user that the time values entered must be in THE STATIONS LOCAL TIME -->
+      <div style="width: 50%;">
+          <v-alert
+              type="info"
+              dense
+              outlined
+              text
+              color="purple"
+          >
+            Note: All dates and times entered must be in <b>UTC.</b>
+          </v-alert>
+      </div>
+
       <div>
         <form class="col l12">
 
@@ -282,7 +296,7 @@
               <v-switch
                 inset
                 v-model="displayUTC"
-                label="Coordinated Universal Time (UTC)"
+                label="Show in UTC"
               ></v-switch>
             </v-col>
 
@@ -617,7 +631,7 @@
         loading: false,
         station: [],
         searchStations: '',
-        displayUTC: false,
+        displayUTC: true,
         export_aqc: true,
         export_mqc: false,
         stations: [
@@ -635,6 +649,7 @@
           {% endfor %}
         ],
         timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        surface_offset_hrs: "{{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }}",
         documents: [],
         documents_headers: [
           { text: "Id", value: "id", align: "left"},
@@ -642,8 +657,8 @@
           { text: "Prepared by", value: "prepared_by", align: "left"},
           { text: "AQC Checks", value: "aqc_checks", align: "left"},
           { text: "MQC Checks", value: "mqc_checks", align: "left"},
-          { text: "Requested at", value: "request_date", align: "left"},
-          { text: "Ready at", value: "ready_date", align: "left"},
+          { text: "Requested at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "request_date", align: "left"},
+          { text: "Ready at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "ready_date", align: "left"},
           { text: "Status", value: "status.text", align: "left"},
           { text: "Lines", value: "lines", align: "left"},
           { text: 'Actions', value: 'action', align: "center", sortable: false },
@@ -654,8 +669,8 @@
           { text: "Prepared by", value: "prepared_by", align: "left"},
           { text: "AQC Checks", value: "aqc_checks", align: "left"},
           { text: "MQC Checks", value: "mqc_checks", align: "left"},
-          { text: "Requested at", value: "request_date", align: "left"},
-          { text: "Ready at", value: "ready_date", align: "left"},
+          { text: "Requested at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "request_date", align: "left"},
+          { text: "Ready at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "ready_date", align: "left"},
           { text: "Status", value: "status.text", align: "left"},
           { text: "Lines", value: "lines", align: "left"},
           { text: 'Actions', value: 'action', align: "center", sortable: false },
@@ -783,9 +798,12 @@
         getStationCode(name) {
           return this.stations.find(s => s.name == name).code;
         },
+
+        // format the date time in YYYY-MM-DD HH:mm:ss (when it reaches the backend it will be assumed to be in UTC)
         formatDatetimeForRequest(datetime){
-            return datetime.clone().tz(this.timezone, true).utc().format('YYYY-MM-DD HH:mm:ss');
+            return datetime.clone().format('YYYY-MM-DD HH:mm:ss');
         },
+
         handleServerDatetime(datetime){
           return datetime ? moment.utc(datetime).tz(this.timezone).format('YYYY-MM-DD HH:mm:ss'): null;
         },

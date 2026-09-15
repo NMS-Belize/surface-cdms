@@ -8,6 +8,20 @@
             <span class="srf-display-1 text-uppercase">Maintenance Reports</span
             ><br/>
           </div>
+
+          <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
+          <div style="width: 50%;">
+              <v-alert
+                  type="info"
+                  dense
+                  outlined
+                  text
+                  color="purple"
+              >
+                Note: All dates and times shown are in the <b>station's local time.</b>
+              </v-alert>
+          </div>
+
           <v-layout column fluid>
             <h6>Search Form</h6>
             <v-layout dense justify="start" class="mb-3">
@@ -59,14 +73,7 @@
                   ></v-date-picker>
                 </v-menu>                  
               </v-flex>
-              <v-flex lg2 ml-3>
-                <v-switch
-                  v-model="filter.isAutomatic"
-                  inset
-                  @change="invertValue(filter.isAutomatic)"
-                  label="Automatic"
-                ></v-switch>
-              </v-flex>
+
               <v-flex lg3 mt-5 ml-3 class="d-flex justify-between">
                 <v-btn justify-end outlined color="success" @click="getMaintenanceReportList()">
                   Submit
@@ -234,7 +241,6 @@
         start_date: moment().subtract(1, 'years').format('YYYY-MM-DD'),
         end_date_menu: false,
         end_date: moment().format('YYYY-MM-DD'),
-        filter: {isAutomatic: true},
         maintenanceReportList: null,
       },
       computed: {
@@ -245,6 +251,12 @@
               align: 'center',
               sortable: true,
               value: 'station_name',
+            },
+            {
+              text: 'Station Offset',
+              align: 'center',
+              sortable: true,
+              value: 'station_offset',
             },
             { 
               text: 'Date',
@@ -304,7 +316,6 @@
           axios.put(`/wx/maintenance_report/get_reports/`,{
               "start_date": this.start_date,
               "end_date": this.end_date,
-              "is_automatic": this.filter.isAutomatic,
             })
             .then(res => {
               this.maintenanceReportList = res.data['maintenance_report_list'];            

@@ -1915,11 +1915,13 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
     try:
         logger.info(f'Exporting data (file "{file_id}")')
 
-        timezone_offset = pytz.timezone(settings.TIMEZONE_NAME)
         start_date_utc = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
         end_date_utc = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
 
         station = Station.objects.get(pk=station_id)
+        station_timezone_offset_min = station.utc_offset_minutes
+        station_local_tz = timezone(timedelta(minutes=station_timezone_offset_min)) # Convert minutes into a timezone object
+
         current_datafile = DataFile.objects.get(pk=file_id)
 
         variable_ids = tuple(variable_ids)
@@ -1946,13 +1948,17 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 converted_start_date = start_date_utc
                 converted_end_date = end_date_utc
 
+            # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+            # the stations local offset. This is why we apply on offset to the start and end dates.
             elif source == 'daily_summary':
                 datetime_variable = 'day'
                 data_source_description = 'Daily summary'
                 date_source = "day::date"
-                converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-                converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+                converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+                converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+            # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+            # the stations local offset. This is why we apply on offset to the start and end dates.
             elif source == 'monthly_summary':
                 # measured_source = '''
                 #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -1963,9 +1969,11 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 datetime_variable = 'date'
                 date_source = "date::date"
                 data_source_description = 'Monthly summary'
-                converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-                converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+                converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+                converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+            # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+            # the stations local offset. This is why we apply on offset to the start and end dates.
             elif source == 'yearly_summary':
                 # measured_source = '''
                 #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -1976,8 +1984,8 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 datetime_variable = 'date'
                 date_source = "date::date"
                 data_source_description = 'Yearly summary'
-                converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-                converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+                converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+                converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
         
         variable_dict = {}
@@ -2305,24 +2313,24 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
             # modify the displayed start and end date in the csv file based on the summary type
             # show the hour, minute, second, year, month, day in the output
             if data_source_description in ["Raw data", "Hourly summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
+                start_date_header = start_date_utc.strftime('%Y-%m-%d %H:%M:%S')
+                end_date_header = end_date_utc.strftime('%Y-%m-%d %H:%M:%S')
             # show just the year, month and day
             elif data_source_description in ["Daily summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d')
+                start_date_header = start_date_utc.strftime('%Y-%m-%d')
+                end_date_header = end_date_utc.strftime('%Y-%m-%d')
             # show just the year and month
             elif data_source_description in ["Monthly summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m')
+                start_date_header = start_date_utc.strftime('%Y-%m')
+                end_date_header = end_date_utc.strftime('%Y-%m')
             # show just the year
             elif data_source_description in ["Yearly summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y')
-                end_date_header = int(end_date_utc.astimezone(timezone_offset).strftime('%Y')) - 1
+                start_date_header = start_date_utc.strftime('%Y')
+                end_date_header = int(end_date_utc.strftime('%Y')) - 1
             # generic: show everything (hour, minute, second, year, month, day)
             else:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
+                start_date_header = start_date_utc.strftime('%Y-%m-%d %H:%M:%S')
+                end_date_header = end_date_utc.strftime('%Y-%m-%d %H:%M:%S')
 
             f.write(f'Station:{station.code} - {station.name}\n')
             f.write(f'Data source:{data_source_description}\n')
@@ -2331,12 +2339,13 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
             f.write(f'Longitude:{station.longitude}\n')
             f.write(f'Passed AQC Checks: {current_datafile.aqc_checks}\n')
             f.write(f'Passed MQC Checks: {current_datafile.mqc_checks}\n')
-            f.write(f'Date of completion:{date_of_completion.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}\n')
+            f.write(f'Date of completion (UTC):{date_of_completion.strftime("%Y-%m-%d %H:%M:%S")}\n')
             f.write(f'Prepared by:{current_datafile.prepared_by}\n')
-            f.write(f'Start date:{start_date_header}, End date:{end_date_header}\n\n')
+            f.write(f'Start date (UTC):{start_date_header}, End date (UTC):{end_date_header}\n\n')
             if displayUTC:
-                f.write('Dates are displayed in UTC\n')
-                f.write(f'Start date in UTC:{converted_start_date.strftime("%Y-%m-%d %H:%M:%S")}, End date in UTC:{converted_end_date.strftime("%Y-%m-%d %H:%M:%S")}\n\n')
+                f.write('Dates below are displayed in UTC\n\n')
+            else:
+                f.write(f'Dates below are displayed in stations local time {convert_offset_min_to_hrs(station_timezone_offset_min)}\n\n')
 
             # Check the value of the agg to inform aggregation
             if agg == "min":
@@ -2584,6 +2593,8 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             # get the station object
             station = Station.objects.get(pk=id)
 
+            station_timezone_offset_min = station.utc_offset_minutes # stations utc offset in minutes
+
             # the number of entries in the data
             lines = len(station_data_frames[x].index)
 
@@ -2636,7 +2647,6 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
                     start_col = end_col - num_merge  # updated start column index
 
             date_of_completion = datetime.utcnow()
-            timezone_offset = pytz.timezone(settings.TIMEZONE_NAME)
 
             # add the file headers
             cell = sheet.cell(row=1, column=1, value=f'Station:{station.code} - {station.name}')
@@ -2646,16 +2656,18 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             cell = sheet.cell(row=5, column=1, value=f'Longitude:{station.longitude}')
             cell = sheet.cell(row=6, column=1, value=f'Passed AQC Checks:{aqc_checks}')
             cell = sheet.cell(row=7, column=1, value=f'Passed MQC Checks:{mqc_checks}')
-            cell = sheet.cell(row=8, column=1, value=f'Date of completion (calculated using default system timezone):{date_of_completion.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}')
+            cell = sheet.cell(row=8, column=1, value=f'Date of completion (UTC):{date_of_completion.strftime("%Y-%m-%d %H:%M:%S")}')
             cell = sheet.cell(row=9, column=1, value=f'Prepared by:{prepared_by}')
 
             if displayUTC and data_source in ['raw_data','hourly_summary']:
-                cell = sheet.cell(row=11, column=1, value=f'Dates are displayed in UTC')
-                cell = sheet.cell(row=12, column=1, value=f'Start date:{start_date}, End date:{end_date}')
+                cell = sheet.cell(row=11, column=1, value=f'Start date (UTC):{start_date}, End date (UTC):{end_date}')
+                cell = sheet.cell(row=12, column=1, value=f'Dates below are displayed in UTC.')
             else:
                 updated_start_date = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
                 updated_end_date = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
-                cell = sheet.cell(row=11, column=1, value=f'Start date:{updated_start_date.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}, End date:{updated_end_date.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}')
+
+                cell = sheet.cell(row=11, column=1, value=f'Start date (UTC):{updated_start_date.strftime("%Y-%m-%d %H:%M:%S")}, End date (UTC):{updated_end_date.strftime("%Y-%m-%d %H:%M:%S")}')
+                cell = sheet.cell(row=12, column=1, value=f'Dates below are displayed in stations local time {convert_offset_min_to_hrs(station_timezone_offset_min)}')
 
         # Save the workbook
         combined_workbook.save(output_file)
@@ -2678,11 +2690,13 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
 # returns the data frame for each query ran in order to facilitate combining the files later
 def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg, aqc_checks, mqc_checks, displayUTC, data_interval_seconds):
 
-    timezone_offset = pytz.timezone(settings.TIMEZONE_NAME)
     start_date_utc = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
     end_date_utc = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
 
     station = Station.objects.get(pk=station_id)
+    station_timezone_offset_min = station.utc_offset_minutes
+    station_local_tz = timezone(timedelta(minutes=station_timezone_offset_min)) # Convert minutes into a timezone object
+
 
     variable_ids = tuple(variable_ids)
     # variable_ids = ','.join([str(x) for x in variable_ids])
@@ -2708,13 +2722,17 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             converted_start_date = start_date_utc
             converted_end_date = end_date_utc
 
+        # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+        # the stations local offset. This is why we apply on offset to the start and end dates.
         elif source == 'daily_summary':
             datetime_variable = 'day'
             data_source_description = 'Daily summary'
             date_source = "day::date"
-            converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-            converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+            converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+            converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+        # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+        # the stations local offset. This is why we apply on offset to the start and end dates.
         elif source == 'monthly_summary':
             # measured_source = '''
             #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -2725,9 +2743,11 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             datetime_variable = 'date'
             date_source = "date::date"
             data_source_description = 'Monthly summary'
-            converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-            converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+            converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+            converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+        # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+        # the stations local offset. This is why we apply on offset to the start and end dates.
         elif source == 'yearly_summary':
             # measured_source = '''
             #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -2738,8 +2758,8 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             datetime_variable = 'date'
             date_source = "date::date"
             data_source_description = 'Yearly summary'
-            converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-            converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+            converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+            converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
     try:
         variable_dict = {}
@@ -5770,7 +5790,7 @@ def get_maunal_data(station_name, id):
     # keep track of the logs to send back
     def log_message(message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}"
+        formatted_message = f"[{timestamp} (UTC)] {message}"
         logs_manual_wis2_transmit.append(formatted_message)  # Store it in logs_manual_wis2_transmit
         
 
@@ -7318,9 +7338,6 @@ def convert_utc_to_offset(utc_dt, offset_minutes):
         or None if no datetime was provided.
     """
 
-    print(utc_dt)
-    print("THIS IS WHAT WE ARE GETTING")
-
     # Handle missing datetime values gracefully.
     if utc_dt is None:
         return None
@@ -7353,4 +7370,4 @@ def convert_offset_min_to_hrs(offset_minutes):
     hours = offset_minutes / 60
     # Use :g format to drop unnecessary trailing zeros (e.g., +6 instead of +6.0, but +9.5 for floats)
     sign = "+" if hours >= 0 else "-"
-    return f"UTC {sign}{abs(hours):g}"
+    return f"UTC{sign}{abs(hours):g}"

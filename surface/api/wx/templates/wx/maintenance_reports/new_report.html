@@ -16,6 +16,19 @@
             ><br /><br />
           </div>
 
+          <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
+          <div style="width: 50%;">
+              <v-alert
+                  type="info"
+                  dense
+                  outlined
+                  text
+                  color="purple"
+              >
+                Note: All dates and times shown are to be in the <b>station's local time.</b>
+              </v-alert>
+          </div>
+
           <v-layout column fluid>
             <h6>Select the station and add initial data to create a report</h6>
             <v-layout dense justify="start" class="mb-3">

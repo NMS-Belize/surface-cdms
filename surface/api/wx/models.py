@@ -1697,10 +1697,13 @@ class MaintenanceReport(BaseModel):
 
     # New Maintenace Report
     station = models.ForeignKey(Station, on_delete=models.DO_NOTHING)
-    # https://stackoverflow.com/questions/49882526/validation-for-datefield-so-it-doesnt-take-future-dates-in-django
+
     visit_type = models.ForeignKey(VisitType, on_delete=models.DO_NOTHING)
+
     responsible_technician = models.ForeignKey(Technician, related_name='responsible_technician', on_delete=models.DO_NOTHING)
+
     visit_date = models.DateField(help_text="Enter the date of the visit", validators=[no_future])
+
     initial_time = models.TimeField() # Set timezone
 
     status = models.CharField(max_length=1, choices=Status.choices, default=Status.DRAFT)
@@ -1717,7 +1720,8 @@ class MaintenanceReport(BaseModel):
     other_technician_3 = models.ForeignKey(Technician, related_name='other_technician_3', on_delete=models.DO_NOTHING, blank=True, null=True)
 
     next_visit_date = models.DateField(blank=True, null=True)
-    end_time = models.TimeField(blank=True, null=True) # Sem timezone
+
+    end_time = models.TimeField(blank=True, null=True) # Set timezone
 
     current_visit_summary = RichTextField(blank=True, null=True)
     next_visit_summary = RichTextField(blank=True, null=True)

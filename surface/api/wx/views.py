@@ -138,9 +138,9 @@ def ScheduleDataExport(request):
 
     data_source = json_body['source']  # could be either raw_data, hourly_summary, daily_summary, monthly_summary or yearly_summary
 
-    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S
+    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
 
-    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S
+    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
 
     variable_ids = json_body['variables']  # list of obj in format {id: Int, agg: Str}
 
@@ -164,17 +164,13 @@ def ScheduleDataExport(request):
 
     created_data_file_ids = []
 
-    # format start and end date NOTE: START and END dates are all understood to be in station local time.
+    # format start and end date NOTE: START and END dates are all understood to be in UTC.
     start_date_formatted = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
     end_date_formatted = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
 
-    logger.info(f"This is the start date: {start_date}")
-    logger.info(f"type: {type(start_date)}")
-    logger.info(f"This is the end date: {end_date}")
-
-    logger.info(f"This is the start date formatted: {start_date_formatted}")
-    logger.info(f"type: {type(start_date_formatted)}")
-    logger.info(f"This is the end date formatted: {end_date_formatted}")
+    # Attach UTC timezone info
+    start_date_formatted = start_date_formatted.replace(tzinfo=datetime.timezone.utc)
+    end_date_formatted = end_date_formatted.replace(tzinfo=datetime.timezone.utc)
 
     if start_date_formatted > end_date_formatted:
         message = 'The initial date must be greater than final date.'
@@ -220,7 +216,6 @@ def ScheduleDataExport(request):
                     tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, agg, aqc_checks, mqc_checks, displayUTC)
                     created_data_file_ids.append(newfile.id)
                 except Exception as err:
-                    # NOTE: requested at and ready at etc... times should be in UTC
                     # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
                     # this shows that the operation failed
                     # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not"
@@ -248,7 +243,6 @@ def ScheduleDataExport(request):
                 tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, aggregation, aqc_checks, mqc_checks, displayUTC)
                 created_data_file_ids.append(newfile.id)
             except Exception as err:
-                # NOTE: requested at and ready at etc... times should be in UTC
                 # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
                 # this shows that the operation failed
                 # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not
@@ -358,13 +352,19 @@ def CombineFilesXLSX(request):
     try:
         # ensuring that the start date and the end date are valid
         json_body = json.loads(request.body)
+        
         # grabbing the start and the end date
         start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S
-
         end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S
 
-        start_date_utc = pytz.UTC.localize(datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
-        end_date_utc = pytz.UTC.localize(datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
+        # format start and end date NOTE: START and END dates are all understood to be in UTC.
+        start_date_utc = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+        end_date_utc = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
+
+        # Attach UTC timezone info
+        start_date_utc = start_date_utc.replace(tzinfo=datetime.timezone.utc)
+        end_date_utc = end_date_utc.replace(tzinfo=datetime.timezone.utc)
+
         # ensuring that the start date and the end date are valid
         if start_date_utc > end_date_utc:
             message = 'The initial date must be greater than final date.'
@@ -2324,18 +2324,18 @@ def qc_list(request):
                                 status=status.HTTP_400_BAD_REQUEST)
 
         # ------------------------------------------------------------------
-        # Parse dates expected format: YYYY-MM-DD
+        # Parse dates
         # ------------------------------------------------------------------
         start_dt = parse_datetime(start_date) if start_date else None
         end_dt = parse_datetime(end_date) if end_date else None
 
         # Invalid date formats
         if start_date and start_dt is None:
-            return JsonResponse({"message": "Invalid start date format. Use YYYY-MM-DD."},
+            return JsonResponse({"message": "Invalid start date."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
         if end_date and end_dt is None:
-            return JsonResponse({"message": "Invalid end date format. Use YYYY-MM-DD."},
+            return JsonResponse({"message": "Invalid end date."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -7562,27 +7562,27 @@ def get_maintenance_report_list(request):
         if maintenance_report.status != '-':
             station, station_profile, technician, visit_type = get_maintenance_report_obj(maintenance_report)
 
-            if station.is_automatic == form_data['is_automatic']:
-                if maintenance_report.status == 'A':
-                    maintenance_report_status = 'Approved'
-                elif maintenance_report.status == 'P':
-                    maintenance_report_status = 'Published'
-                else:
-                    maintenance_report_status = 'Draft'
+            if maintenance_report.status == 'A':
+                maintenance_report_status = 'Approved'
+            elif maintenance_report.status == 'P':
+                maintenance_report_status = 'Published'
+            else:
+                maintenance_report_status = 'Draft'
 
-                maintenance_report_object = {
-                    'maintenance_report_id': maintenance_report.id,
-                    'station_name': station.name,
-                    'station_profile': station_profile.name,
-                    'station_type': 'Automatic' if station.is_automatic else 'Manual',
-                    'visit_date': maintenance_report.visit_date,
-                    'next_visit_date': maintenance_report.next_visit_date,
-                    'technician': technician.name,
-                    'type_of_visit': visit_type.name,
-                    'status': maintenance_report_status,
-                }
+            maintenance_report_object = {
+                'maintenance_report_id': maintenance_report.id,
+                'station_name': station.name,
+                'station_profile': station_profile.name,
+                'station_type': 'Automatic' if station.is_automatic else 'Manual',
+                'visit_date': maintenance_report.visit_date,
+                'next_visit_date': maintenance_report.next_visit_date,
+                'technician': technician.name,
+                'type_of_visit': visit_type.name,
+                'status': maintenance_report_status,
+                'station_offset': tasks.convert_offset_min_to_hrs(station.utc_offset_minutes),
+            }
 
-                response['maintenance_report_list'].append(maintenance_report_object)
+            response['maintenance_report_list'].append(maintenance_report_object)
 
     return JsonResponse(response, status=status.HTTP_200_OK)
 
@@ -11291,6 +11291,7 @@ def publishingLogs(request, pk):
 
     # getting station metadata
     station_metadata = Wis2BoxPublish.objects.filter(id=pk).values("station__name", "station__wigos", "publish_success", "publish_fail", "hybrid", "hybrid_station__name")
+    
     return JsonResponse({"logs":list(logs), "station_metadata":list(station_metadata), "timezone_offset":settings.TIMEZONE_OFFSET}, safe=False)  # Convert QuerySet to list
 
 

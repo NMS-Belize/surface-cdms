@@ -197,10 +197,10 @@
                           <!-- Offset tag -->
                           <small class="d-flex justify-center pt-1">
                             <span v-if="time_type==='Pick a day' || ['Visits', 'Equipment'].includes(data_type)" style="color: orange;">
-                              Offset UTC [[surface_offset_hrs]]
+                              Offset [[surface_offset_hrs]]
                             </span>
                             <span v-else style="color: orange;">
-                              Offset UTC +0
+                              Offset UTC+0
                             </span>
                           </small>
                         </div>
@@ -311,6 +311,8 @@
 
             <!-- displaying the date of the current data being displayed -->
             <div class="mt-2 ml-2 mr-2">
+
+                <!-- This alert DOES NOT appear on the visits & equipments page -->
                 <v-alert
                     v-if="!['Visits', 'Equipment'].includes(data_type)"
                     type="info"
@@ -321,10 +323,27 @@
                 >
                     All records and metrics displayed below are filtered for 
                     
-                    <span v-if="time_type == 'Last 24h'"> the <b>Last 24 Hours (UTC +0)</b></span>
-                    <span v-else><b>[[ this.date ]] (UTC [[surface_offset_hrs]])</b></span>
+                    <span v-if="time_type == 'Last 24h'"> the <b>Last 24 Hours (UTC+0)</b></span>
+                    
+                    <span v-else><b>[[ this.date ]] ([[surface_offset_hrs]])</b></span>
 
                 </v-alert>
+
+                <!-- This alert appears on the visits page -->
+                <v-alert
+                  v-if="['Visits'].includes(data_type) && selected.station.offset_hr_string"
+                  type="info"
+                  dense
+                  outlined
+                  text
+                  color="purple"
+                >
+                  All time records displayed below are the selected station's timezone
+            
+                  <span><b>([[selected.station.offset_hr_string]])</b></span>
+
+                </v-alert>
+
             </div>
 
             <!-- communication tab -->

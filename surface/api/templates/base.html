@@ -77,6 +77,7 @@
     {% include 'material/includes/material_css.html' %}
 
     <style>
+      
       /* Floating UTC clock start */
       .wx-utc-widget {
         position: fixed;
@@ -171,7 +172,7 @@
         right: 0;
         bottom: calc(100% + 12px);
 
-        min-width: 210px;
+        min-width: 240px;
         padding: 14px 16px;
 
         border-radius: 12px;
@@ -220,6 +221,16 @@
         margin-top: 4px;
         font-size: 12px;
         color: #5b6770;
+      }
+
+      .wx-utc-widget__section {
+        width: 100%;
+      }
+      
+      .wx-utc-widget__divider {
+        height: 1px;
+        background: rgba(0, 123, 255, 0.15);
+        margin: 12px 0;
       }
       /* Floating UTC clock END */
 
@@ -1664,13 +1675,35 @@
         }
       };
 
+
       function updateUtcWidget() {
         const now = new Date();
 
-        const timeEl = document.getElementById('wx-utc-time');
-        const dateEl = document.getElementById('wx-utc-date');
+        const widget = document.getElementById('wx-utc-widget');
 
-        if (!timeEl || !dateEl) return;
+        const utcTimeEl = document.getElementById('wx-utc-time');
+        const utcDateEl = document.getElementById('wx-utc-date');
+
+        const defaultTimeEl = document.getElementById('wx-local-time');
+        const defaultDateEl = document.getElementById('wx-local-date');
+        const defaultLabelEl = document.getElementById('wx-local-label');
+
+        if (
+          !widget ||
+          !utcTimeEl ||
+          !utcDateEl ||
+          !defaultTimeEl ||
+          !defaultDateEl
+        ) {
+          return;
+        }
+
+        const timezoneName = widget.dataset.timezoneName;
+        const timezoneOffset = Number(widget.dataset.timezoneOffset || 0);
+
+        // -------------------------
+        // UTC
+        // -------------------------
 
         const utcTime = now.toLocaleTimeString('en-GB', {
           timeZone: 'UTC',
@@ -1685,11 +1718,47 @@
           day: 'numeric'
         });
 
-        timeEl.textContent = utcTime;
-        dateEl.textContent = `${utcDate} · UTC`;
+        utcTimeEl.textContent = utcTime;
+        utcDateEl.textContent = `${utcDate} · UTC`;
+
+        // -------------------------
+        // Local / Default Timezone
+        // -------------------------
+
+        const defaultTime = now.toLocaleTimeString('en-GB', {
+          timeZone: timezoneName,
+          hour12: false
+        });
+
+        const defaultDate= now.toLocaleDateString('en-GB', {
+          timeZone: timezoneName,
+          weekday: 'short',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+
+        defaultTimeEl.textContent = defaultTime;
+        defaultDateEl.textContent = `${defaultDate} · ${formatUtcOffset(timezoneOffset)}`;
+
+        if (defaultLabelEl) {
+          defaultLabelEl.textContent = `Default · ${timezoneName}`;
+        }
       }
 
-      // floating utc clock js
+
+      function formatUtcOffset(offsetMinutes) {
+        const sign = offsetMinutes >= 0 ? '+' : '-';
+
+        const absoluteMinutes = Math.abs(offsetMinutes);
+        const hours = Math.floor(absoluteMinutes / 60);
+        const minutes = absoluteMinutes % 60;
+
+        return `UTC${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+
+
+      // Floating clock
       document.addEventListener('DOMContentLoaded', function () {
         const widget = document.getElementById('wx-utc-widget');
         const trigger = document.getElementById('wx-utc-trigger');
@@ -1715,24 +1784,43 @@
     {% endblock %}
     {% block localjavascript %}{% endblock %}
 
-
-    <!-- floating utc clock -->
-    <div class="wx-utc-widget" id="wx-utc-widget">
+    <!-- floating UTC/default clock -->
+    <div
+      class="wx-utc-widget"
+      id="wx-utc-widget"
+      data-timezone-name="{{ TIMEZONE_NAME }}"
+      data-timezone-offset="{{ DEFAULT_TIMEZONE_OFFSET }}"
+    >
       <button
         type="button"
         class="wx-utc-widget__trigger"
         id="wx-utc-trigger"
-        aria-label="Show current UTC time"
-        title="Current UTC time"
+        aria-label="Show current time"
+        title="Current UTC and defualt time"
       >
         <i class="material-icons wx-utc-icon">schedule</i>
       </button>
 
       <div class="wx-utc-widget__panel" id="wx-utc-panel">
-        <div class="wx-utc-widget__label">Current UTC Time</div>
-        <div class="wx-utc-widget__time" id="wx-utc-time">--:--:--</div>
-        <div class="wx-utc-widget__date" id="wx-utc-date">Loading...</div>
+
+        <!-- UTC -->
+        <div class="wx-utc-widget__section">
+          <div class="wx-utc-widget__label">Current UTC Time</div>
+          <div class="wx-utc-widget__time" id="wx-utc-time">--:--:--</div>
+          <div class="wx-utc-widget__date" id="wx-utc-date">Loading...</div>
+        </div>
+
+        <div class="wx-utc-widget__divider"></div>
+
+        <!-- Default -->
+        <div class="wx-utc-widget__section">
+          <div class="wx-utc-widget__label" id="wx-local-label">Default Time</div>
+          <div class="wx-utc-widget__time" id="wx-local-time">--:--:--</div>
+          <div class="wx-utc-widget__date" id="wx-local-date">Loading...</div>
+        </div>
+
       </div>
     </div>
+
   </body>
 </html>
