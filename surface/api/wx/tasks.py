@@ -7110,7 +7110,7 @@ def qc_manual_checks_bulk(
 
 # Get data for the QC manual checks
 @shared_task
-def get_qc_data(sql_string, where_parameters, response):
+def get_qc_data(sql_string, where_parameters, response, station_id):
     with connection.cursor() as cursor:
 
         cursor.execute(sql_string, where_parameters)
@@ -7132,6 +7132,8 @@ def get_qc_data(sql_string, where_parameters, response):
             }
 
             response['results'].append(obj)
+
+        response['station_utc_offset'] = get_station_offset_min(station_id)
 
     return response
 
@@ -7371,3 +7373,10 @@ def convert_offset_min_to_hrs(offset_minutes):
     # Use :g format to drop unnecessary trailing zeros (e.g., +6 instead of +6.0, but +9.5 for floats)
     sign = "+" if hours >= 0 else "-"
     return f"UTC{sign}{abs(hours):g}"
+
+
+# get station utc offset minutes
+def get_station_offset_min(station_id):
+    station = Station.objects.get(id=int(station_id))
+    
+    return station.utc_offset_minutes

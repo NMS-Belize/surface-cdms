@@ -2285,7 +2285,7 @@ def qc_list(request):
         variable_id = request.GET.get('variable_id', None)
         start_date = request.GET.get('start_date', None)
         end_date = request.GET.get('end_date', None)
-        is_automatic_raw = request.GET.get('is_automatic', None)
+        is_automatic_raw = Station.objects.get(id=station_id).is_automatic
 
         if station_id is None:
             return JsonResponse(data={"message": "'station_id' parameter cannot be null."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2297,13 +2297,8 @@ def qc_list(request):
         # ------------------------------------------------------------------
         # Validate is_automatic flag (controls allowed date range)
         # ------------------------------------------------------------------
-        if is_automatic_raw is None:
-            # Frontend must explicitly tell us whether the station is automatic
-            return JsonResponse({"message": "'Automatic' parameter cannot be null."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
         # Normalize input (e.g. "True", "FALSE" -> "true"/"false")
-        is_automatic = is_automatic_raw.strip().lower()
+        is_automatic = str(is_automatic_raw).lower()
 
         # Only allow explicit boolean strings
         if is_automatic not in ("true", "false"):
@@ -2326,15 +2321,29 @@ def qc_list(request):
         # ------------------------------------------------------------------
         # Parse dates
         # ------------------------------------------------------------------
+
+        station_offset_min = tasks.get_station_offset_min(station_id)
+
         start_dt = parse_datetime(start_date) if start_date else None
         end_dt = parse_datetime(end_date) if end_date else None
 
-        # Invalid date formats
-        if start_date and start_dt is None:
+        # Construct the timezone using the station offset in minutes
+        station_tz = timezone(timedelta(minutes=station_offset_min))
+
+        if start_dt:
+            # 1. Attach the station timezone offset
+            # 2. Convert directly to UTC
+            start_dt = start_dt.replace(tzinfo=station_tz).astimezone(timezone.utc)
+
+        else: # Invalid date formats
             return JsonResponse({"message": "Invalid start date."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        if end_date and end_dt is None:
+        if end_dt:
+            # 1. Attach the station timezone offset
+            # 2. Convert directly to UTC
+            end_dt = end_dt.replace(tzinfo=station_tz).astimezone(timezone.utc)
+        else: # Invalid date formats
             return JsonResponse({"message": "Invalid end date."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
@@ -2387,23 +2396,23 @@ def qc_list(request):
                         AND value.variable_id=%s
                     """
 
-        if start_date is not None and end_date is not None:
-            where_parameters.append(start_date)
-            where_parameters.append(end_date)
+        if start_dt is not None and end_dt is not None:
+            where_parameters.append(start_dt)
+            where_parameters.append(end_dt)
             sql_string += " AND value.datetime >= %s AND value.datetime <= %s"
 
-        elif start_date is not None:
-            where_parameters.append(start_date)
+        elif start_dt is not None:
+            where_parameters.append(start_dt)
             sql_string += " AND value.datetime >= %s"
 
-        elif end_date is not None:
-            where_parameters.append(end_date)
+        elif end_dt is not None:
+            where_parameters.append(end_dt)
             sql_string += " AND value.datetime <= %s "
 
         sql_string += " ORDER BY value.datetime "
 
 
-        task = tasks.get_qc_data.delay(sql_string, where_parameters, response)
+        task = tasks.get_qc_data.delay(sql_string, where_parameters, response, station_id)
 
         return JsonResponse({"task_id": task.id})
 
@@ -2425,6 +2434,7 @@ def qc_list(request):
         try:
             station_id = int(station_id)
             variable_id = int(variable_id)
+            # expecting the a UTC datetime value
             req_datetime = datetime.datetime.strptime(req_datetime, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
         except ValueError:
             return JsonResponse({"message": "Invalid parameter type."},
@@ -6354,6 +6364,7 @@ def get_stationsmonitoring_station_data(request, id):
     response = {
         'lastupdate': tasks.convert_utc_to_offset(get_station_lastupdate(id), station_offset),
         'station_hr_offset_str': tasks.convert_offset_min_to_hrs(station_offset),
+        'station_min_offset': station_offset,
         'station_data': query_stationsmonitoring_station(data_type, time_type, date_picked, id),
     }
 

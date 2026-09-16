@@ -23,8 +23,8 @@
           </div>
 
           <div class="truncate-text">
+            <span class="pl-2 pt-2">Last updated (UTC): [[ lastUpdateMessage ]]</span>
             <span class="pl-2 pt-2" style="color: orange;">[[ lastUpdateStationMessage ]]</span>
-            <span class="pl-2 pt-2">Last updated (STL): [[ lastUpdateMessage ]]</span>
           </div>
 
           <v-btn
@@ -369,8 +369,8 @@
               </small>
 
               <small class="d-flex justify-center pt-1">
-                <span style="color: orange;">
-                  Offset [[surface_offset_hrs]]
+                <span style="color: orange;" v-if="timeToggle != 0">
+                  Default Offset [[surface_offset_hrs]]
                 </span>
               </small>
 
@@ -1562,7 +1562,7 @@
       },
       
       formatDatetime(datetime){
-        return datetime ? moment(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
+        return datetime ? moment.utc(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
       },
       
       openStationsDetailDialog(marker, event) {
@@ -1640,7 +1640,7 @@
         this.lastUpdateMessage = `${lastUpdateDate}`;
 
         // display offset in hours
-        this.lastUpdateStationMessage = `Station Local Time (STL), UTC 
+        this.lastUpdateStationMessage = `Station Offset, UTC 
                                           ${this.selected_station_utc_offset/60 >= 0 
                                           ?
                                           `+${this.selected_station_utc_offset/60}` 

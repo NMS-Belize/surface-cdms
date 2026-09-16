@@ -196,12 +196,12 @@
 
                           <!-- Offset tag -->
                           <small class="d-flex justify-center pt-1">
-                            <span v-if="time_type==='Pick a day' || ['Visits', 'Equipment'].includes(data_type)" style="color: orange;">
+                            <span v-if="time_type==='Pick a day'" style="color: orange;">
                               Offset [[surface_offset_hrs]]
                             </span>
-                            <span v-else style="color: orange;">
+                            <!-- <span v-else style="color: orange;">
                               Offset UTC+0
-                            </span>
+                            </span> -->
                           </small>
                         </div>
                       </v-btn>
@@ -321,11 +321,11 @@
                     text
                     color="purple"
                 >
-                    All records and metrics displayed below are filtered for 
+                    All records displayed below are filtered for the
                     
-                    <span v-if="time_type == 'Last 24h'"> the <b>Last 24 Hours (UTC+0)</b></span>
+                    <span v-if="time_type == 'Last 24h'"><b>Last 24 Hours</b></span>
                     
-                    <span v-else><b>[[ this.date ]] ([[surface_offset_hrs]])</b></span>
+                    <span v-else><b>default timezone ([[surface_offset_hrs]])</b></span>
 
                 </v-alert>
 
@@ -364,19 +364,19 @@
                 <v-layout column class="ma-2 fill-height">
 
                    <!-- station metadata section -->
-                  <v-layout class="ma-2" shrink>
+                  <!-- <v-layout class="ma-2" shrink>
 
                     <span v-if="selected.station.lastupdate">
                       <h5>
                         <span style="color: #1976D2;">[[selected.station.name]]</span> Station
                       </h5>
 
-                      <span style="color: orange;">Station Local Time (STL), [[ selected.station.offset_hr_string ]]</span><br/>
+                      <span style="color: orange;">Station Offset, [[ selected.station.offset_hr_string ]]</span><br/>
 
-                      Last updated (STL): [[selected.station.lastupdate]]
+                      Last updated (UTC): [[selected.station.lastupdate]]
                     </span>
 
-                  </v-layout>
+                  </v-layout> -->
 
                   <!-- communication control tab table -->
                   <v-layout class="ma-2 table-area">
@@ -414,17 +414,17 @@
               <v-tab-item class="tab-item-fill">                
                 <v-layout column class="ma-2 fill-height">
 
-                  <v-layout class="ma-2" shrink>              
+                  <!-- <v-layout class="ma-2" shrink>              
                     <span v-if="selected.station.lastupdate">
                       <h5>
                         <span style="color: #1976D2;">[[selected.station.name]]</span> Station
                       </h5>
 
-                      <span style="color: orange;">Station Local Time (STL), [[ selected.station.offset_hr_string ]]</span><br/>
+                      <span style="color: orange;">Station Offset, [[ selected.station.offset_hr_string ]]</span><br/>
 
-                      Last updated (STL): [[selected.station.lastupdate]]
+                      Last updated (UTC): [[selected.station.lastupdate]]
                     </span>
-                  </v-layout>  
+                  </v-layout>   -->
 
                   <v-layout class="ma-2 table-area">                
                     <v-data-table
@@ -473,17 +473,17 @@
                 <v-layout column class="ma-2 fill-height">
                   
                   <!-- station metadata -->
-                  <v-layout class="ma-2" shrink>
+                  <!-- <v-layout class="ma-2" shrink>
                     <span v-if="selected.station.lastupdate">
                       <h5>
                         <span style="color: #1976D2;">[[selected.station.name]]</span> Station
                       </h5>
 
-                      <span style="color: orange;">Station Local Time (STL), [[ selected.station.offset_hr_string ]]</span><br/>
+                      <span style="color: orange;">Station Offset, [[ selected.station.offset_hr_string ]]</span><br/>
 
-                      Last updated (STL): [[selected.station.lastupdate]]
+                      Last updated (UTC): [[selected.station.lastupdate]]
                     </span>
-                  </v-layout>
+                  </v-layout> -->
 
                   <v-layout class="ma-2 table-area">
                     <v-data-table
@@ -685,7 +685,7 @@
         dialog_chart: false,
         dialog_info: false,
         selected: {
-          station: {name: null, lastupdate: null, color: null, offset_hr_string: null},
+          station: {name: null, lastupdate: null, color: null, offset_hr_string: null, offset_min: null},
           data: [],
         },
         station_list: [],
@@ -742,7 +742,7 @@
           this.goToDataInventory();
         }
         else if (this.data_type=="Quality Control"){
-          this.goToDataValidation(selected_station_id, item_var_id);
+          this.goToDataValidation(selected_station_id, item_var_id, this.selected.station.offset_min);
         }
         else if (this.data_type=="Visits"){
           this.goToMaintenanceReports();
@@ -752,39 +752,51 @@
         }                
       },
 
-      goToDataValidation(selected_station_id = null, item_var_id = null) {
+      goToDataValidation(selected_station_id = null, item_var_id = null, utc_offset_min = null) {
           let initial_datetime;
           let final_datetime;
 
           if (this.time_type === 'Last 24h') {
-              // Data Validation accepts dates rather than exact datetimes.
-              // Open the calendar days covered by the rolling last-24h period.
-              const now = moment();
+              // Get the current time expressed in the station's UTC offset.
+              final_datetime = moment().utcOffset(utc_offset_min);
 
-              initial_datetime = now.clone().subtract(24, 'hours').startOf('day');
-              final_datetime = now.clone().add(1, 'day').startOf('day');
+              // Exact rolling 24-hour period.
+              initial_datetime = final_datetime.clone().subtract(24, 'hours');
           }
           else {
-              // Pick-a-day represents exactly one selected calendar day.
-              initial_datetime = moment(
+              // Interpret the selected date as midnight in the default application's timezone.
+              const initial_datetime_default_timezone = moment.tz(
                   this.date,
                   'YYYY-MM-DD',
-                  true
-              );
+                  this.timezone
+              ).startOf('day');
 
-              final_datetime = initial_datetime.clone().add(1, 'day');
+              const final_datetime_default_timezone = initial_datetime_default_timezone
+                  .clone()
+                  .add(1, 'day');
+
+              // Shift those datetimes to the station's UTC offset.
+              initial_datetime = initial_datetime_default_timezone
+                  .clone()
+                  .utcOffset(utc_offset_min);
+
+              final_datetime = final_datetime_default_timezone
+                  .clone()
+                  .utcOffset(utc_offset_min);
           }
 
           const url =
               `/wx/quality_control/validation?` +
               `start_date=${initial_datetime.format('YYYY-MM-DD')}` +
+              `&start_time=${initial_datetime.format('HH:mm')}` +
               `&end_date=${final_datetime.format('YYYY-MM-DD')}` +
+              `&end_time=${final_datetime.format('HH:mm')}` +
               `&station_id=${selected_station_id}` +
               `&variable_id=${item_var_id}`;
 
           window.open(url, '_blank');
       },
-            
+                  
       goToDataInventory(){
         const url = `/wx/data/inventory`;
         window.open(url, '_blank');
@@ -872,7 +884,7 @@
       },
       
       formatDatetime(datetime){
-        return datetime ? moment(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
+        return datetime ? moment.utc(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
       },
 
       getPercentageColor(color){
@@ -922,6 +934,7 @@
           this.loading_station = false;          
           this.selected.station.lastupdate = this.formatDatetime(response.data['lastupdate']);
           this.selected.station.offset_hr_string = response.data['station_hr_offset_str'];
+          this.selected.station.offset_min = response.data['station_min_offset'];
           this.selected.data = response.data['station_data'];
           this.selected.color = station.color
         })
