@@ -6448,36 +6448,19 @@ def query_stationsmonitoring_map(data_type, time_type, date_picked):
                 s.latitude,
                 s.longitude,
 
-                -- Station color is based on the worst-performing variable.
+                -- Station color is based on the worst-performing variable greater than 0.
                 CASE
-                    WHEN MIN(
-                        COALESCE(hs.number_hours, 0)
-                    ) >= 20 THEN (
-                        SELECT color
-                        FROM wx_qualityflag
-                        WHERE name = 'Good'
+                    WHEN MIN(hs.number_hours) FILTER (WHERE hs.number_hours > 0) >= 20 THEN (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Good'
                     )
-
-                    WHEN MIN(
-                        COALESCE(hs.number_hours, 0)
-                    ) >= 8 THEN (
-                        SELECT color
-                        FROM wx_qualityflag
-                        WHERE name = 'Suspicious'
+                    WHEN MIN(hs.number_hours) FILTER (WHERE hs.number_hours > 0) >= 8 THEN (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
                     )
-
-                    WHEN MIN(
-                        COALESCE(hs.number_hours, 0)
-                    ) >= 1 THEN (
-                        SELECT color
-                        FROM wx_qualityflag
-                        WHERE name = 'Bad'
+                    WHEN MIN(hs.number_hours) FILTER (WHERE hs.number_hours > 0) >= 1 THEN (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Bad'
                     )
-
                     ELSE (
-                        SELECT color
-                        FROM wx_qualityflag
-                        WHERE name = 'Not checked'
+                        SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
                     )
                 END AS color
 

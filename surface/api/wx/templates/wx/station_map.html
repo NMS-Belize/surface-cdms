@@ -23,8 +23,8 @@
           </div>
 
           <div class="truncate-text">
-            <span class="pl-2 pt-2">Last updated (UTC): [[ lastUpdateMessage ]]</span>
-            <span class="pl-2 pt-2" style="color: orange;">[[ lastUpdateStationMessage ]]</span>
+            <span class="pl-2 pt-2" style="color: orange;">Last updated: [[ lastUpdateMessage ]]</span>
+            <!-- <span class="pl-2 pt-2" style="color: orange;">[[ lastUpdateStationMessage ]]</span> -->
           </div>
 
           <v-btn
@@ -818,6 +818,7 @@
 
       watershedEnabled: false,
     },
+    
     computed: {
       filteredMarkers() {
         return this.markers.filter(marker =>
@@ -1028,6 +1029,7 @@
         };
       }
     },
+    
     methods: {
       openPopup: function (event) {
         this.$nextTick(() => {
@@ -1636,7 +1638,7 @@
       },
       
       handleTabUpdate(selectedTab) {
-        const lastUpdateDate = this.sandbox[this.tabsLastUpdate[selectedTab]];
+        const lastUpdateDate = moment.utc(this.sandbox[this.tabsLastUpdate[selectedTab]]).tz(this.timezone).format('YYYY-MM-DD HH:mm');
         this.lastUpdateMessage = `${lastUpdateDate}`;
 
         // display offset in hours
@@ -1648,9 +1650,11 @@
                                           this.selected_station_utc_offset/60}`;
       }
     },
+    
     beforeMount() {
       this.getVariables();
     },
+    
     mounted() {
       // showing lat/lng coordinates when mouse moves
       this.$refs.myMap.mapObject.on('mousemove',function(e){
