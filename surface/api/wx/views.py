@@ -138,9 +138,9 @@ def ScheduleDataExport(request):
 
     data_source = json_body['source']  # could be either raw_data, hourly_summary, daily_summary, monthly_summary or yearly_summary
 
-    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S
+    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
 
-    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S
+    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
 
     variable_ids = json_body['variables']  # list of obj in format {id: Int, agg: Str}
 
@@ -163,15 +163,20 @@ def ScheduleDataExport(request):
         data_interval_seconds = 300
 
     created_data_file_ids = []
-    start_date_utc = pytz.UTC.localize(datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
-    end_date_utc = pytz.UTC.localize(datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
-    current_utc_datetime = datetime.datetime.now(pytz.utc)
 
-    if start_date_utc > end_date_utc:
+    # format start and end date NOTE: START and END dates are all understood to be in UTC.
+    start_date_formatted = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+    end_date_formatted = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
+
+    # Attach UTC timezone info
+    start_date_formatted = start_date_formatted.replace(tzinfo=datetime.timezone.utc)
+    end_date_formatted = end_date_formatted.replace(tzinfo=datetime.timezone.utc)
+
+    if start_date_formatted > end_date_formatted:
         message = 'The initial date must be greater than final date.'
         return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
 
-    days_interval = (end_date_utc - start_date_utc).days
+    days_interval = (end_date_formatted - start_date_formatted).days
 
     data_source_dict = {
         "raw_data": "Raw Data",
@@ -193,8 +198,8 @@ def ScheduleDataExport(request):
         if aggregation:
             for agg in aggregation:
                 newfile = DataFile.objects.create(ready=False, 
-                                                  initial_date=start_date_utc, 
-                                                  final_date=end_date_utc,
+                                                  initial_date=start_date_formatted, 
+                                                  final_date=end_date_formatted,
                                                   source=data_source_description, 
                                                   prepared_by=prepared_by,
                                                   interval_in_seconds=data_interval_seconds,
@@ -215,11 +220,12 @@ def ScheduleDataExport(request):
                     # this shows that the operation failed
                     # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not"
                     # this prevents a possible error state from mascarading as a "processing" status
-                    newfile.ready_at = current_utc_datetime
+
+                    newfile.ready_at = datetime.datetime.now(pytz.utc)
         else:
             newfile = DataFile.objects.create(ready=False, 
-                                              initial_date=start_date_utc, 
-                                              final_date=end_date_utc,
+                                              initial_date=start_date_formatted, 
+                                              final_date=end_date_formatted,
                                               source=data_source_description, 
                                               prepared_by=prepared_by,
                                               interval_in_seconds=data_interval_seconds,
@@ -241,7 +247,8 @@ def ScheduleDataExport(request):
                 # this shows that the operation failed
                 # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not
                 # this prevents a possible error state from mascarading as a "processing" status
-                newfile.ready_at = current_utc_datetime
+
+                newfile.ready_at = datetime.datetime.now(pytz.utc)
 
     return JsonResponse({'data': created_data_file_ids}, status=status.HTTP_200_OK)
 
@@ -345,13 +352,19 @@ def CombineFilesXLSX(request):
     try:
         # ensuring that the start date and the end date are valid
         json_body = json.loads(request.body)
+        
         # grabbing the start and the end date
         start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S
-
         end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S
 
-        start_date_utc = pytz.UTC.localize(datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
-        end_date_utc = pytz.UTC.localize(datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
+        # format start and end date NOTE: START and END dates are all understood to be in UTC.
+        start_date_utc = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+        end_date_utc = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
+
+        # Attach UTC timezone info
+        start_date_utc = start_date_utc.replace(tzinfo=datetime.timezone.utc)
+        end_date_utc = end_date_utc.replace(tzinfo=datetime.timezone.utc)
+
         # ensuring that the start date and the end date are valid
         if start_date_utc > end_date_utc:
             message = 'The initial date must be greater than final date.'
@@ -2135,7 +2148,12 @@ def get_latest_data(station_id):
 def get_current_data(station_id):
     result = []
     max_date = None
-    parameter_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+
+    station = Station.objects.get(id=station_id)
+    station_offset = station.utc_offset_minutes
+
+    # detemining the day based on the stations time. The current installations date could be used but using the stations time would be more accurate.
+    parameter_timezone = pytz.FixedOffset(station_offset)
     today = datetime.datetime.now().astimezone(parameter_timezone).date()
 
     query = """
@@ -2203,8 +2221,10 @@ def livedata(request, code):
         station = Station.objects.get(code=code)
     except ObjectDoesNotExist as e:
         station = Station.objects.get(pk=code)
-    finally:
-        id = station.id
+    
+    id = station.id
+
+    station_offset = station.utc_offset_minutes # station offset
 
     past24h_data, past24h_max_date = get_last24_data(station_id=id)
     latest_data, latest_max_date = get_latest_data(station_id=id)
@@ -2218,13 +2238,20 @@ def livedata(request, code):
             'station_name': station.name,
             'station_id': station.id,
             'past24h': past24h_data,
-            'past24h_last_update': past24h_max_date,
+            'past24h_last_update': past24h_max_date, # in utc
             'latest': latest_data,
-            'latest_last_update': latest_max_date,
+            'latest_last_update': latest_max_date, # in utc
             'currentday': current_data,
-            'currentday_last_update': current_max_date,
+            'currentday_last_update': current_max_date, # in utc
+
+            # getting the last update time in Station Time (using stations utc offset in minutes)
+            'station_offset': station_offset,
+            'past24h_last_update_station_time': tasks.convert_utc_to_offset(past24h_max_date, station_offset),
+            'latest_last_update_station_time': tasks.convert_utc_to_offset(latest_max_date, station_offset),
+            'currentday_last_update_station_time': tasks.convert_utc_to_offset(current_max_date, station_offset),
         }
         , status=status.HTTP_200_OK)
+
 
 
 class WatershedList(generics.ListAPIView):
@@ -2258,7 +2285,7 @@ def qc_list(request):
         variable_id = request.GET.get('variable_id', None)
         start_date = request.GET.get('start_date', None)
         end_date = request.GET.get('end_date', None)
-        is_automatic_raw = request.GET.get('is_automatic', None)
+        is_automatic_raw = Station.objects.get(id=station_id).is_automatic
 
         if station_id is None:
             return JsonResponse(data={"message": "'station_id' parameter cannot be null."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2270,13 +2297,8 @@ def qc_list(request):
         # ------------------------------------------------------------------
         # Validate is_automatic flag (controls allowed date range)
         # ------------------------------------------------------------------
-        if is_automatic_raw is None:
-            # Frontend must explicitly tell us whether the station is automatic
-            return JsonResponse({"message": "'Automatic' parameter cannot be null."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
         # Normalize input (e.g. "True", "FALSE" -> "true"/"false")
-        is_automatic = is_automatic_raw.strip().lower()
+        is_automatic = str(is_automatic_raw).lower()
 
         # Only allow explicit boolean strings
         if is_automatic not in ("true", "false"):
@@ -2297,18 +2319,32 @@ def qc_list(request):
                                 status=status.HTTP_400_BAD_REQUEST)
 
         # ------------------------------------------------------------------
-        # Parse dates expected format: YYYY-MM-DD
+        # Parse dates
         # ------------------------------------------------------------------
+
+        station_offset_min = tasks.get_station_offset_min(station_id)
+
         start_dt = parse_datetime(start_date) if start_date else None
         end_dt = parse_datetime(end_date) if end_date else None
 
-        # Invalid date formats
-        if start_date and start_dt is None:
-            return JsonResponse({"message": "Invalid start date format. Use YYYY-MM-DD."},
+        # Construct the timezone using the station offset in minutes
+        station_tz = timezone(timedelta(minutes=station_offset_min))
+
+        if start_dt:
+            # 1. Attach the station timezone offset
+            # 2. Convert directly to UTC
+            start_dt = start_dt.replace(tzinfo=station_tz).astimezone(timezone.utc)
+
+        else: # Invalid date formats
+            return JsonResponse({"message": "Invalid start date."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        if end_date and end_dt is None:
-            return JsonResponse({"message": "Invalid end date format. Use YYYY-MM-DD."},
+        if end_dt:
+            # 1. Attach the station timezone offset
+            # 2. Convert directly to UTC
+            end_dt = end_dt.replace(tzinfo=station_tz).astimezone(timezone.utc)
+        else: # Invalid date formats
+            return JsonResponse({"message": "Invalid end date."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -2360,23 +2396,23 @@ def qc_list(request):
                         AND value.variable_id=%s
                     """
 
-        if start_date is not None and end_date is not None:
-            where_parameters.append(start_date)
-            where_parameters.append(end_date)
+        if start_dt is not None and end_dt is not None:
+            where_parameters.append(start_dt)
+            where_parameters.append(end_dt)
             sql_string += " AND value.datetime >= %s AND value.datetime <= %s"
 
-        elif start_date is not None:
-            where_parameters.append(start_date)
+        elif start_dt is not None:
+            where_parameters.append(start_dt)
             sql_string += " AND value.datetime >= %s"
 
-        elif end_date is not None:
-            where_parameters.append(end_date)
+        elif end_dt is not None:
+            where_parameters.append(end_dt)
             sql_string += " AND value.datetime <= %s "
 
         sql_string += " ORDER BY value.datetime "
 
 
-        task = tasks.get_qc_data.delay(sql_string, where_parameters, response)
+        task = tasks.get_qc_data.delay(sql_string, where_parameters, response, station_id)
 
         return JsonResponse({"task_id": task.id})
 
@@ -2398,6 +2434,7 @@ def qc_list(request):
         try:
             station_id = int(station_id)
             variable_id = int(variable_id)
+            # expecting the a UTC datetime value
             req_datetime = datetime.datetime.strptime(req_datetime, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
         except ValueError:
             return JsonResponse({"message": "Invalid parameter type."},
@@ -3106,11 +3143,14 @@ def get_monthly_data(station, start_date, next_month, utc_offset_minutes=0):
                             measured,
                             remarks,
                             observer,
-                            datetime + (%(utc_offset_minutes)s * interval '1 minute') AS local_datetime
+                            (datetime AT TIME ZONE 'UTC')
+                                + (%(utc_offset_minutes)s * interval '1 minute')
+                                AS local_datetime
                         FROM raw_data
                         WHERE station_id = %(station_id)s
-                          AND datetime >= %(local_month_start)s
-                          AND datetime < %(local_next_month)s
+                        AND datetime >= %(local_month_start)s
+                        AND datetime < %(local_next_month)s
+                        AND is_daily = TRUE
                     )
                     SELECT DISTINCT ON (local_datetime::date, variable_id)
                         EXTRACT(DAY FROM local_datetime)::int AS day_of_month,
@@ -3158,7 +3198,8 @@ def MonthlyFormUpdate(request):
 
         variables = Variable.objects.in_bulk()
 
-        now_utc = datetime.datetime.now().astimezone(pytz.UTC)
+        now_utc = datetime.datetime.now(pytz.UTC)
+
         datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
 
         # Monthly form rows are daily observations.
@@ -3474,6 +3515,7 @@ def MonthlyFormDelete(request):
         "delete_raw_data": """
             DELETE FROM raw_data
             WHERE station_id = %s
+              AND is_daily = TRUE
               AND variable_id = ANY(%s)
               AND datetime >= %s
               AND datetime < %s
@@ -3662,7 +3704,7 @@ def monthly_capture_update_empty_col(request):
               AND variable_id = ANY(%s)
               AND datetime >= %s
               AND datetime < %s
-            RETURNING station_id, variable_id, datetime, measured, code
+              AND is_daily = TRUE
         """,
 
         # Queue daily summary recalculation for the affected day.
@@ -3677,16 +3719,24 @@ def monthly_capture_update_empty_col(request):
             ON CONFLICT DO NOTHING
         """,
 
-        # Check if StationVariable.last_data_datetime points to the deleted day.
-        # We check this before repairing last_data_*.
+        # Check if StationVariable.last_data_datetime points to a daily row
+        # that will be deleted by this operation.
         "get_affected_stationvariables": """
-            SELECT variable_id
-            FROM wx_stationvariable
-            WHERE station_id = %s
-              AND variable_id = ANY(%s)
-              AND last_data_datetime IS NOT NULL
-              AND last_data_datetime >= %s
-              AND last_data_datetime < %s
+            SELECT sv.variable_id
+            FROM wx_stationvariable sv
+            WHERE sv.station_id = %s
+            AND sv.variable_id = ANY(%s)
+            AND sv.last_data_datetime IS NOT NULL
+            AND EXISTS (
+                SELECT 1
+                FROM raw_data rd
+                WHERE rd.station_id = sv.station_id
+                    AND rd.variable_id = sv.variable_id
+                    AND rd.datetime = sv.last_data_datetime
+                    AND rd.datetime >= %s
+                    AND rd.datetime < %s
+                    AND rd.is_daily = TRUE
+            )
         """,
 
         # Repair StationVariable.last_data_* using the latest remaining raw_data row.
@@ -3849,8 +3899,7 @@ def monthly_capture_update_empty_col(request):
                         ]
                     )
 
-                    deleted_rows = cursor.fetchall()
-                    deleted_count = len(deleted_rows)
+                    deleted_count = cursor.rowcount
 
                     deleted_total += deleted_count
                     deleted_by_day[str(local_date)] = deleted_count
@@ -3865,12 +3914,13 @@ def monthly_capture_update_empty_col(request):
                     )
 
                     # -----------------------------------------------------
-                    # 9. Queue daily summary recalculation
+                    # 9. Queue daily summary recalculation (only something was deleted)
                     # -----------------------------------------------------
-                    cursor.execute(
-                        queries["create_daily_summary"],
-                        [station_id, local_date]
-                    )
+                    if deleted_count == 0:
+                        cursor.execute(
+                            queries["create_daily_summary"],
+                            [station_id, local_date]
+                        )
 
                     # -----------------------------------------------------
                     # 10. Repair StationVariable.last_data_* if needed
@@ -5448,52 +5498,128 @@ def last24_summary_list(request):
     return JsonResponse(data={"message": "No data found."}, status=status.HTTP_404_NOT_FOUND)
 
 
-def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime_picked):
+def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_type, datetime_picked):
     station = Station.objects.get(id=station_id)
     variable = Variable.objects.get(id=variable_id)
 
-    date_start = str((datetime_picked - datetime.timedelta(days=6)).date())
-    date_end = str(datetime_picked.date())
+    # Last 24h is handled in UTC.
+    # Pick-a-day is based on the configured SURFACE timezone.
+    if time_type == 'Last 24h':
+        chart_timezone = pytz.UTC
+        timezone_name = 'UTC'
+        chart_time_label = 'UTC calendar days'
+    else:
+        chart_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+        timezone_name = settings.TIMEZONE_NAME
+        chart_time_label = 'SURFACE local calendar days'
 
-    if data_type=='Communication':
+    # Convert datetime_picked into the timezone whose calendar dates
+    # should be displayed/grouped on the chart.
+    datetime_picked_local = datetime_picked.astimezone(chart_timezone)
+
+    chart_end_date = datetime_picked_local.date()
+    chart_start_date = chart_end_date - datetime.timedelta(days=6)
+    chart_next_date = chart_end_date + datetime.timedelta(days=1)
+
+    # Build the actual datetime boundaries represented by those
+    # calendar dates, then convert them to UTC for comparison with
+    # timestamptz columns.
+    query_start_datetime = chart_timezone.localize(
+        datetime.datetime.combine(
+            chart_start_date,
+            datetime.time.min
+        )
+    ).astimezone(pytz.UTC)
+
+    query_end_datetime = chart_timezone.localize(
+        datetime.datetime.combine(
+            chart_next_date,
+            datetime.time.min
+        )
+    ).astimezone(pytz.UTC)
+
+    date_start = str(chart_start_date)
+    date_end = str(chart_end_date)
+
+    query_params = {
+        "chart_start_date": chart_start_date,
+        "chart_end_date": chart_end_date,
+        "query_start_datetime": query_start_datetime,
+        "query_end_datetime": query_end_datetime,
+        "timezone_name": timezone_name,
+        "station_id": station_id,
+        "variable_id": variable_id,
+    }
+
+    if data_type == 'Communication':
+
         query = """
-            WITH
-                date_range AS (
-                    SELECT GENERATE_SERIES(%s::DATE - '6 day'::INTERVAL, %s::DATE, '1 day')::DATE AS date
-                ),
-                hs AS (
-                    SELECT
-                        datetime::date AS date,
-                        COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS amount
-                    FROM
-                        hourly_summary
-                    WHERE
-                        datetime >= %s::DATE - '7 day'::INTERVAL AND datetime < %s::DATE + '1 day'::INTERVAL
-                        AND station_id = %s
-                        AND variable_id = %s
-                    GROUP BY 1
-                )
+            WITH date_range AS (
+                SELECT
+                    generate_series(
+                        %(chart_start_date)s::date,
+                        %(chart_end_date)s::date,
+                        INTERVAL '1 day'
+                    )::date AS date
+            ),
+
+            hs AS (
+                SELECT
+                    (
+                        datetime AT TIME ZONE %(timezone_name)s
+                    )::date AS date,
+
+                    COUNT(
+                        DISTINCT date_trunc('hour', datetime)
+                    ) AS amount
+
+                FROM hourly_summary
+
+                WHERE datetime >= %(query_start_datetime)s
+                  AND datetime < %(query_end_datetime)s
+                  AND station_id = %(station_id)s
+                  AND variable_id = %(variable_id)s
+
+                GROUP BY 1
+            )
+
             SELECT
                 date_range.date,
                 COALESCE(hs.amount, 0) AS amount,
-                COALESCE((
-                    SELECT color FROM wx_qualityflag
-                    WHERE 
-                        CASE 
-                            WHEN COALESCE(hs.amount, 0) >= 20 THEN name = 'Good'
-                            WHEN COALESCE(hs.amount, 0) >= 8 AND COALESCE(hs.amount, 0) <= 19 THEN name = 'Suspicious'
-                            WHEN COALESCE(hs.amount, 0) >= 1 AND COALESCE(hs.amount, 0) <= 7 THEN name = 'Bad'
-                            ELSE name = 'Not checked'
-                        END
-                ), '') AS color
-            FROM
-                date_range
-                LEFT JOIN hs ON date_range.date = hs.date
+
+                COALESCE(
+                    (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE
+                            CASE
+                                WHEN COALESCE(hs.amount, 0) >= 20
+                                    THEN name = 'Good'
+
+                                WHEN COALESCE(hs.amount, 0) >= 8
+                                     AND COALESCE(hs.amount, 0) <= 19
+                                    THEN name = 'Suspicious'
+
+                                WHEN COALESCE(hs.amount, 0) >= 1
+                                     AND COALESCE(hs.amount, 0) <= 7
+                                    THEN name = 'Bad'
+
+                                ELSE name = 'Not checked'
+                            END
+                    ),
+                    ''
+                ) AS color
+
+            FROM date_range
+
+            LEFT JOIN hs
+                ON date_range.date = hs.date
+
             ORDER BY date_range.date
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, datetime_picked, datetime_picked, station_id, variable_id,))
+            cursor.execute(query, query_params)
             results = cursor.fetchall()
 
         chart_options = {
@@ -5501,17 +5627,28 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
                 'type': 'column'
             },
             'title': {
-                'text': " ".join(['Delay Data Track -',date_start,'to',date_end]) 
+                'text': " ".join([
+                    'Daily Communication Hours -',
+                    date_start,
+                    'to',
+                    date_end
+                ])
             },
             'subtitle': {
-                'text': " ".join([station.name, station.code, '-', variable.name])
-            },  
+                'text': " ".join([
+                    station.name,
+                    station.code,
+                    '-',
+                    variable.name,
+                    f'({chart_time_label})'
+                ])
+            },
             'xAxis': {
                 'categories': [r[0] for r in results]
             },
             'yAxis': {
                 'title': None,
-                'categories': [str(i)+'h' for i in range(25)],      
+                'categories': [str(i) + 'h' for i in range(25)],
                 'tickInterval': 2,
                 'min': 0,
                 'max': 24,
@@ -5519,7 +5656,13 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
             'series': [
                 {
                     'name': 'Max comunication',
-                    'data': [{'y': r[1], 'color': r[2]} for r in results],
+                    'data': [
+                        {
+                            'y': r[1],
+                            'color': r[2]
+                        }
+                        for r in results
+                    ],
                     'showInLegend': False
                 }
             ],
@@ -5529,78 +5672,141 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
                     'pointPadding': 0.01,
                     'groupPadding': 0.05
                 }
-            }            
+            }
         }
 
-    elif data_type=='Quality Control':
+    elif data_type == 'Quality Control':
+
         flags = {
-          'good': QualityFlag.objects.get(name='Good').color,
-          'suspicious': QualityFlag.objects.get(name='Suspicious').color,
-          'bad': QualityFlag.objects.get(name='Bad').color,
-          'not_checked': QualityFlag.objects.get(name='Not checked').color,
-        }        
+            'good': QualityFlag.objects.get(name='Good').color,
+            'suspicious': QualityFlag.objects.get(name='Suspicious').color,
+            'bad': QualityFlag.objects.get(name='Bad').color,
+            'not_checked': QualityFlag.objects.get(name='Not checked').color,
+        }
 
         query = """
-            WITH
-              date_range AS (
-                SELECT GENERATE_SERIES(%s::DATE - '6 day'::INTERVAL, %s::DATE, '1 day')::DATE AS date
-              ),
-              hs AS(              
-                SELECT 
-                    rd.datetime::DATE AS date
-                    ,EXTRACT(hour FROM rd.datetime) AS hour
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN('Bad')
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN('Suspicious')
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN('Good')
-                      ELSE ('Not checked')
+            WITH date_range AS (
+                SELECT
+                    generate_series(
+                        %(chart_start_date)s::date,
+                        %(chart_end_date)s::date,
+                        INTERVAL '1 day'
+                    )::date AS date
+            ),
+
+            hs AS (
+                SELECT
+                    (
+                        rd.datetime AT TIME ZONE %(timezone_name)s
+                    )::date AS date,
+
+                    date_trunc(
+                        'hour',
+                        rd.datetime AT TIME ZONE %(timezone_name)s
+                    ) AS hour,
+
+                    CASE
+                        WHEN COUNT(
+                            CASE WHEN name = 'Bad' THEN 1 END
+                        ) > 0
+                            THEN 'Bad'
+
+                        WHEN COUNT(
+                            CASE WHEN name = 'Suspicious' THEN 1 END
+                        ) > 0
+                            THEN 'Suspicious'
+
+                        WHEN COUNT(
+                            CASE WHEN name = 'Good' THEN 1 END
+                        ) > 0
+                            THEN 'Good'
+
+                        ELSE 'Not checked'
                     END AS quality_flag
+
                 FROM raw_data AS rd
-                    LEFT JOIN wx_qualityflag qf ON rd.quality_flag = qf.id
-                WHERE 
-                    datetime >= %s::DATE - '7 day'::INTERVAL AND datetime < %s::DATE + '1 day'::INTERVAL
-                    AND rd.station_id = %s
-                    AND rd.variable_id = %s
-                GROUP BY 1,2
-                ORDER BY 1,2
-              )
+
+                LEFT JOIN wx_qualityflag qf
+                    ON COALESCE(rd.manual_flag, rd.quality_flag) = qf.id
+
+                WHERE rd.datetime >= %(query_start_datetime)s
+                  AND rd.datetime < %(query_end_datetime)s
+                  AND rd.station_id = %(station_id)s
+                  AND rd.variable_id = %(variable_id)s
+
+                GROUP BY 1, 2
+                ORDER BY 1, 2
+            )
+
             SELECT
-                date_range.date
-                ,COUNT(CASE WHEN hs.quality_flag='Good' THEN 1 END) AS good
-                ,COUNT(CASE WHEN hs.quality_flag='Suspicious' THEN 1 END) AS suspicious
-                ,COUNT(CASE WHEN hs.quality_flag='Bad' THEN 1 END) AS bad
-                ,COUNT(CASE WHEN hs.quality_flag='Not checked' THEN 1 END) AS not_checked
+                date_range.date,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Good' THEN 1 END
+                ) AS good,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Suspicious' THEN 1 END
+                ) AS suspicious,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Bad' THEN 1 END
+                ) AS bad,
+
+                COUNT(
+                    CASE WHEN hs.quality_flag = 'Not checked' THEN 1 END
+                ) AS not_checked
+
             FROM date_range
-                LEFT JOIN hs ON date_range.date = hs.date
-            GROUP BY 1
-            ORDER BY 1
+
+            LEFT JOIN hs
+                ON date_range.date = hs.date
+
+            GROUP BY date_range.date
+            ORDER BY date_range.date
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, datetime_picked, datetime_picked, station_id, variable_id,))
+            cursor.execute(query, query_params)
             results = cursor.fetchall()
 
-        series = [] 
+        series = []
+
         for i, flag in enumerate(flags):
-            data = [r[i+1] for r in results]
-            series.append({'name': flag.capitalize(), 'data': data, 'color': flags[flag]})
+            data = [r[i + 1] for r in results]
+
+            series.append({
+                'name': flag.capitalize(),
+                'data': data,
+                'color': flags[flag]
+            })
 
         chart_options = {
             'chart': {
                 'type': 'column'
             },
             'title': {
-                'text': " ".join(['Amount of Flags - ',date_start,'to',date_end]) 
+                'text': " ".join([
+                    'Amount of Flags -',
+                    date_start,
+                    'to',
+                    date_end
+                ])
             },
             'subtitle': {
-                'text': " ".join([station.name, station.code, '-', variable.name])
-            },            
+                'text': " ".join([
+                    station.name,
+                    station.code,
+                    '-',
+                    variable.name
+                ])
+            },
             'xAxis': {
                 'categories': [r[0] for r in results]
             },
             'yAxis': {
                 'title': None,
-                'categories': [str(i)+'h' for i in range(25)],      
+                'categories': [str(i) + 'h' for i in range(25)],
                 'tickInterval': 2,
                 'min': 0,
                 'max': 24,
@@ -5608,12 +5814,12 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime
             'series': series,
             'plotOptions': {
                 'column': {
-                    'minPointLength': 10, 
+                    'minPointLength': 10,
                     'pointPadding': 0.01,
                     'groupPadding': 0.05
                 }
-            }            
-        }            
+            }
+        }
 
     return chart_options
 
@@ -5625,15 +5831,32 @@ def get_stationsmonitoring_chart_data(request, station_id, variable_id):
     data_type = request.GET.get('data_type', 'Communication')
     date_picked = request.GET.get('date_picked', None)
 
-    if time_type=='Last 24h':
-        datetime_picked = datetime.datetime.now()
+    if time_type == 'Last 24h':
+        # Get the current time directly in UTC.
+        # This returns a timezone-aware datetime.
+        datetime_picked = datetime.datetime.now(pytz.UTC)
+
     else:
-        datetime_picked = datetime.datetime.strptime(date_picked, '%Y-%m-%d')    
+        # Parse the user-selected date.
+        # At this point the datetime is naive and represents
+        # midnight in the SURFACE default timezone.
+        datetime_picked = datetime.datetime.strptime(
+            date_picked,
+            '%Y-%m-%d'
+        )
 
-    # Fix a date to test
-    # datetime_picked = datetime.datetime.strptime('2023-01-01', '%Y-%m-%d')
+        # Get the timezone configured in Django's TIMEZONE_NAME setting.
+        default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
 
-    chart_data = query_stationsmonintoring_chart(station_id, variable_id, data_type, datetime_picked)
+        # Tell Python that the selected datetime belongs to
+        # the application's default timezone.
+        datetime_picked = default_timezone.localize(datetime_picked)
+
+        # Convert that local datetime to UTC before sending it
+        # to PostgreSQL.
+        datetime_picked = datetime_picked.astimezone(pytz.UTC)
+
+    chart_data = query_stationsmonintoring_chart(station_id, variable_id, data_type, time_type, datetime_picked)
 
     response = {
         "chartOptions": chart_data
@@ -5657,224 +5880,474 @@ def get_station_lastupdate(station_id):
 
 
 def query_stationsmonitoring_station(data_type, time_type, date_picked, station_id):
-    if time_type=='Last 24h':
-        datetime_picked = datetime.datetime.now()
-    else:
-        datetime_picked = datetime.datetime.strptime(date_picked, '%Y-%m-%d')
+    if time_type == 'Last 24h':
+        # True rolling 24-hour UTC window.
+        query_end = datetime.datetime.now(pytz.UTC)
+        query_start = query_end - datetime.timedelta(hours=24)
 
+    else:
+        # Pick-a-day represents a calendar day in the SURFACE timezone.
+        selected_date = datetime.datetime.strptime(
+            date_picked,
+            '%Y-%m-%d'
+        ).date()
+
+        default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+
+        local_start = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date,
+                datetime.time.min
+            )
+        )
+
+        local_end = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date + datetime.timedelta(days=1),
+                datetime.time.min
+            )
+        )
+
+        query_start = local_start.astimezone(pytz.UTC)
+        query_end = local_end.astimezone(pytz.UTC)
 
     station_data = []
 
-    if data_type=='Communication':
+    # ------------------------------------------------------------
+    # Communication
+    # ------------------------------------------------------------
+    if data_type == 'Communication':
         query = """
             WITH hs AS (
                 SELECT
                     station_id,
                     variable_id,
-                    COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS number_hours
-                FROM
-                    hourly_summary
+
+                    COUNT(
+                        DISTINCT date_trunc('hour', datetime)
+                    ) AS number_hours
+
+                FROM hourly_summary
+
                 WHERE
-                    datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL AND station_id = %s
-                GROUP BY 1, 2
+                    datetime >= %s
+                    AND datetime < %s
+                    AND station_id = %s
+
+                GROUP BY
+                    station_id,
+                    variable_id
             )
+
             SELECT
                 v.id,
                 v.name,
                 hs.number_hours,
                 ls.latest_value,
-                u.symbol,                    
+                u.symbol,
+
                 CASE
                     WHEN hs.number_hours >= 20 THEN (
-                        SELECT color FROM wx_qualityflag WHERE name = 'Good'
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Good'
                     )
-                    WHEN hs.number_hours >= 8 AND hs.number_hours <= 19 THEN(
-                        SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
+
+                    WHEN hs.number_hours >= 8
+                         AND hs.number_hours <= 19 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Suspicious'
                     )
-                    WHEN hs.number_hours >= 1 AND hs.number_hours <= 7 THEN(
-                        SELECT color FROM wx_qualityflag WHERE name = 'Bad'
+
+                    WHEN hs.number_hours >= 1
+                         AND hs.number_hours <= 7 THEN (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Bad'
                     )
+
                     ELSE (
-                        SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Not checked'
                     )
-                END AS color                     
-            FROM
-                wx_stationvariable sv
-                LEFT JOIN hs ON sv.station_id = hs.station_id AND sv.variable_id = hs.variable_id
-                LEFT JOIN last24h_summary ls ON sv.station_id = ls.station_id AND sv.variable_id = ls.variable_id
-                LEFT JOIN wx_variable v ON sv.variable_id = v.id
-                LEFT JOIN wx_unit u ON v.unit_id = u.id
+                END AS color
+
+            FROM wx_stationvariable AS sv
+
+            LEFT JOIN hs
+                ON sv.station_id = hs.station_id
+                AND sv.variable_id = hs.variable_id
+
+            LEFT JOIN last24h_summary AS ls
+                ON sv.station_id = ls.station_id
+                AND sv.variable_id = ls.variable_id
+
+            LEFT JOIN wx_variable AS v
+                ON sv.variable_id = v.id
+
+            LEFT JOIN wx_unit AS u
+                ON v.unit_id = u.id
+
             WHERE
                 sv.station_id = %s
-            ORDER BY 1
-        """
 
-        with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, station_id, station_id))
-            results = cursor.fetchall()
-
-        station_data = [{'id': r[0], 
-                         'name': r[1], 
-                         'amount': r[2] if r[2] is not None else 0, 
-                         'latestvalue': " ".join([str(r[3]), str(r[4])]) if r[3] is not None else '---', 
-                         'color': r[5]} for r in results]
-
-    elif data_type=='Quality Control':
-        query = """
-            WITH h AS(
-                SELECT 
-                    rd.station_id
-                    ,rd.variable_id
-                    ,EXTRACT(hour FROM rd.datetime) AS hour
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN('Bad')
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN('Suspicious')
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN('Good')
-                      ELSE ('Not checked')
-                    END AS quality_flag
-                FROM raw_data AS rd
-                    LEFT JOIN wx_qualityflag qf ON rd.quality_flag = qf.id
-                WHERE 
-                    datetime <= %s
-                    AND datetime >= %s - '24 hour'::INTERVAL
-                    AND rd.station_id = %s
-                GROUP BY 1,2,3
-                ORDER BY 1,2,3
-            )
-            SELECT
+            ORDER BY
                 v.id
-                ,v.name
-                ,COUNT(CASE WHEN h.quality_flag='Good' THEN 1 END) AS good
-                ,COUNT(CASE WHEN h.quality_flag='Suspicious' THEN 1 END) AS suspicious
-                ,COUNT(CASE WHEN h.quality_flag='Bad' THEN 1 END) AS bad
-                ,COUNT(CASE WHEN h.quality_flag='Not checked' THEN 1 END) AS not_checked
-            FROM wx_stationvariable AS sv
-                LEFT JOIN wx_variable AS v ON sv.variable_id = v.id
-                LEFT JOIN h ON sv.station_id = h.station_id AND sv.variable_id = h.variable_id
-            WHERE sv.station_id = %s
-            GROUP BY 1,2
-            ORDER BY 1,2
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (datetime_picked, datetime_picked, station_id, station_id))
+            cursor.execute(
+                query,
+                (
+                    query_start,
+                    query_end,
+                    station_id,
+                    station_id
+                )
+            )
             results = cursor.fetchall()
 
-        station_data = [{'id': r[0], 
-                         'name': r[1], 
-                         'good': r[2],
-                         'suspicious': r[3],
-                         'bad': r[4],
-                         'not_checked': r[5]} for r in results]
-    elif data_type=='Visits':
+        station_data = [
+            {
+                'id': r[0],
+                'name': r[1],
+                'amount': r[2] if r[2] is not None else 0,
+                'latestvalue': (
+                    " ".join([str(r[3]), str(r[4])])
+                    if r[3] is not None
+                    else '---'
+                ),
+                'color': r[5]
+            }
+            for r in results
+        ]
+
+    # ------------------------------------------------------------
+    # Quality Control
+    # ------------------------------------------------------------
+    elif data_type == 'Quality Control':
+        query = """
+            WITH h AS (
+                SELECT
+                    rd.station_id,
+                    rd.variable_id,
+
+                    -- Anchor hourly buckets to the start of the requested
+                    -- period. A rolling 24h window therefore has 24 buckets.
+                    FLOOR(
+                        EXTRACT(
+                            EPOCH FROM (
+                                rd.datetime - %s
+                            )
+                        ) / 3600
+                    ) AS hour,
+
+                    -- Worst QC status inside each one-hour bucket.
+                    CASE
+                        WHEN COUNT(
+                            CASE
+                                WHEN qf.name = 'Bad' THEN 1
+                            END
+                        ) > 0 THEN 'Bad'
+
+                        WHEN COUNT(
+                            CASE
+                                WHEN qf.name = 'Suspicious' THEN 1
+                            END
+                        ) > 0 THEN 'Suspicious'
+
+                        WHEN COUNT(
+                            CASE
+                                WHEN qf.name = 'Good' THEN 1
+                            END
+                        ) > 0 THEN 'Good'
+
+                        ELSE 'Not checked'
+                    END AS quality_flag
+
+                FROM raw_data AS rd
+
+                -- Manual QC overrides the automatic QC flag.
+                LEFT JOIN wx_qualityflag AS qf
+                    ON COALESCE(
+                        rd.manual_flag,
+                        rd.quality_flag
+                    ) = qf.id
+
+                WHERE
+                    rd.datetime >= %s
+                    AND rd.datetime < %s
+                    AND rd.station_id = %s
+
+                GROUP BY
+                    rd.station_id,
+                    rd.variable_id,
+                    hour
+
+                ORDER BY
+                    rd.station_id,
+                    rd.variable_id,
+                    hour
+            )
+
+            SELECT
+                v.id,
+                v.name,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Good' THEN 1
+                    END
+                ) AS good,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Suspicious' THEN 1
+                    END
+                ) AS suspicious,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Bad' THEN 1
+                    END
+                ) AS bad,
+
+                COUNT(
+                    CASE
+                        WHEN h.quality_flag = 'Not checked' THEN 1
+                    END
+                ) AS not_checked
+
+            FROM wx_stationvariable AS sv
+
+            LEFT JOIN wx_variable AS v
+                ON sv.variable_id = v.id
+
+            LEFT JOIN h
+                ON sv.station_id = h.station_id
+                AND sv.variable_id = h.variable_id
+
+            WHERE
+                sv.station_id = %s
+
+            GROUP BY
+                v.id,
+                v.name
+
+            ORDER BY
+                v.id,
+                v.name
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                query,
+                (
+                    query_start,  # origin of the hourly buckets
+                    query_start,  # requested period start
+                    query_end,    # requested period end
+                    station_id,
+                    station_id
+                )
+            )
+            results = cursor.fetchall()
+
+        station_data = [
+            {
+                'id': r[0],
+                'name': r[1],
+                'good': r[2],
+                'suspicious': r[3],
+                'bad': r[4],
+                'not_checked': r[5]
+            }
+            for r in results
+        ]
+
+    # ------------------------------------------------------------
+    # Visits
+    # ------------------------------------------------------------
+    elif data_type == 'Visits':
         query = """
             WITH ordered_reports AS (
-                SELECT 
-                    id
-                    ,station_id
-                    ,visit_type_id
-                    ,visit_date
-                    ,initial_time
-                    ,end_time
-                    ,responsible_technician_id
-                    ,next_visit_date
-                    ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
+                SELECT
+                    id,
+                    station_id,
+                    visit_type_id,
+                    visit_date,
+                    initial_time,
+                    end_time,
+                    responsible_technician_id,
+                    next_visit_date,
+
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+
                 FROM wx_maintenancereport
-                WHERE status='A'AND station_id=%s
-            )
-            ,latest_report AS(
-                SELECT 
-                    *
+
+                WHERE
+                    status = 'A'
+                    AND station_id = %s
+            ),
+
+            latest_report AS (
+                SELECT *
                 FROM ordered_reports
-                WHERE rn=1    
+                WHERE rn = 1
             )
-            SELECT 
-                r.id
-                ,p.name
-                ,s.is_automatic
-                ,r.visit_date
-                ,v.name
-                ,r.initial_time
-                ,r.end_time
-                ,t.name
-                ,r.next_visit_date
-            FROM latest_report r
-            LEFT JOIN wx_station s ON r.station_id = s.id
-            LEFT JOIN wx_stationprofile p ON p.id=s.profile_id
-            LEFT JOIN wx_technician t ON r.responsible_technician_id = t.id
-            LEFT JOIN wx_visittype v ON r.visit_type_id = v.id
+
+            SELECT
+                r.id,
+                p.name,
+                s.is_automatic,
+                r.visit_date,
+                v.name,
+                r.initial_time,
+                r.end_time,
+                t.name,
+                r.next_visit_date
+
+            FROM latest_report AS r
+
+            LEFT JOIN wx_station AS s
+                ON r.station_id = s.id
+
+            LEFT JOIN wx_stationprofile AS p
+                ON p.id = s.profile_id
+
+            LEFT JOIN wx_technician AS t
+                ON r.responsible_technician_id = t.id
+
+            LEFT JOIN wx_visittype AS v
+                ON r.visit_type_id = v.id
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (station_id,))
+            cursor.execute(
+                query,
+                (station_id,)
+            )
             results = cursor.fetchall()
-        
-        station_data = [{'Maintenance Report ID': r[0],
-                         'Station Profile': r[1],
-                         'Station Type': 'Automatic' if r[2] else 'Manual',
-                         'Visit Date': r[3],
-                         'Visit Type': r[4],
-                         'Initial Time': r[5],
-                         'End Time': r[6],
-                         'Responsible Technician': r[7],
-                         'Next Visit Date': r[8]} for r in results]
-        
-        if len(station_data)>0:
+
+        station_data = [
+            {
+                'Maintenance Report ID': r[0],
+                'Station Profile': r[1],
+                'Station Type': (
+                    'Automatic'
+                    if r[2]
+                    else 'Manual'
+                ),
+                'Visit Date': r[3],
+                'Visit Type': r[4],
+                'Initial Time': r[5],
+                'End Time': r[6],
+                'Responsible Technician': r[7],
+                'Next Visit Date': r[8]
+            }
+            for r in results
+        ]
+
+        if len(station_data) > 0:
             station_data = station_data[0]
         else:
             station_data = {}
-    elif data_type=='Equipment':
+
+    # ------------------------------------------------------------
+    # Equipment
+    # ------------------------------------------------------------
+    elif data_type == 'Equipment':
         query = """
             WITH ordered_reports AS (
-                SELECT 
-                    id
-                    ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
+                SELECT
+                    id,
+
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+
                 FROM wx_maintenancereport
-                WHERE status='A'AND station_id=%s
-            )
-            ,latest_report AS(
-                SELECT 
-                    id
+
+                WHERE
+                    status = 'A'
+                    AND station_id = %s
+            ),
+
+            latest_report AS (
+                SELECT id
                 FROM ordered_reports
-                WHERE rn=1    
+                WHERE rn = 1
             )
-            SELECT 
-                em.name
-                ,e.serial_number
-                ,et.name
-                ,se.classification
-                ,q.color
-            FROM latest_report r
-            LEFT JOIN wx_maintenancereportequipment se ON se.maintenance_report_id=r.id
-            LEFT JOIN wx_equipment e ON e.id = se.new_equipment_id
-            LEFT JOIN wx_equipmenttype et ON et.id = se.equipment_type_id
-            LEFT JOIN wx_equipmentmodel em ON e.model_id = em.id
-            LEFT JOIN
-                    wx_qualityflag q ON 
-                    CASE
-                        WHEN se.classification='N' THEN q.symbol = 'B'
-                        WHEN se.classification='P' THEN q.symbol = 'S'
-                        WHEN se.classification='F' THEN q.symbol = 'G'
-                        ELSE q.symbol = '-'
-                    END
-            ORDER BY se.equipment_type_id, se.equipment_order
+
+            SELECT
+                em.name,
+                e.serial_number,
+                et.name,
+                se.classification,
+                q.color
+
+            FROM latest_report AS r
+
+            LEFT JOIN wx_maintenancereportequipment AS se
+                ON se.maintenance_report_id = r.id
+
+            LEFT JOIN wx_equipment AS e
+                ON e.id = se.new_equipment_id
+
+            LEFT JOIN wx_equipmenttype AS et
+                ON et.id = se.equipment_type_id
+
+            LEFT JOIN wx_equipmentmodel AS em
+                ON e.model_id = em.id
+
+            LEFT JOIN wx_qualityflag AS q ON
+                CASE
+                    WHEN se.classification = 'N'
+                        THEN q.symbol = 'B'
+
+                    WHEN se.classification = 'P'
+                        THEN q.symbol = 'S'
+
+                    WHEN se.classification = 'F'
+                        THEN q.symbol = 'G'
+
+                    ELSE q.symbol = '-'
+                END
+
+            ORDER BY
+                se.equipment_type_id,
+                se.equipment_order
         """
 
         with connection.cursor() as cursor:
-            cursor.execute(query, (station_id,))
+            cursor.execute(
+                query,
+                (station_id,)
+            )
             results = cursor.fetchall()
 
         classification_dict = {
-            'F':  'Fully Functional',
-            'P':  'Partially Functional',
-            'N':  'Not Functional'
+            'F': 'Fully Functional',
+            'P': 'Partially Functional',
+            'N': 'Not Functional'
         }
-        
-        station_data = [{'model': r[0],
-                         'serial_number': r[1],
-                         'equipment_type': r[2],
-                         'classification': classification_dict[r[3]],
-                         'color': r[4]} for r in results]        
+
+        station_data = [
+            {
+                'model': r[0],
+                'serial_number': r[1],
+                'equipment_type': r[2],
+                'classification': classification_dict[r[3]],
+                'color': r[4]
+            }
+            for r in results
+        ]
+
     return station_data
 
 
@@ -5885,8 +6358,13 @@ def get_stationsmonitoring_station_data(request, id):
     time_type = request.GET.get('time_type', 'Last 24h')
     date_picked = request.GET.get('date_picked', None)
 
+    station = Station.objects.get(id=id)
+    station_offset = station.utc_offset_minutes
+
     response = {
-        'lastupdate': get_station_lastupdate(id),
+        'lastupdate': tasks.convert_utc_to_offset(get_station_lastupdate(id), station_offset),
+        'station_hr_offset_str': tasks.convert_offset_min_to_hrs(station_offset),
+        'station_min_offset': station_offset,
         'station_data': query_stationsmonitoring_station(data_type, time_type, date_picked, id),
     }
 
@@ -5894,278 +6372,376 @@ def get_stationsmonitoring_station_data(request, id):
 
 
 def query_stationsmonitoring_map(data_type, time_type, date_picked):
-    if time_type=='Last 24h':
-        datetime_picked = datetime.datetime.now()
+
+    selected_date = None
+
+    # Determine the datetime window used by Communication and QC.
+    if time_type == 'Last 24h':
+        query_end = datetime.datetime.now(pytz.UTC)
+        query_start = query_end - datetime.timedelta(hours=24)
+
     else:
-        datetime_picked = datetime.datetime.strptime(date_picked, '%Y-%m-%d')
+        selected_date = datetime.datetime.strptime(
+            date_picked,
+            '%Y-%m-%d'
+        ).date()
+
+        default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
+
+        local_start = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date,
+                datetime.time.min
+            )
+        )
+
+        local_end = default_timezone.localize(
+            datetime.datetime.combine(
+                selected_date + datetime.timedelta(days=1),
+                datetime.time.min
+            )
+        )
+
+        query_start = local_start.astimezone(pytz.UTC)
+        query_end = local_end.astimezone(pytz.UTC)
 
     results = []
 
-    if time_type=='Last 24h':
-        if data_type=='Communication':
-            query = """
-                WITH hs AS (
-                    SELECT
-                        station_id
-                        ,variable_id
-                        ,COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS number_hours
-                    FROM
-                        hourly_summary
-                    WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL
-                    GROUP BY 1, 2
-                )
-                SELECT
-                    s.id
-                    ,s.name
-                    ,s.code
-                    ,s.latitude
-                    ,s.longitude
-                    ,CASE
-                        WHEN MAX(number_hours) >= 20 THEN (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                        )
-                        WHEN MAX(number_hours) >= 8 AND MAX(number_hours) <= 19 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                        )
-                        WHEN MAX(number_hours) >= 1 AND MAX(number_hours) <= 7 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                        )
-                        ELSE (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                        )
-                    END AS color    
-                FROM wx_station AS s
-                    LEFT JOIN wx_stationvariable AS sv ON s.id = sv.station_id
-                    LEFT JOIN hs ON sv.station_id = hs.station_id AND sv.variable_id = hs.variable_id
-                WHERE s.is_active
-                GROUP BY 1, 2, 3, 4, 5
-            """
-        elif data_type=='Quality Control':
-            query = """
-                WITH qf AS (
-                  SELECT
-                    station_id
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                      )
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                      )   
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                      )
-                      ELSE (
-                          SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                      )
-                    END AS color
-                  FROM
-                    raw_data AS rd
-                    LEFT JOIN wx_qualityflag AS qf ON rd.quality_flag = qf.id
-                  WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL                
-                  GROUP BY 1
-                )
-                SELECT
-                  s.id
-                  ,s.name
-                  ,s.code
-                  ,s.latitude
-                  ,s.longitude
-                  ,COALESCE(qf.color, (SELECT color FROM wx_qualityflag WHERE name = 'Not checked')) AS color
-                FROM wx_station AS s
-                LEFT JOIN qf ON s.id = qf.station_id
-                WHERE s.is_active
-            """
-        elif data_type=='Visits':
-            query = """
-                WITH ordered_reports AS (
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
-                    FROM wx_maintenancereport
-                    WHERE status='A'
-                )
-                ,latest_reports AS(
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,rn
-                    FROM ordered_reports
-                    WHERE rn=1    
-                )
-                SELECT 
-                    s.id
-                    ,s.name
-                    ,s.code
-                    ,s.latitude
-                    ,s.longitude                    
-                    ,q.color AS color
-                FROM wx_station s
-                LEFT JOIN latest_reports l ON l.station_id = s.id
-                LEFT JOIN wx_qualityflag q ON
-                    CASE
-                        WHEN l.next_visit_date IS NULL THEN q.symbol = '-'
-                        WHEN l.next_visit_date > NOW() THEN q.symbol = 'G'
-                        WHEN l.next_visit_date >= NOW() - INTERVAL '1 month' AND l.next_visit_date <= NOW() THEN q.symbol = 'S'
-                        WHEN l.next_visit_date < NOW() - INTERVAL '1 month' THEN q.symbol = 'B'
-                    END
-                WHERE s.is_active
-            """
-        elif data_type == 'Equipment':
-            query = """
-                WITH ordered_reports AS (
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,ROW_NUMBER() OVER (PARTITION BY station_id ORDER BY visit_date DESC) AS rn
-                    FROM wx_maintenancereport
-                    WHERE status='A'
-                )
-                ,latest_reports AS(
-                    SELECT 
-                        id
-                        ,station_id
-                        ,visit_date
-                        ,next_visit_date
-                        ,rn
-                    FROM ordered_reports
-                    WHERE rn=1    
-                )
-                ,station_equipment AS (
-                    SELECT 
-                        r.station_id
-                        ,COUNT(*) AS count_eq
-                        ,SUM(CASE WHEN re.classification = 'F' THEN 1 ELSE 0 END) AS count_f
-                        ,SUM(CASE WHEN re.classification = 'P' THEN 1 ELSE 0 END) AS count_p
-                        ,SUM(CASE WHEN re.classification = 'N' THEN 1 ELSE 0 END) AS count_n
-                    FROM latest_reports r
-                    LEFT JOIN wx_maintenancereportequipment re 
-                        ON  re.maintenance_report_id = r.id
-                    GROUP BY r.station_id
-                )
-                SELECT
-                    s.id,
-                    s.name,
-                    s.code,
-                    s.latitude,
-                    s.longitude,
-                    q.color AS color
-                FROM
-                    wx_station s
-                LEFT JOIN
-                    station_equipment se ON se.station_id = s.id
-                LEFT JOIN
-                    wx_qualityflag q ON 
-                    CASE
-                        WHEN se.count_eq IS NULL THEN q.symbol = '-'
-                        WHEN se.count_n > 0 THEN q.symbol = 'B'
-                        WHEN se.count_p > 0 THEN q.symbol = 'S'
-                        ELSE q.symbol = 'G'
-                    END
-                WHERE
-                    s.is_active
-            """            
-            
-
-        if data_type in ['Communication', 'Quality Control']:
-            with connection.cursor() as cursor:
-                cursor.execute(query, (datetime_picked, datetime_picked, ))
-                results = cursor.fetchall()
-        elif data_type in ['Visits', 'Equipment']:
-            with connection.cursor() as cursor:
-                cursor.execute(query)
-                results = cursor.fetchall()
+    # Current mode shows active stations.
+    # Pick-a-day shows stations that existed on the selected date.
+    if time_type == 'Last 24h':
+        station_filter = "s.is_active"
+        station_filter_params = []
     else:
-        if data_type=='Communication':
-            query = """
-                WITH hs AS (
-                    SELECT
-                        station_id
-                        ,variable_id
-                        ,COUNT(DISTINCT EXTRACT(hour FROM datetime)) AS number_hours
-                    FROM
-                        hourly_summary
-                    WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL
-                    GROUP BY 1, 2
-                )
-                SELECT
-                    s.id
-                    ,s.name
-                    ,s.code
-                    ,s.latitude
-                    ,s.longitude
-                    ,CASE
-                        WHEN MAX(number_hours) >= 20 THEN (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                        )
-                        WHEN MAX(number_hours) >= 8 AND MAX(number_hours) <= 19 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                        )
-                        WHEN MAX(number_hours) >= 1 AND MAX(number_hours) <= 7 THEN(
-                            SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                        )
-                        ELSE (
-                            SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                        )
-                    END AS color    
-                FROM wx_station AS s
-                    LEFT JOIN wx_stationvariable AS sv ON s.id = sv.station_id
-                    LEFT JOIN hs ON sv.station_id = hs.station_id AND sv.variable_id = hs.variable_id
-                WHERE s.begin_date <= %s AND (s.end_date IS NULL OR s.end_date >= %s)
-                GROUP BY 1, 2, 3, 4, 5
-            """
-        elif data_type=='Quality Control':
-            query = """
-                WITH qf AS (
-                  SELECT
-                    station_id
-                    ,CASE
-                      WHEN COUNT(CASE WHEN name='Bad' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Bad'
-                      )
-                      WHEN COUNT(CASE WHEN name='Suspicious' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
-                      )   
-                      WHEN COUNT(CASE WHEN name='Good' THEN 1 END) > 0 THEN(
-                          SELECT color FROM wx_qualityflag WHERE name = 'Good'
-                      )
-                      ELSE (
-                          SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
-                      )
-                    END AS color
-                  FROM
-                    raw_data AS rd
-                    LEFT JOIN wx_qualityflag AS qf ON rd.quality_flag = qf.id
-                  WHERE
-                        datetime <= %s AND datetime >= %s - '24 hour'::INTERVAL                
-                  GROUP BY 1
-                )
-                SELECT
-                  s.id
-                  ,s.name
-                  ,s.code
-                  ,s.latitude
-                  ,s.longitude
-                  ,COALESCE(qf.color, (SELECT color FROM wx_qualityflag WHERE name = 'Not checked')) AS color
-                FROM wx_station AS s
-                LEFT JOIN qf ON s.id = qf.station_id
-                WHERE s.begin_date <= %s AND (s.end_date IS NULL OR s.end_date >= %s)
-            """
+        station_filter = """
+            s.begin_date <= %s
+            AND (s.end_date IS NULL OR s.end_date >= %s)
+        """
+        station_filter_params = [
+            selected_date,
+            selected_date
+        ]
 
-        if data_type in ['Communication', 'Quality Control']:
-            with connection.cursor() as cursor:
-                cursor.execute(query, (datetime_picked, datetime_picked, datetime_picked, datetime_picked, ))
-                results = cursor.fetchall()
+    if data_type == 'Communication':
+
+        query = f"""
+            WITH hs AS (
+                SELECT
+                    station_id,
+                    variable_id,
+                    COUNT(
+                        DISTINCT date_trunc('hour', datetime)
+                    ) AS number_hours
+                FROM hourly_summary
+                WHERE
+                    datetime >= %s
+                    AND datetime < %s
+                GROUP BY
+                    station_id,
+                    variable_id
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+
+                -- Station color is based on the worst-performing variable greater than 0.
+                CASE
+                    WHEN MIN(hs.number_hours) FILTER (WHERE hs.number_hours > 0) >= 20 THEN (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Good'
+                    )
+                    WHEN MIN(hs.number_hours) FILTER (WHERE hs.number_hours > 0) >= 8 THEN (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Suspicious'
+                    )
+                    WHEN MIN(hs.number_hours) FILTER (WHERE hs.number_hours > 0) >= 1 THEN (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Bad'
+                    )
+                    ELSE (
+                        SELECT color FROM wx_qualityflag WHERE name = 'Not checked'
+                    )
+                END AS color
+
+            FROM wx_station AS s
+
+            LEFT JOIN wx_stationvariable AS sv
+                ON s.id = sv.station_id
+
+            LEFT JOIN hs
+                ON sv.station_id = hs.station_id
+                AND sv.variable_id = hs.variable_id
+
+            WHERE {station_filter}
+
+            GROUP BY
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude
+        """
+
+        query_params = [
+            query_start,
+            query_end,
+            *station_filter_params
+        ]
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, query_params)
+            results = cursor.fetchall()
+
+    elif data_type == 'Quality Control':
+
+        query = f"""
+            WITH qf AS (
+                SELECT
+                    rd.station_id,
+
+                    CASE
+                        WHEN COUNT(
+                            CASE WHEN qf.name = 'Bad' THEN 1 END
+                        ) > 0 THEN (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Bad'
+                        )
+
+                        WHEN COUNT(
+                            CASE WHEN qf.name = 'Suspicious' THEN 1 END
+                        ) > 0 THEN (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Suspicious'
+                        )
+
+                        WHEN COUNT(
+                            CASE WHEN qf.name = 'Good' THEN 1 END
+                        ) > 0 THEN (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Good'
+                        )
+
+                        ELSE (
+                            SELECT color
+                            FROM wx_qualityflag
+                            WHERE name = 'Not checked'
+                        )
+                    END AS color
+
+                FROM raw_data AS rd
+
+                INNER JOIN wx_stationvariable AS sv
+                    ON sv.station_id = rd.station_id
+                    AND sv.variable_id = rd.variable_id
+
+                LEFT JOIN wx_qualityflag AS qf
+                    ON COALESCE(
+                        rd.manual_flag,
+                        rd.quality_flag
+                    ) = qf.id
+
+                WHERE
+                    rd.datetime >= %s
+                    AND rd.datetime < %s
+
+                GROUP BY
+                    rd.station_id
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+
+                COALESCE(
+                    qf.color,
+                    (
+                        SELECT color
+                        FROM wx_qualityflag
+                        WHERE name = 'Not checked'
+                    )
+                ) AS color
+
+            FROM wx_station AS s
+
+            LEFT JOIN qf
+                ON s.id = qf.station_id
+
+            WHERE {station_filter}
+        """
+
+        query_params = [
+            query_start,
+            query_end,
+            *station_filter_params
+        ]
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, query_params)
+            results = cursor.fetchall()
+
+    elif data_type == 'Visits':
+
+        query = """
+            WITH ordered_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+                FROM wx_maintenancereport
+                WHERE status = 'A'
+            ),
+
+            latest_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    rn
+                FROM ordered_reports
+                WHERE rn = 1
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+                q.color AS color
+
+            FROM wx_station s
+
+            LEFT JOIN latest_reports l
+                ON l.station_id = s.id
+
+            LEFT JOIN wx_qualityflag q ON
+                CASE
+                    WHEN l.next_visit_date IS NULL
+                        THEN q.symbol = '-'
+
+                    WHEN l.next_visit_date > NOW()
+                        THEN q.symbol = 'G'
+
+                    WHEN l.next_visit_date >= NOW() - INTERVAL '1 month'
+                         AND l.next_visit_date <= NOW()
+                        THEN q.symbol = 'S'
+
+                    WHEN l.next_visit_date < NOW() - INTERVAL '1 month'
+                        THEN q.symbol = 'B'
+                END
+
+            WHERE s.is_active
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+    elif data_type == 'Equipment':
+
+        query = """
+            WITH ordered_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY station_id
+                        ORDER BY visit_date DESC
+                    ) AS rn
+                FROM wx_maintenancereport
+                WHERE status = 'A'
+            ),
+
+            latest_reports AS (
+                SELECT
+                    id,
+                    station_id,
+                    visit_date,
+                    next_visit_date,
+                    rn
+                FROM ordered_reports
+                WHERE rn = 1
+            ),
+
+            station_equipment AS (
+                SELECT
+                    r.station_id,
+                    COUNT(*) AS count_eq,
+                    SUM(
+                        CASE
+                            WHEN re.classification = 'F' THEN 1
+                            ELSE 0
+                        END
+                    ) AS count_f,
+                    SUM(
+                        CASE
+                            WHEN re.classification = 'P' THEN 1
+                            ELSE 0
+                        END
+                    ) AS count_p,
+                    SUM(
+                        CASE
+                            WHEN re.classification = 'N' THEN 1
+                            ELSE 0
+                        END
+                    ) AS count_n
+
+                FROM latest_reports r
+
+                LEFT JOIN wx_maintenancereportequipment re
+                    ON re.maintenance_report_id = r.id
+
+                GROUP BY r.station_id
+            )
+
+            SELECT
+                s.id,
+                s.name,
+                s.code,
+                s.latitude,
+                s.longitude,
+                q.color AS color
+
+            FROM wx_station s
+
+            LEFT JOIN station_equipment se
+                ON se.station_id = s.id
+
+            LEFT JOIN wx_qualityflag q ON
+                CASE
+                    WHEN se.count_eq IS NULL
+                        THEN q.symbol = '-'
+
+                    WHEN se.count_n > 0
+                        THEN q.symbol = 'B'
+
+                    WHEN se.count_p > 0
+                        THEN q.symbol = 'S'
+
+                    ELSE q.symbol = 'G'
+                END
+
+            WHERE s.is_active
+        """
+
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            results = cursor.fetchall()
 
     return results
 
@@ -6980,27 +7556,27 @@ def get_maintenance_report_list(request):
         if maintenance_report.status != '-':
             station, station_profile, technician, visit_type = get_maintenance_report_obj(maintenance_report)
 
-            if station.is_automatic == form_data['is_automatic']:
-                if maintenance_report.status == 'A':
-                    maintenance_report_status = 'Approved'
-                elif maintenance_report.status == 'P':
-                    maintenance_report_status = 'Published'
-                else:
-                    maintenance_report_status = 'Draft'
+            if maintenance_report.status == 'A':
+                maintenance_report_status = 'Approved'
+            elif maintenance_report.status == 'P':
+                maintenance_report_status = 'Published'
+            else:
+                maintenance_report_status = 'Draft'
 
-                maintenance_report_object = {
-                    'maintenance_report_id': maintenance_report.id,
-                    'station_name': station.name,
-                    'station_profile': station_profile.name,
-                    'station_type': 'Automatic' if station.is_automatic else 'Manual',
-                    'visit_date': maintenance_report.visit_date,
-                    'next_visit_date': maintenance_report.next_visit_date,
-                    'technician': technician.name,
-                    'type_of_visit': visit_type.name,
-                    'status': maintenance_report_status,
-                }
+            maintenance_report_object = {
+                'maintenance_report_id': maintenance_report.id,
+                'station_name': station.name,
+                'station_profile': station_profile.name,
+                'station_type': 'Automatic' if station.is_automatic else 'Manual',
+                'visit_date': maintenance_report.visit_date,
+                'next_visit_date': maintenance_report.next_visit_date,
+                'technician': technician.name,
+                'type_of_visit': visit_type.name,
+                'status': maintenance_report_status,
+                'station_offset': tasks.convert_offset_min_to_hrs(station.utc_offset_minutes),
+            }
 
-                response['maintenance_report_list'].append(maintenance_report_object)
+            response['maintenance_report_list'].append(maintenance_report_object)
 
     return JsonResponse(response, status=status.HTTP_200_OK)
 
@@ -9098,7 +9674,7 @@ def get_data_inventory(request):
     result = []
 
     query = """
-        SELECT EXTRACT('YEAR' from station_data.datetime) AS year
+        SELECT EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') AS year
             ,station.id
             ,station.name
             ,station.code
@@ -9109,8 +9685,8 @@ def get_data_inventory(request):
         FROM wx_stationdataminimuminterval AS station_data
         JOIN wx_station AS station ON station.id = station_data.station_id
         JOIN wx_administrativeregion AS region ON region.id = station.region_id
-        WHERE EXTRACT('YEAR' from station_data.datetime) >= %(start_year)s
-        AND EXTRACT('YEAR' from station_data.datetime) <  %(end_year)s
+        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
+        AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') <  %(end_year)s
         AND station.is_automatic = %(is_automatic)s
         GROUP BY 1, station.id, region.name
         ORDER BY region.name, station.name
@@ -9162,15 +9738,15 @@ def get_data_inventory_by_station(request):
             ORDER BY variable.name
             {record_limit_lexical}
         )
-        SELECT EXTRACT('YEAR' from station_data.datetime)
+        SELECT EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC')
               ,limited_variable.id
               ,limited_variable.name
               ,TRUNC(AVG(station_data.record_count_percentage)::numeric, 2)
         FROM wx_stationdataminimuminterval AS station_data
         JOIN variable AS limited_variable ON limited_variable.id = station_data.variable_id
         JOIN wx_station station ON station_data.station_id = station.id
-        WHERE EXTRACT('YEAR' from station_data.datetime) >= %(start_year)s
-          AND EXTRACT('YEAR' from station_data.datetime) <  %(end_year)s
+        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
+          AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') <  %(end_year)s
           AND station_data.station_id = %(station_id)s
         GROUP BY 1, limited_variable.id, limited_variable.name
         ORDER BY 1, limited_variable.name
@@ -9205,7 +9781,7 @@ def get_station_variable_month_data_inventory(request):
 
     result = []
     query = """
-        SELECT EXTRACT('MONTH' FROM station_data.datetime) AS month
+        SELECT EXTRACT(MONTH FROM station_data.datetime AT TIME ZONE 'UTC') AS month
               ,variable.id
               ,variable.name
               ,measurementvariable.name
@@ -9213,7 +9789,7 @@ def get_station_variable_month_data_inventory(request):
         FROM wx_stationdataminimuminterval AS station_data
         JOIN wx_variable variable ON station_data.variable_id=variable.id
         LEFT JOIN wx_measurementvariable measurementvariable ON measurementvariable.id = variable.measurement_variable_id
-        WHERE EXTRACT('YEAR' from station_data.datetime) = %(year)s
+        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') = %(year)s
           AND station_data.station_id = %(station_id)s
         GROUP BY 1, variable.id, variable.name, measurementvariable.name
     """
@@ -9717,15 +10293,20 @@ def synop_pressure_calc(request):
         date_value = data.get('date')
 
         station = Station.objects.get(pk=station_id[0]) 
-        # Invert the station's UTC offset (minutes) to convert its local time to UTC.
-        offset = datetime.timedelta(minutes=(-1 * station.utc_offset_minutes))
+
+        station_tz = pytz.FixedOffset(station.utc_offset_minutes)
 
         # Convert the string to a datetime object:
-        dt_object = datetime.datetime.strptime(date_value, "%Y-%m-%d %H:%M")
-        dt_object = dt_object + offset
+        dt_object = datetime.datetime.strptime(
+            date_value,
+            "%Y-%m-%d %H:%M"
+        )
 
-        # Subtract 24 hours:
-        dt_24_hours_ago = dt_object - timedelta(days=1)
+        local_datetime = station_tz.localize(dt_object)
+
+        utc_datetime = local_datetime.astimezone(pytz.UTC)
+
+        dt_24_hours_ago = utc_datetime - datetime.timedelta(days=1)
 
         # Format the resulting datetime object back into a string:
         formatted_date_string = dt_24_hours_ago.strftime("%Y-%m-%dT%H:%MZ")
@@ -9762,52 +10343,108 @@ def synop_pressure_calc(request):
 @csrf_exempt
 @wx_mapped_permission_required
 def synop_precip_calc(request):
+
     if request.method == 'POST':
+        # Get the station and request payload.
         station_id = int(request.GET['station_id'])
-        data = json.loads(request.body)  # Parse JSON data
-        # precip_value = float(data.get('precipitation_value')) 
-        precip_24_hr = 0
+        data = json.loads(request.body)
+
+        # Current precipitation value entered in the Synop form.
+        precip_value = float(data.get('precipitation_value'))
+
+        # Selected station-local datetime from the frontend.
+        # Expected format: YYYY-MM-DD HH:MM
         date_value = data.get('date')
 
-        station = Station.objects.get(pk=station_id) 
-        # Invert the station's UTC offset (minutes) to convert its local time to UTC.
-        offset = datetime.timedelta(minutes=(-1 * station.utc_offset_minutes))
+        # Fetch the station so we can use its configured UTC offset.
+        station = Station.objects.get(pk=station_id)
 
-        # Convert the string to a datetime object:
-        dt_object = datetime.datetime.strptime(date_value, "%Y-%m-%d %H:%M")
-        dt_object = dt_object + offset
+        # Build the station's fixed timezone from its UTC offset.
+        #
+        # Example:
+        #   station.utc_offset_minutes = -360
+        #   station_tz = UTC-06:00
+        station_tz = pytz.FixedOffset(station.utc_offset_minutes)
 
-        # Subtract 24 hours:
-        dt_24_hours_ago = dt_object - timedelta(days=1)
+        # Parse the incoming datetime.
+        #
+        # At this point it is still naive:
+        #   2026-09-06 13:00:00
+        local_datetime = datetime.datetime.strptime(
+            date_value,
+            "%Y-%m-%d %H:%M"
+        )
 
-        # Format the resulting datetime object back into a string:
-        formatted_dt_24_hours_ago = dt_24_hours_ago.strftime("%Y-%m-%dT%H:%MZ")
+        # Interpret the naive datetime as station-local time.
+        #
+        # Example:
+        #   2026-09-06 13:00:00
+        # becomes:
+        #   2026-09-06 13:00:00-06:00
+        local_datetime = station_tz.localize(local_datetime)
 
-        # Format the datetime object also
-        formatted_dt_object = dt_object.strftime("%Y-%m-%dT%H:%MZ")
+        # Convert the station-local datetime to UTC.
+        #
+        # Example:
+        #   2026-09-06 13:00:00-06:00
+        # becomes:
+        #   2026-09-06 19:00:00+00:00
+        utc_datetime = local_datetime.astimezone(pytz.UTC)
+
+        # Calculate the start of the previous 24-hour period.
+        dt_24_hours_ago = utc_datetime - datetime.timedelta(days=1)
 
         precipitation_variable_id = 0
 
+        # Retrieve non-daily precipitation observations from the
+        # previous 24-hour period.
+        #
+        # We intentionally use:
+        #
+        #   datetime >  dt_24_hours_ago
+        #   datetime <  utc_datetime
+        #
+        # The current observation is excluded because precip_value,
+        # which represents the value currently entered in the form,
+        # is added separately below.
+        #
+        # This prevents an existing value at the current hour from
+        # being counted twice when the user edits it.
         sql_string = """
             SELECT measured
             FROM raw_data
             WHERE station_id = %s
             AND variable_id = %s
-            AND datetime >= %s AND datetime < %s;
+            AND is_daily = FALSE
+            AND datetime > %s
+            AND datetime < %s
         """
 
-        if sql_string:
-            with connection.cursor() as cursor:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                sql_string,
+                [
+                    station_id,
+                    precipitation_variable_id,
+                    dt_24_hours_ago,
+                    utc_datetime,
+                ]
+            )
 
-                cursor.execute(sql_string, [station_id, precipitation_variable_id, formatted_dt_24_hours_ago, formatted_dt_object])
+            rows = cursor.fetchall()
 
-                rows = cursor.fetchall()
-            
-                # adding to get the total precipitation in 24 hours
-                precip_24_hr = sum(row[0] for row in rows if row[0] != -99.9)
-                # the below is leagacy code of the above
-                # precip_24_hr = sum(row[0] for row in rows if row[0] != -99.9) + precip_value
-        
+        # Sum the precipitation observations from the previous 24 hours,
+        # ignoring missing values, then add the current value entered
+        # in the Synop form.
+        precip_24_hr = (
+            sum(
+                row[0]
+                for row in rows
+                if row[0] != settings.MISSING_VALUE
+            )
+            + precip_value
+        )
+
     return JsonResponse({'dataset': precip_24_hr}, status=status.HTTP_200_OK)
 
 
@@ -9829,8 +10466,11 @@ def synop_update(request):
 
         variables = Variable.objects.in_bulk()
 
-        now_utc = datetime.datetime.now().astimezone(pytz.UTC)
-        now_utc += datetime.timedelta(hours=1)
+        now_utc = datetime.datetime.now(pytz.UTC)
+
+        # allow for saving 15 min before the intended time
+        # eg: data for 1400 can be saved at 1345
+        now_utc += datetime.timedelta(minutes=15)
 
         datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
         seconds = 3600
@@ -9884,7 +10524,8 @@ def synop_update(request):
 
     except Exception as e:
         logger.error(repr(e))
-        return JsonResponse({"error": "Failed to start task"}, status=500)
+        return JsonResponse({"error": "Failed to start synop update task"}, status=500)
+
 
 
 def get_synop_data(station, date, utc_offset_minutes=0):
@@ -9910,6 +10551,7 @@ def get_synop_data(station, date, utc_offset_minutes=0):
                 WHERE station_id = {station.id}
                     AND datetime >= '{start_datetime}'
                     AND datetime < '{end_datetime}'
+                    AND is_daily = FALSE
                 """
 
             cursor.execute(query)
@@ -9958,110 +10600,432 @@ def synop_load(request):
 @api_view(['POST'])
 @wx_mapped_permission_required
 def synop_delete(request):
-    # Extract data from the request
-    request_date_str = request.GET.get('date', None)
-    hour = request.GET.get('hour', None)
-    station_id = request.GET.get('station_id', None)
-    
-    hour = int(hour)
-
+    # ---------------------------------------------------------------------
+    # 1. Extract and validate request data
+    # ---------------------------------------------------------------------
+    request_date_str = request.GET.get('date')
+    hour = request.GET.get('hour')
+    station_id = request.GET.get('station_id')
     variable_id_list = request.data.get('variable_ids')
 
-    # Validate inputs
-    if (None in [request_date_str, hour, station_id, variable_id_list]):
-        message = "Invalid request. 'date', 'hour', 'station_id', and 'variable_ids' must be provided."
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+    if (
+        request_date_str is None
+        or hour is None
+        or station_id is None
+        or variable_id_list is None
+    ):
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid request. 'date', 'hour', 'station_id', "
+                    "and 'variable_ids' must be provided."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    # Validate date format
+    # Validate hour and station ID.
     try:
-        request_date = datetime.datetime.strptime(request_date_str, '%Y-%m-%d')
+        hour = int(hour)
+        station_id = int(station_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"message": "Invalid hour or station_id."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if hour < 0 or hour > 23:
+        return JsonResponse(
+            {"message": "Hour must be between 0 and 23."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate selected date.
+    try:
+        request_date = datetime.datetime.strptime(
+            request_date_str,
+            '%Y-%m-%d'
+        )
     except ValueError:
-        message = "Invalid date format. The expected date format is 'YYYY-MM-DD'"
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
-    
-    variable_id_list = [int(v) for v in tuple(variable_id_list)]
-    station = Station.objects.get(id=station_id)
-    datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
-    request_datetime = datetime_offset.localize(request_date.replace(hour=hour))
-    request_start_range_dt = request_datetime - timedelta(days=10)
-    request_end_range_dt = request_datetime + timedelta(days=10)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid date format. "
+                    "The expected date format is 'YYYY-MM-DD'"
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate variable IDs.
+    try:
+        variable_id_list = [int(v) for v in variable_id_list]
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"message": "All variable IDs must be integers."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not variable_id_list:
+        return JsonResponse(
+            {"message": "At least one variable ID must be provided."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ---------------------------------------------------------------------
+    # 2. Build the selected station-local datetime
+    # ---------------------------------------------------------------------
+    station = get_object_or_404(Station, id=station_id)
+
+    station_tz = pytz.FixedOffset(station.utc_offset_minutes)
+
+    # request_date is currently a naive local calendar date.
+    #
+    # Example:
+    #   request_date = 2026-09-06 00:00
+    #   hour         = 13
+    #
+    # becomes:
+    #   2026-09-06 13:00
+    local_datetime = request_date.replace(
+        hour=hour,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    # Interpret the datetime as station-local time.
+    #
+    # Example for Belize:
+    #   2026-09-06 13:00
+    # becomes:
+    #   2026-09-06 13:00-06:00
+    request_datetime = station_tz.localize(local_datetime)
+
+    # Daily summary tasks use the station's local calendar date,
+    # not the PostgreSQL/session representation of the timestamp.
+    local_date = request_date.date()
+
+    # ---------------------------------------------------------------------
+    # 3. Find only the Timescale chunks around the requested datetime
+    # ---------------------------------------------------------------------
+    # Keep the existing +/- 10 day window so that deletion and normal
+    # last_data_* repair operate only against nearby chunks instead of
+    # scanning the full raw_data hypertable.
+    request_start_range_dt = request_datetime - datetime.timedelta(days=10)
+    request_end_range_dt = request_datetime + datetime.timedelta(days=10)
 
     queries = {
         "grab_relevant_chunks": """
-            SELECT 
-            show_chunks('raw_data', newer_than => %s, older_than => %s)
+            SELECT show_chunks(
+                'raw_data',
+                newer_than => %s,
+                older_than => %s
+            )
         """,
-        "delete_raw_data": """
-            DELETE FROM {raw_data_chunk}
-            WHERE station_id = %s
-            AND variable_id = ANY(%s)
-            AND datetime = %s
-        """,
+
         "create_daily_summary": """
-            INSERT INTO wx_dailysummarytask (station_id, date, created_at, updated_at)
+            INSERT INTO wx_dailysummarytask (
+                station_id,
+                date,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
+
         "create_hourly_summary": """
-            INSERT INTO wx_hourlysummarytask (station_id, datetime, created_at, updated_at)
+            INSERT INTO wx_hourlysummarytask (
+                station_id,
+                datetime,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
-        "get_last_updated": """
-            SELECT max(last_data_datetime)
+
+        # After deletion, determine which StationVariable records actually
+        # pointed to one of the deleted observations.
+        "get_affected_stationvariables": """
+            SELECT variable_id
             FROM wx_stationvariable
             WHERE station_id = %s
               AND variable_id = ANY(%s)
-            ORDER BY 1 DESC
+              AND last_data_datetime = %s
         """,
-        "update_last_updated": """
-            WITH rd AS (
-                SELECT station_id, variable_id, measured, code, datetime,
-                       RANK() OVER (PARTITION BY station_id, variable_id ORDER BY datetime DESC) AS datetime_rank
-                FROM {raw_data_chunk}
-                WHERE station_id = %s
-                  AND variable_id = ANY(%s)
-            )
-            UPDATE wx_stationvariable sv
-            SET last_data_datetime = rd.datetime,
-                last_data_value = rd.measured,
-                last_data_code = rd.code
-            FROM rd
-            WHERE sv.station_id = rd.station_id
-              AND sv.variable_id = rd.variable_id
-              AND rd.datetime_rank = 1
-        """
+
+        # Used only as a fallback when no remaining observation for a
+        # variable exists inside the nearby chunks.
+        #
+        # At that point any remaining latest observation must be older
+        # than the chunk window, so this upper bound still gives Timescale
+        # useful chunk pruning.
+        "get_older_last_data": """
+            SELECT DISTINCT ON (variable_id)
+                variable_id,
+                measured,
+                code,
+                datetime
+            FROM raw_data
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+              AND datetime < %s
+            ORDER BY variable_id, datetime DESC
+        """,
+
+        "update_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = %s,
+                last_data_value = %s,
+                last_data_code = %s
+            WHERE station_id = %s
+              AND variable_id = %s
+        """,
+
+        "clear_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = NULL,
+                last_data_value = NULL,
+                last_data_code = NULL
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+        """,
     }
+
+    deleted_total = 0
+    deleted_variable_ids = set()
 
     with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
         with conn.cursor() as cursor:
-            # grab relevant chunks, holding data within 10 days of the request datetime
-            # this reduces the overhead of looking through the entire raw_data table
-            cursor.execute(queries['grab_relevant_chunks'], [request_start_range_dt, request_end_range_dt])
-            
+
+            # -------------------------------------------------------------
+            # 4. Find relevant chunks
+            # -------------------------------------------------------------
+            cursor.execute(
+                queries["grab_relevant_chunks"],
+                [
+                    request_start_range_dt,
+                    request_end_range_dt,
+                ]
+            )
+
             chunks = [row[0] for row in cursor.fetchall()]
 
+            # -------------------------------------------------------------
+            # 5. Delete the selected Synop observations
+            # -------------------------------------------------------------
+            # Work directly against the relevant chunks for efficiency.
+            #
+            # is_daily = FALSE is important because a daily/monthly
+            # observation can exist at the exact same timestamp,
+            # particularly at 00:00.
             for chunk in chunks:
-                cursor.execute(queries['delete_raw_data'].format(raw_data_chunk=chunk), [station_id, variable_id_list, request_datetime])
+                chunk_identifier = psycopg2.sql.Identifier(*chunk.split('.', 1))
 
-            # After deleting from raw_data, is necessary to update the daily and hourly summary tables.
-            cursor.execute(queries["create_daily_summary"], [station_id, request_datetime])
-            cursor.execute(queries["create_hourly_summary"], [station_id, request_datetime])
-            
-            # If succeed in inserting new data, it's necessary to update the 'last data' columns in wx_stationvariable tabl.
-            cursor.execute(queries["get_last_updated"], [station_id, variable_id_list])
-            
-            last_data_datetime_row = cursor.fetchone()
+                delete_query = psycopg2.sql.SQL("""
+                    DELETE FROM {raw_data_chunk}
+                    WHERE station_id = %s
+                      AND variable_id = ANY(%s)
+                      AND datetime = %s
+                      AND is_daily = FALSE
+                    RETURNING variable_id
+                """).format(
+                    raw_data_chunk=chunk_identifier
+                )
 
-            if last_data_datetime_row and last_data_datetime_row[0] == request_datetime:
-                # loop through relevant chunks instead of the entire raw_data
+                cursor.execute(
+                    delete_query,
+                    [
+                        station_id,
+                        variable_id_list,
+                        request_datetime,
+                    ]
+                )
+
+                deleted_rows = cursor.fetchall()
+
+                deleted_total += len(deleted_rows)
+                deleted_variable_ids.update(
+                    row[0] for row in deleted_rows
+                )
+
+            # Nothing was actually deleted, so there is no summary or
+            # StationVariable state that needs to be repaired.
+            if not deleted_variable_ids:
+                return Response(
+                    {
+                        "deleted_rows": 0,
+                        "message": "No matching Synop observations were found."
+                    },
+                    status=status.HTTP_200_OK
+                )
+
+            # -------------------------------------------------------------
+            # 6. Queue summary recalculation
+            # -------------------------------------------------------------
+
+            # Daily summaries operate on the station-local calendar date.
+            cursor.execute(
+                queries["create_daily_summary"],
+                [station_id, local_date]
+            )
+
+            # Hourly summaries operate on the actual aware datetime.
+            cursor.execute(
+                queries["create_hourly_summary"],
+                [station_id, request_datetime]
+            )
+
+            # -------------------------------------------------------------
+            # 7. Determine which last_data_* records were affected
+            # -------------------------------------------------------------
+            # Only variables for which we actually deleted data are checked.
+            cursor.execute(
+                queries["get_affected_stationvariables"],
+                [
+                    station_id,
+                    list(deleted_variable_ids),
+                    request_datetime,
+                ]
+            )
+
+            affected_variable_ids = {
+                row[0] for row in cursor.fetchall()
+            }
+
+            if affected_variable_ids:
+
+                # ---------------------------------------------------------
+                # 8. Find latest remaining values in the nearby chunks
+                # ---------------------------------------------------------
+                # Each chunk returns its latest observation for each
+                # affected variable. Python then chooses the newest result
+                # across all of those chunks.
+                latest_by_variable = {}
+
                 for chunk in chunks:
-                    cursor.execute(queries["update_last_updated"].format(raw_data_chunk=chunk), [station_id, variable_id_list])
+                    chunk_identifier = psycopg2.sql.Identifier(*chunk.split('.', 1))
+
+                    latest_query = psycopg2.sql.SQL("""
+                        SELECT DISTINCT ON (variable_id)
+                            variable_id,
+                            measured,
+                            code,
+                            datetime
+                        FROM {raw_data_chunk}
+                        WHERE station_id = %s
+                          AND variable_id = ANY(%s)
+                        ORDER BY variable_id, datetime DESC
+                    """).format(
+                        raw_data_chunk=chunk_identifier
+                    )
+
+                    cursor.execute(
+                        latest_query,
+                        [
+                            station_id,
+                            list(affected_variable_ids),
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+
+                        existing = latest_by_variable.get(variable_id)
+
+                        if (
+                            existing is None
+                            or data_datetime > existing["datetime"]
+                        ):
+                            latest_by_variable[variable_id] = {
+                                "measured": measured,
+                                "code": code,
+                                "datetime": data_datetime,
+                            }
+
+                # ---------------------------------------------------------
+                # 9. Fallback for variables with no nearby observations
+                # ---------------------------------------------------------
+                unresolved_variable_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                # Normally the latest remaining value will be found in the
+                # nearby chunks. If it is not, the previous observation may
+                # simply be older than 10 days.
+                #
+                # Only those unresolved variables fall back to raw_data,
+                # preserving the chunk-based fast path for normal deletes.
+                if unresolved_variable_ids:
+                    cursor.execute(
+                        queries["get_older_last_data"],
+                        [
+                            station_id,
+                            list(unresolved_variable_ids),
+                            request_start_range_dt,
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+                        latest_by_variable[variable_id] = {
+                            "measured": measured,
+                            "code": code,
+                            "datetime": data_datetime,
+                        }
+
+                # ---------------------------------------------------------
+                # 10. Update StationVariable.last_data_*
+                # ---------------------------------------------------------
+                for variable_id, latest in latest_by_variable.items():
+                    cursor.execute(
+                        queries["update_stationvariable"],
+                        [
+                            latest["datetime"],
+                            latest["measured"],
+                            latest["code"],
+                            station_id,
+                            variable_id,
+                        ]
+                    )
+
+                # ---------------------------------------------------------
+                # 11. Clear last_data_* when no raw_data remains
+                # ---------------------------------------------------------
+                no_remaining_data_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                if no_remaining_data_ids:
+                    cursor.execute(
+                        queries["clear_stationvariable"],
+                        [
+                            station_id,
+                            list(no_remaining_data_ids),
+                        ]
+                    )
 
         conn.commit()
 
-    return Response([], status=status.HTTP_200_OK)
-
+    return Response(
+        {
+            "deleted_rows": deleted_total,
+            "message": f"Deleted {deleted_total} database row(s).",
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 class MonthlyFormView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
@@ -10083,7 +11047,8 @@ class MonthlyFormView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateVie
 
         # changing the date so that if reflects that users timezone
         offset = datetime.timedelta(minutes=(settings.TIMEZONE_OFFSET))
-        dt_object = datetime.datetime.now() + offset
+        fixed_tz = pytz.FixedOffset(settings.TIMEZONE_OFFSET)
+        dt_object = datetime.datetime.now(pytz.UTC).astimezone(fixed_tz)
 
         # This will store it as a string like "2026-05"
         context['date'] = dt_object.strftime('%Y-%m')
@@ -10320,6 +11285,7 @@ def publishingLogs(request, pk):
 
     # getting station metadata
     station_metadata = Wis2BoxPublish.objects.filter(id=pk).values("station__name", "station__wigos", "publish_success", "publish_fail", "hybrid", "hybrid_station__name")
+    
     return JsonResponse({"logs":list(logs), "station_metadata":list(station_metadata), "timezone_offset":settings.TIMEZONE_OFFSET}, safe=False)  # Convert QuerySet to list
 
 
@@ -10644,183 +11610,533 @@ def get_synop_capture_config():
     return context, num_validate_ids, variable_ids
 
 
-# recieve the coloumns which are empty and removes their entry from the database
-# similar to synop delete, except this handles multiple hours
+# Receive columns which were cleared in the Synop form and remove
+# their corresponding raw_data entries.
+#
+# Similar to synop_delete, except this can handle multiple hours
+# in a single request.
 @api_view(['POST'])
 @wx_mapped_permission_required
 def synop_capture_update_empty_col(request):
-    # Extract data from the request
+    # ---------------------------------------------------------------------
+    # 1. Extract request data
+    # ---------------------------------------------------------------------
     request_date_str = request.GET.get('date')
     station_id = request.GET.get('station_id')
     empty_cols_data = request.data.get('empty_cols_data')
 
-    # Basic validation
+    # Basic validation.
     if not request_date_str or not station_id or empty_cols_data is None:
-        message = "Invalid request. 'date', 'station_id', and 'empty_cols_data' must be provided."
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid request. 'date', 'station_id', and "
+                    "'empty_cols_data' must be provided."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if not isinstance(empty_cols_data, dict):
-        message = "Invalid request. 'empty_cols_data' must be an object keyed by hour."
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid request. 'empty_cols_data' must be "
+                    "an object keyed by hour."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Validate date format once
+    # ---------------------------------------------------------------------
+    # 2. Validate date and station
+    # ---------------------------------------------------------------------
     try:
-        request_date = datetime.datetime.strptime(request_date_str, '%Y-%m-%d')
+        request_date = datetime.datetime.strptime(
+            request_date_str,
+            '%Y-%m-%d'
+        )
     except ValueError:
-        message = "Invalid date format. The expected date format is 'YYYY-MM-DD'"
-        return JsonResponse({"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {
+                "message": (
+                    "Invalid date format. "
+                    "The expected date format is 'YYYY-MM-DD'"
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Fetch station once
     try:
+        station_id = int(station_id)
         station = Station.objects.get(id=station_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"message": "Invalid station_id."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     except Station.DoesNotExist:
         return JsonResponse(
             {"message": "Station not found"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
+    station_tz = pytz.FixedOffset(station.utc_offset_minutes)
+
+    # Daily summary tasks use the station-local calendar date.
+    local_date = request_date.date()
+
+    # ---------------------------------------------------------------------
+    # 3. Validate every hour/variable list BEFORE touching the database
+    # ---------------------------------------------------------------------
+    delete_requests = []
+
+    for hour_key, variable_id_list in empty_cols_data.items():
+        try:
+            hour = int(hour_key)
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {"message": f"Invalid hour value: {hour_key}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if hour < 0 or hour > 23:
+            return JsonResponse(
+                {
+                    "message": (
+                        f"Hour must be between 0 and 23. "
+                        f"Received: {hour}"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if variable_id_list is None:
+            return JsonResponse(
+                {
+                    "message": (
+                        f"variable_ids must be provided for hour {hour}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(variable_id_list, (list, tuple)):
+            return JsonResponse(
+                {
+                    "message": (
+                        f"variable_ids for hour {hour} must be a list."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Nothing was cleared for this hour.
+        if not variable_id_list:
+            continue
+
+        try:
+            variable_id_list = [
+                int(v) for v in variable_id_list
+            ]
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {
+                    "message": (
+                        f"Invalid variable_ids for hour {hour}. "
+                        "All variable IDs must be integers."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build the station-local observation datetime.
+        #
+        # Example:
+        #   date = 2026-09-06
+        #   hour = 13
+        #   station offset = -360
+        #
+        # becomes:
+        #   2026-09-06 13:00:00-06:00
+        local_datetime = request_date.replace(
+            hour=hour,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+        request_datetime = station_tz.localize(local_datetime)
+
+        delete_requests.append({
+            "hour": hour,
+            "datetime": request_datetime,
+            "variable_ids": variable_id_list,
+        })
+
+    # Nothing was actually requested for deletion.
+    if not delete_requests:
+        return Response(
+            {
+                "deleted_rows": 0,
+                "message": "No cleared Synop values to delete."
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ---------------------------------------------------------------------
+    # 4. Determine the chunk search window ONCE
+    # ---------------------------------------------------------------------
+    # All observations belong to the same selected local date, so there is
+    # no need to call show_chunks() separately for every hour.
+    earliest_datetime = min(
+        item["datetime"] for item in delete_requests
+    )
+
+    latest_datetime = max(
+        item["datetime"] for item in delete_requests
+    )
+
+    request_start_range_dt = (
+        earliest_datetime - datetime.timedelta(days=10)
+    )
+
+    request_end_range_dt = (
+        latest_datetime + datetime.timedelta(days=10)
+    )
 
     queries = {
         "grab_relevant_chunks": """
-            SELECT 
-            show_chunks('raw_data', newer_than => %s, older_than => %s)
+            SELECT show_chunks(
+                'raw_data',
+                newer_than => %s,
+                older_than => %s
+            )
         """,
-        "delete_raw_data": """
-            DELETE FROM {raw_data_chunk}
-            WHERE station_id = %s
-            AND variable_id = ANY(%s)
-            AND datetime = %s
-        """,
+
         "create_daily_summary": """
-            INSERT INTO wx_dailysummarytask (station_id, date, created_at, updated_at)
+            INSERT INTO wx_dailysummarytask (
+                station_id,
+                date,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
+
         "create_hourly_summary": """
-            INSERT INTO wx_hourlysummarytask (station_id, datetime, created_at, updated_at)
+            INSERT INTO wx_hourlysummarytask (
+                station_id,
+                datetime,
+                created_at,
+                updated_at
+            )
             VALUES (%s, %s, now(), now())
             ON CONFLICT DO NOTHING
         """,
-        "get_last_updated": """
-            SELECT max(last_data_datetime)
+
+        # Get StationVariable metadata only for variables from which
+        # rows were actually deleted.
+        "get_stationvariables": """
+            SELECT variable_id, last_data_datetime
             FROM wx_stationvariable
             WHERE station_id = %s
               AND variable_id = ANY(%s)
-            ORDER BY 1 DESC
         """,
-        "update_last_updated": """
-            WITH rd AS (
-                SELECT station_id, variable_id, measured, code, datetime,
-                       RANK() OVER (PARTITION BY station_id, variable_id ORDER BY datetime DESC) AS datetime_rank
-                FROM {raw_data_chunk}
-                WHERE station_id = %s
-                  AND variable_id = ANY(%s)
-            )
-            UPDATE wx_stationvariable sv
-            SET last_data_datetime = rd.datetime,
-                last_data_value = rd.measured,
-                last_data_code = rd.code
-            FROM rd
-            WHERE sv.station_id = rd.station_id
-              AND sv.variable_id = rd.variable_id
-              AND rd.datetime_rank = 1
-        """
+
+        # Fallback for affected variables whose previous observation
+        # is older than the nearby chunk window.
+        "get_older_last_data": """
+            SELECT DISTINCT ON (variable_id)
+                variable_id,
+                measured,
+                code,
+                datetime
+            FROM raw_data
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+              AND datetime < %s
+            ORDER BY variable_id, datetime DESC
+        """,
+
+        "update_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = %s,
+                last_data_value = %s,
+                last_data_code = %s
+            WHERE station_id = %s
+              AND variable_id = %s
+        """,
+
+        "clear_stationvariable": """
+            UPDATE wx_stationvariable
+            SET last_data_datetime = NULL,
+                last_data_value = NULL,
+                last_data_code = NULL
+            WHERE station_id = %s
+              AND variable_id = ANY(%s)
+        """,
     }
 
-    with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
+    deleted_total = 0
+
+    # Store exactly which datetime(s) were deleted for each variable.
+    #
+    # Example:
+    # {
+    #     61: {10:00, 11:00},
+    #     0:  {13:00}
+    # }
+    deleted_datetimes_by_variable = {}
+
+    with psycopg2.connect(
+        settings.SURFACE_CONNECTION_STRING
+    ) as conn:
         with conn.cursor() as cursor:
-            for col_data_key, variable_id_list in empty_cols_data.items():
-                # Validate hour
-                try:
-                    hour = int(col_data_key)
-                except (TypeError, ValueError):
-                    return JsonResponse(
-                        {"message": f"Invalid hour value: {col_data_key}"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
 
-                if hour < 0 or hour > 23:
-                    return JsonResponse(
-                        {"message": f"Hour must be between 0 and 23. Received: {hour}"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            # -------------------------------------------------------------
+            # 5. Grab relevant Timescale chunks once
+            # -------------------------------------------------------------
+            cursor.execute(
+                queries["grab_relevant_chunks"],
+                [
+                    request_start_range_dt,
+                    request_end_range_dt,
+                ]
+            )
 
-                # Validate variable list
-                if variable_id_list is None:
-                    return JsonResponse(
-                        {"message": f"Invalid request. variable_ids must be provided for hour {hour}."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            chunks = [row[0] for row in cursor.fetchall()]
 
-                if not isinstance(variable_id_list, (list, tuple)):
-                    return JsonResponse(
-                        {"message": f"Invalid request. variable_ids for hour {hour} must be a list."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            # -------------------------------------------------------------
+            # 6. Delete cleared Synop values
+            # -------------------------------------------------------------
+            for delete_request in delete_requests:
+                request_datetime = delete_request["datetime"]
+                variable_id_list = delete_request["variable_ids"]
 
-                # Nothing to delete for this hour
-                if not variable_id_list:
-                    continue
+                hour_deleted_count = 0
 
-                try:
-                    variable_id_list = [int(v) for v in variable_id_list]
-                except (TypeError, ValueError):
-                    return JsonResponse(
-                        {"message": f"Invalid variable_ids for hour {hour}. All variable IDs must be integers."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                request_datetime = datetime_offset.localize(
-                    request_date.replace(hour=hour)
-                )
-                request_start_range_dt = request_datetime - timedelta(days=10)
-                request_end_range_dt = request_datetime + timedelta(days=10)
-
-                # Grab relevant chunks, holding data within 10 days of the request datetime
-                # This reduces the overhead of looking through the entire raw_data table.
-                cursor.execute(
-                    queries["grab_relevant_chunks"],
-                    [request_start_range_dt, request_end_range_dt]
-                )
-                chunks = [row[0] for row in cursor.fetchall()]
-
-                # Delete matching raw_data rows from relevant chunks
                 for chunk in chunks:
-                    cursor.execute(
-                        queries["delete_raw_data"].format(raw_data_chunk=chunk),
-                        [station_id, variable_id_list, request_datetime]
+                    chunk_identifier = psycopg2.sql.Identifier(
+                        *chunk.split('.', 1)
                     )
 
-                # After deleting from raw_data, it is necessary to update the daily and hourly summary tables.
+                    delete_query = psycopg2.sql.SQL("""
+                        DELETE FROM {raw_data_chunk}
+                        WHERE station_id = %s
+                          AND variable_id = ANY(%s)
+                          AND datetime = %s
+                          AND is_daily = FALSE
+                        RETURNING variable_id
+                    """).format(
+                        raw_data_chunk=chunk_identifier
+                    )
+
+                    cursor.execute(
+                        delete_query,
+                        [
+                            station_id,
+                            variable_id_list,
+                            request_datetime,
+                        ]
+                    )
+
+                    deleted_rows = cursor.fetchall()
+
+                    hour_deleted_count += len(deleted_rows)
+                    deleted_total += len(deleted_rows)
+
+                    for row in deleted_rows:
+                        variable_id = row[0]
+
+                        deleted_datetimes_by_variable.setdefault(
+                            variable_id,
+                            set()
+                        ).add(request_datetime)
+
+                # Only queue the hourly summary if something was
+                # actually deleted for this hour.
+                if hour_deleted_count > 0:
+                    cursor.execute(
+                        queries["create_hourly_summary"],
+                        [
+                            station_id,
+                            request_datetime,
+                        ]
+                    )
+
+            # -------------------------------------------------------------
+            # 7. Queue daily summary recalculation
+            # -------------------------------------------------------------
+            # Only one daily-summary task is needed because every edited
+            # hour belongs to the same station-local date.
+            if deleted_total > 0:
                 cursor.execute(
                     queries["create_daily_summary"],
-                    [station_id, request_datetime]
-                )
-                cursor.execute(
-                    queries["create_hourly_summary"],
-                    [station_id, request_datetime]
+                    [
+                        station_id,
+                        local_date,
+                    ]
                 )
 
-                # If the deleted datetime was the last_data_datetime for any of these variables,
-                # update the last_data_* fields from the remaining raw_data.
-                cursor.execute(
-                    queries["get_last_updated"],
-                    [station_id, variable_id_list]
-                )
-                last_data_datetime_row = cursor.fetchone()
+            # -------------------------------------------------------------
+            # 8. Determine which StationVariable.last_data_* values
+            #    were actually deleted
+            # -------------------------------------------------------------
+            deleted_variable_ids = list(
+                deleted_datetimes_by_variable.keys()
+            )
 
-                if last_data_datetime_row and last_data_datetime_row[0] == request_datetime:
-                    for chunk in chunks:
-                        cursor.execute(
-                            queries["update_last_updated"].format(raw_data_chunk=chunk),
-                            [station_id, variable_id_list]
+            affected_variable_ids = set()
+
+            if deleted_variable_ids:
+                cursor.execute(
+                    queries["get_stationvariables"],
+                    [
+                        station_id,
+                        deleted_variable_ids,
+                    ]
+                )
+
+                for variable_id, last_data_datetime in cursor.fetchall():
+                    deleted_datetimes = (
+                        deleted_datetimes_by_variable.get(
+                            variable_id,
+                            set()
                         )
+                    )
+
+                    if last_data_datetime in deleted_datetimes:
+                        affected_variable_ids.add(variable_id)
+
+            # -------------------------------------------------------------
+            # 9. Repair StationVariable.last_data_* only when needed
+            # -------------------------------------------------------------
+            if affected_variable_ids:
+                latest_by_variable = {}
+
+                # Search the already-selected nearby chunks first.
+                for chunk in chunks:
+                    chunk_identifier = psycopg2.sql.Identifier(
+                        *chunk.split('.', 1)
+                    )
+
+                    latest_query = psycopg2.sql.SQL("""
+                        SELECT DISTINCT ON (variable_id)
+                            variable_id,
+                            measured,
+                            code,
+                            datetime
+                        FROM {raw_data_chunk}
+                        WHERE station_id = %s
+                          AND variable_id = ANY(%s)
+                        ORDER BY variable_id, datetime DESC
+                    """).format(
+                        raw_data_chunk=chunk_identifier
+                    )
+
+                    cursor.execute(
+                        latest_query,
+                        [
+                            station_id,
+                            list(affected_variable_ids),
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+
+                        current_latest = latest_by_variable.get(
+                            variable_id
+                        )
+
+                        if (
+                            current_latest is None
+                            or data_datetime >
+                            current_latest["datetime"]
+                        ):
+                            latest_by_variable[variable_id] = {
+                                "measured": measured,
+                                "code": code,
+                                "datetime": data_datetime,
+                            }
+
+                # ---------------------------------------------------------
+                # 10. Fallback for observations older than nearby chunks
+                # ---------------------------------------------------------
+                unresolved_variable_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                if unresolved_variable_ids:
+                    cursor.execute(
+                        queries["get_older_last_data"],
+                        [
+                            station_id,
+                            list(unresolved_variable_ids),
+                            request_start_range_dt,
+                        ]
+                    )
+
+                    for (
+                        variable_id,
+                        measured,
+                        code,
+                        data_datetime,
+                    ) in cursor.fetchall():
+
+                        latest_by_variable[variable_id] = {
+                            "measured": measured,
+                            "code": code,
+                            "datetime": data_datetime,
+                        }
+
+                # ---------------------------------------------------------
+                # 11. Update last_data_* from latest remaining observations
+                # ---------------------------------------------------------
+                for variable_id, latest in latest_by_variable.items():
+                    cursor.execute(
+                        queries["update_stationvariable"],
+                        [
+                            latest["datetime"],
+                            latest["measured"],
+                            latest["code"],
+                            station_id,
+                            variable_id,
+                        ]
+                    )
+
+                # If absolutely no raw_data remains for an affected
+                # variable, clear its last_data_* metadata.
+                no_remaining_data_ids = (
+                    affected_variable_ids
+                    - set(latest_by_variable.keys())
+                )
+
+                if no_remaining_data_ids:
+                    cursor.execute(
+                        queries["clear_stationvariable"],
+                        [
+                            station_id,
+                            list(no_remaining_data_ids),
+                        ]
+                    )
 
         conn.commit()
 
-    return Response([], status=status.HTTP_200_OK)
-
+    return Response(
+        {
+            "deleted_rows": deleted_total,
+            "message": f"Deleted {deleted_total} database row(s).",
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 def get_static_assets_dir():

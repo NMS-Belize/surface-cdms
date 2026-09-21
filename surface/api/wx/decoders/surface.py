@@ -61,13 +61,10 @@ def read_file(filename, highfrequency_data=False, process_in_chunks=False, stati
     variable_symbols = df.columns[1:]
 
     # get station utc offset if it is not passed
-    if not utc_offset:
+    if utc_offset is None:
         utc_offset = station_object.utc_offset_minutes
 
-    if utc_offset is None:
-        fixed_tz = None
-    else:
-        fixed_tz = pytz.FixedOffset(utc_offset)
+    fixed_tz = pytz.FixedOffset(utc_offset)
 
     # set timezone if datetime is aware, otherwise use the given timezone
     df['datetime'] = df['datetime'].apply(lambda dt: naive_to_aware(dt, fixed_tz))

@@ -308,6 +308,7 @@
           overrideData: true,
           manuallyValidatedData: false,
           timezone: "{{ TIMEZONE_NAME|escapejs }}",
+          surface_offset_hrs: "{{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }}",
           stations: [
               {% for station in station_list %}
                   {   value: {{ station.id }},
@@ -335,7 +336,7 @@
           documents_headers: [
             { text: "Id", value: "id", align: "left"},
             { text: "File Name", value: "file_name", align: "left"},
-            { text: "Upload Date", value: "upload_date", align: "left"},
+            { text: "Uploaded At (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "upload_date", align: "left"},
             { text: "Status", value: "status", align: "left"},
             { text: 'Actions', value: 'action', align: "center", sortable: false },
           ],
@@ -687,6 +688,7 @@
           updateTable() {
             axios.get('data-files/').then(res => {
                 res.data.forEach(record => {
+                  // convert the upload date from UTC to the default timezone set during the installation
                   record.upload_date =  this.handleServerDatetime(record.upload_date);
                 });
                 this.documents = res.data

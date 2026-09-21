@@ -111,7 +111,7 @@ def read_file(filename, highfrequency_data=False, process_in_chunks=False, stati
     station_id = station_object.id
 
     # get station utc offset if it is not passed
-    if not utc_offset:
+    if utc_offset is None:
         utc_offset = station_object.utc_offset_minutes
 
     try:

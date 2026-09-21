@@ -510,7 +510,20 @@ def backup_postgres():
 
 @shared_task
 def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_list=None):
-    # IMPORTANT: Hourly summaries are ran on SUSPICIOUS, GOOD and NOT CHECKED
+    """
+        IMPORTANT: Hourly summaries are ran on SUSPICIOUS, GOOD and NOT CHECKED
+        
+        Hourly SUMMARIES include the top of the next hour and exclude the top of the current hour
+        eg: (1300,1400]
+
+        13:00:00.000000  → previous 12:00 summary
+        13:00:00.000001  → 13:00 summary
+        13:30:00         → 13:00 summary
+        14:00:00         → 13:00 summary
+
+        is_daily data is also not included in the hourly summaries.
+    """
+
     start_at = time()
 
     if not start_datetime:
@@ -575,11 +588,7 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
             now()
         FROM
             (SELECT 
-                CASE
-                  WHEN rd.datetime = rd.datetime::date
-                  THEN date_trunc('hour', rd.datetime - '1 second'::interval)
-                  ELSE date_trunc('hour', rd.datetime)
-                END as datetime,
+                date_trunc('hour', rd.datetime - INTERVAL '1 microsecond') AS datetime,
                 station_id,
                 variable_id,
                 min(calc.value) AS min_value,
@@ -590,44 +599,10 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
             FROM 
                 raw_data rd
                 ,LATERAL (SELECT CASE WHEN rd.consisted IS NOT NULL THEN rd.consisted ELSE rd.measured END as value) AS calc
-            WHERE rd.datetime >= %(hour_start)s
-              AND rd.datetime <  %(hour_end)s
+            WHERE rd.datetime > %(hour_start)s
+              AND rd.datetime <=  %(hour_end)s
               AND (rd.manual_flag in (1,4) OR (rd.manual_flag IS NULL AND rd.quality_flag in (1,2,4)))
               AND NOT rd.is_daily
-              AND calc.value != %(MISSING_VALUE)s
-              AND station_id = ANY(%(station_ids)s) 
-            GROUP BY 1,2,3) values
-        WHERE values.datetime = %(hour_start)s
-
-        UNION ALL
-
-        SELECT 
-            values.datetime,
-            values.station_id,
-            values.variable_id,
-            values.min_value,
-            values.max_value,
-            values.avg_value,
-            values.sum_value,
-            values.num_records,
-            now(),
-            now()
-        FROM
-            (SELECT date_trunc('hour', rd.datetime) as datetime,
-                station_id,
-                variable_id,
-                min(calc.value) AS min_value,
-                max(calc.value) AS max_value,
-                avg(calc.value) AS avg_value,
-                sum(calc.value) AS sum_value,
-                count(calc.value) AS num_records
-            FROM 
-                raw_data rd
-                ,LATERAL (SELECT CASE WHEN rd.consisted IS NOT NULL THEN rd.consisted ELSE rd.measured END as value) AS calc
-            WHERE rd.datetime >= %(hour_start)s
-              AND rd.datetime <  %(hour_end)s
-              AND (rd.manual_flag in (1,4) OR (rd.manual_flag IS NULL AND rd.quality_flag in (1,2,4)))
-              AND rd.is_daily
               AND calc.value != %(MISSING_VALUE)s
               AND station_id = ANY(%(station_ids)s) 
             GROUP BY 1,2,3) values
@@ -655,116 +630,41 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
 
 @shared_task
 def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None):
-    # IMPORTANT: Daily summaries are run on SUSPICIOUS, GOOD and NOT CHECKED.
-    #
-    # IMPORTANT DAILY WINDOW BEHAVIOR:
-    # This function intentionally uses:
-    #
-    #     rd.datetime >  datetime_start
-    #     rd.datetime <= datetime_end
-
-
     """
     Calculate (or recalculate) DAILY summaries.
 
-    IMPORTANT DESIGN RULES (DO NOT BREAK):
-    --------------------------------------
-    1. DAILY summaries are keyed by a *logical local DATE* (daily_summary.day).
+    IMPORTANT DESIGN RULES
+    ----------------------
+    1. daily_summary.day is a logical station-local DATE.
 
-    2. DELETES must ALWAYS be done using DATE equality, NEVER datetime ranges.
+    2. Summary rows are deleted using DATE equality, not datetime ranges.
 
-    This is important because daily_summary.day is a DATE column, while raw_data
-    selection uses timezone-adjusted datetime ranges.
+    3. Raw-data selection uses each station's configured UTC offset.
 
-    3. Datetime ranges are ONLY for selecting raw_data, NOT for deleting summaries.
+    4. Non-daily observations use the reporting-day convention:
 
-    4. This function may be called:
-    - as a normal scheduled daily run
-    - as a QC-triggered recalculation for past dates
+           datetime_start < rd.datetime <= datetime_end
 
-    Therefore it MUST be safe to run repeatedly and out-of-order.
+       Therefore, an observation exactly at next-day 00:00 belongs
+       to the day that just ended.
 
-    =======================================================================================
+    5. Daily observations use the calendar-day convention:
 
-    DAILY SUMMARY TIME WINDOW BEHAVIOR (READ CAREFULLY):
-    ----------------------------------------------------
+           datetime_start <= rd.datetime < datetime_end
 
-    This function intentionally uses this raw_data selection window:
+       Therefore, a daily observation at 00:00 belongs to the
+       current calendar day.
 
-        rd.datetime >  datetime_start
-        rd.datetime <= datetime_end
+    Example for 2026-05-08:
 
-    Where:
+        NON-DAILY:
+            (May 8 00:00, May 9 00:00]
+            May 9 00:00 -> May 8
 
-        datetime_start = local DATE at 00:00 converted to UTC
-        datetime_end   = datetime_start + 1 day
-
-    This is a non-standard window. It is effectively:
-
-        (datetime_start, datetime_end]
-
-    instead of the more common:
-
-        [datetime_start, datetime_end)
-
-    EFFECTS:
-    --------
-
-    1. A raw_data record exactly at local 00:00:00 of the target date
-    (rd.datetime == datetime_start) is EXCLUDED.
-
-    2. A raw_data record exactly at local 00:00:00 of the next day
-    (rd.datetime == datetime_end) is INCLUDED.
-
-    3. For NON-DAILY records:
-
-    The logical date is calculated using:
-
-        local_datetime - 1 second
-
-    This means a non-daily record exactly at local midnight of the next day
-    is assigned to the PREVIOUS logical date.
-
-    Example:
-        2026-05-09 00:00:00 local
-        minus 1 second
-        -> 2026-05-08 23:59:59 local
-        -> daily_summary.day = 2026-05-08
-
-    4. For DAILY records:
-
-    The logical date is calculated WITHOUT subtracting 1 second.
-
-    This means a daily record exactly at local midnight of the next day
-    is assigned to the NEXT logical date.
-
-    Example:
-        2026-05-09 00:00:00 local
-        -> daily_summary.day = 2026-05-09
-
-    5. This behavior is intentional based on the current system logic and should
-    not be changed casually, because it affects how midnight-boundary records
-    are assigned to daily summaries.
-
-    WARNING:
-    --------
-
-    Do NOT change the inequality operators:
-
-        rd.datetime >  datetime_start
-        rd.datetime <= datetime_end
-
-    or the non-daily '- 1 second' adjustment unless you also update the logical
-    definition of what "daily" means for this system.
-
-    If you want the standard behavior where:
-
-        [datetime_start, datetime_end)
-
-    is used instead, then BOTH the WHERE clause and the date-casting logic must
-    be reviewed and changed together.
+        DAILY:
+            [May 8 00:00, May 9 00:00)
+            May 8 00:00 -> May 8
     """
-
 
     logger.info(
         f'DAILY SUMMARY started at {datetime.now(tz=pytz.UTC)} with parameters: '
@@ -779,7 +679,7 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
         start_date = datetime.now(pytz.UTC).date()
         end_date = start_date + timedelta(days=1)
 
-    # end_date is treated as exclusive in the Python loop.
+    # end_date is exclusive in the Python loop.
     if start_date >= end_date:
         logger.error("Invalid date range: start_date must be < end_date")
         return
@@ -788,17 +688,24 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
 
     try:
         with conn.cursor() as cursor:
+
             # Determine which stations should be processed.
             if station_id_list is None:
                 stations = Station.objects.filter(is_active=True)
             else:
                 stations = Station.objects.filter(id__in=station_id_list)
 
-            # Group stations by UTC offset.
-            # This is necessary because "daily" is based on each station's local day.
-            offsets = set(stations.values_list("utc_offset_minutes", flat=True))
+            # Group stations by UTC offset because each station's daily
+            # boundaries are based on its local time.
+            offsets = set(
+                stations.values_list(
+                    "utc_offset_minutes",
+                    flat=True
+                )
+            )
 
             for offset in offsets:
+
                 station_ids = list(
                     stations
                     .filter(utc_offset_minutes=offset)
@@ -813,18 +720,16 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                 current_date = start_date
 
                 # Process one logical date at a time.
-                # This keeps each transaction smaller and safer.
                 while current_date < end_date:
-                    # Convert the station-local date window to UTC.
-                    #
-                    # Example:
-                    # If station local day starts at 2026-05-08 00:00 local,
-                    # this converts that local midnight into UTC.
+
+                    # Build station-local midnight and convert the instant to UTC.
                     datetime_start = datetime(
                         current_date.year,
                         current_date.month,
                         current_date.day,
-                        0, 0, 0,
+                        0,
+                        0,
+                        0,
                         tzinfo=fixed_offset
                     ).astimezone(pytz.UTC)
 
@@ -832,7 +737,7 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
 
                     logger.info(
                         "Daily Summary | date=%s offset=%s stations=%d "
-                        "utc_window=(%s, %s]",
+                        "utc_boundaries=(%s, %s)",
                         current_date,
                         offset,
                         len(station_ids),
@@ -840,11 +745,12 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                         datetime_end,
                     )
 
-                    # Delete only the current logical date for the selected stations.
+                    # ---------------------------------------------------------
+                    # Delete the existing summary only for this logical date.
                     #
-                    # Important:
-                    # daily_summary.day is a DATE column, so we delete by date equality.
-                    # Do not delete using datetime ranges here.
+                    # daily_summary.day is a DATE column, so deletion should
+                    # always use date equality.
+                    # ---------------------------------------------------------
                     delete_sql = """
                         DELETE FROM daily_summary
                         WHERE station_id = ANY(%(station_ids)s)
@@ -859,19 +765,24 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                         }
                     )
 
-                    # Optimized insert:
+                    # ---------------------------------------------------------
+                    # Calculate the summary.
                     #
-                    # The old version scanned raw_data twice:
-                    #   1. once for NOT rd.is_daily
-                    #   2. once for rd.is_daily
+                    # Non-daily observations:
                     #
-                    # This version scans the target raw_data window once and uses
-                    # CASE to calculate the correct logical day.
+                    #     datetime_start < datetime <= datetime_end
                     #
-                    # Non-daily records subtract 1 second before casting to DATE.
-                    # Daily records do not subtract 1 second.
+                    # Exact next-day midnight belongs to the reporting day
+                    # that just ended.
                     #
-                    # This preserves the midnight-boundary behavior from the old query.
+                    # Daily observations:
+                    #
+                    #     datetime_start <= datetime < datetime_end
+                    #
+                    # Exact midnight belongs to the current calendar day.
+                    #
+                    # raw_data is still handled in a single SQL statement.
+                    # ---------------------------------------------------------
                     insert_sql = """
                         INSERT INTO daily_summary (
                             "day",
@@ -885,40 +796,45 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                             created_at,
                             updated_at
                         )
-                        WITH filtered AS (
-                            SELECT
-                                CASE
-                                    WHEN rd.is_daily THEN
-                                        CAST(
-                                            (rd.datetime + interval '%(offset)s minutes')
-                                            AT TIME ZONE 'utc'
-                                            AS DATE
-                                        )
-                                    ELSE
-                                        CAST(
-                                            (rd.datetime + interval '%(offset)s minutes')
-                                            AT TIME ZONE 'utc'
-                                            - '1 second'::interval
-                                            AS DATE
-                                        )
-                                END AS day,
 
+                        WITH source_data AS (
+                            SELECT
+                                (
+                                    (rd.datetime AT TIME ZONE 'UTC')
+                                    + (
+                                        %(offset)s
+                                        * INTERVAL '1 minute'
+                                    )
+                                ) AS local_datetime,
+
+                                rd.is_daily,
                                 rd.station_id,
                                 rd.variable_id,
 
                                 CASE
-                                    WHEN rd.consisted IS NOT NULL THEN rd.consisted
+                                    WHEN rd.consisted IS NOT NULL
+                                        THEN rd.consisted
                                     ELSE rd.measured
                                 END AS value
 
                             FROM raw_data rd
-                            WHERE rd.datetime > %(datetime_start)s
-                              AND rd.datetime <= %(datetime_end)s
-                              AND rd.station_id = ANY(%(station_ids)s)
 
-                              -- Daily summaries are calculated using:
-                              -- GOOD, SUSPICIOUS, and NOT CHECKED values,
-                              -- while also respecting accepted manual flags.
+                            WHERE rd.station_id = ANY(%(station_ids)s)
+
+                              AND (
+                                  (
+                                      NOT rd.is_daily
+                                      AND rd.datetime > %(datetime_start)s
+                                      AND rd.datetime <= %(datetime_end)s
+                                  )
+                                  OR
+                                  (
+                                      rd.is_daily
+                                      AND rd.datetime >= %(datetime_start)s
+                                      AND rd.datetime < %(datetime_end)s
+                                  )
+                              )
+
                               AND (
                                   rd.manual_flag IN (1, 4)
                                   OR (
@@ -926,7 +842,35 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                                       AND rd.quality_flag IN (1, 2, 4)
                                   )
                               )
+                        ),
+
+                        filtered AS (
+                            SELECT
+                                CASE
+                                    -- Daily observations use their actual
+                                    -- station-local calendar date.
+                                    WHEN is_daily THEN
+                                        local_datetime::date
+
+                                    -- Non-daily observations exactly at
+                                    -- midnight belong to the previous
+                                    -- reporting day.
+                                    WHEN local_datetime::time = TIME '00:00:00'
+                                        THEN local_datetime::date - 1
+
+                                    -- Every other non-daily observation
+                                    -- belongs to its normal local date.
+                                    ELSE
+                                        local_datetime::date
+                                END AS day,
+
+                                station_id,
+                                variable_id,
+                                value
+
+                            FROM source_data
                         )
+
                         SELECT
                             day,
                             station_id,
@@ -938,20 +882,29 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                             COUNT(value),
                             now(),
                             now()
+
                         FROM filtered
+
                         WHERE value != %(MISSING_VALUE)s
+
+                          -- Safety check: this iteration should only ever
+                          -- create the summary date currently being rebuilt.
+                          AND day = %(target_date)s
+
                         GROUP BY
                             day,
                             station_id,
                             variable_id
 
-                        ON CONFLICT (day, station_id, variable_id) DO UPDATE
-                        SET min_value   = EXCLUDED.min_value,
-                            max_value   = EXCLUDED.max_value,
-                            avg_value   = EXCLUDED.avg_value,
-                            sum_value   = EXCLUDED.sum_value,
+                        ON CONFLICT (day, station_id, variable_id)
+                        DO UPDATE
+                        SET
+                            min_value = EXCLUDED.min_value,
+                            max_value = EXCLUDED.max_value,
+                            avg_value = EXCLUDED.avg_value,
+                            sum_value = EXCLUDED.sum_value,
                             num_records = EXCLUDED.num_records,
-                            updated_at  = now();
+                            updated_at = now();
                     """
 
                     cursor.execute(
@@ -959,14 +912,14 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                         {
                             "datetime_start": datetime_start,
                             "datetime_end": datetime_end,
+                            "target_date": current_date,
                             "station_ids": station_ids,
                             "offset": offset,
                             "MISSING_VALUE": settings.MISSING_VALUE,
                         }
                     )
 
-                    # Commit after each logical date.
-                    # This keeps transactions smaller and reduces how long locks are held.
+                    # Keep transactions limited to one logical reporting day.
                     conn.commit()
 
                     current_date += timedelta(days=1)
@@ -979,13 +932,16 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
     finally:
         conn.close()
 
-    cache.set("daily_summary_last_run", datetime.now(pytz.UTC), None)
+    cache.set(
+        "daily_summary_last_run",
+        datetime.now(pytz.UTC),
+        None
+    )
 
     logger.info(
         f'Daily summary finished at {datetime.now(pytz.UTC)}. '
         f'Took {time() - start_at:.2f} seconds.'
     )
-
 
 
 @shared_task
@@ -1199,13 +1155,19 @@ def data_inventory_month_view(year, month, station_id, variable_id):
 
     IMPORTANT:
     ----------
-    This version intentionally keeps the original date behavior.
+    Inventory completeness records use UTC-midnight calendar labels,
+    but their counts represent station-local reporting days.
 
-    We are still using Python date objects:
-        query_start_datetime = date(year, month, 1)
-        query_end_datetime   = first day of next month
+    This task preserves that convention:
+        - Inventory labels are interpreted in UTC.
+        - Raw observations are queried using the station's configured
+        UTC offset.
+        - Reporting days use start < datetime <= end.
+        - An observation exactly at local midnight belongs to the
+        reporting day that just ended.
 
-    So this does NOT intentionally change timezone handling.
+    This ensures the QC percentage is calculated from the same
+    reporting-day window as the stored completeness percentage.
 
     Performance design:
     -------------------
@@ -1249,6 +1211,33 @@ def data_inventory_month_view(year, month, station_id, variable_id):
         query_end_datetime = datetime(year, month + 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
     # ---------------------------------------------------------------------
+    # Build the station-local month boundaries.
+    #
+    # Inventory labels are stored at UTC midnight, but the observations
+    # contributing to each reporting day are selected using the station's
+    # configured UTC offset.
+    # ---------------------------------------------------------------------
+    station = Station.objects.only(
+        "utc_offset_minutes"
+    ).get(id=station_id)
+
+    station_tz = pytz.FixedOffset(station.utc_offset_minutes)
+
+    # Convert the selected calendar midnights into actual station-local
+    # midnights, then convert those instants to UTC for querying raw_data.
+    raw_start = station_tz.localize(
+        query_start_datetime.replace(tzinfo=None)
+    ).astimezone(pytz.UTC)
+
+    raw_end = station_tz.localize(
+        query_end_datetime.replace(tzinfo=None)
+    ).astimezone(pytz.UTC)
+
+    # Calendar dates used to generate the days of the selected month.
+    month_start_date = query_start_datetime.date()
+    next_month_date = query_end_datetime.date()
+
+    # ---------------------------------------------------------------------
     # Optimized SQL.
     #
     # available_days:
@@ -1256,10 +1245,22 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     #
     # station_days:
     #   Gets the monthly inventory rows from wx_stationdataminimuminterval.
+    #   Inventory datetime values are interpreted as UTC-midnight
+    #   calendar labels.
+    #
+    # raw_local:
+    #   Retrieves raw_data once for the station + variable + month,
+    #   using the station's local reporting-period boundaries.
+    #   Converts observation timestamps to station-local wall-clock time.
+    #
+    # raw_reporting_days:
+    #   Assigns observations to their reporting day.
+    #   An observation exactly at local midnight belongs to the
+    #   reporting day that just ended.
     #
     # raw_qc:
-    #   Gets all raw_data rows for this station + variable + month once,
-    #   groups them by day, and calculates QC counts.
+    #   Aggregates the retrieved observations by reporting day and
+    #   calculates QC counts.
     #
     # Final SELECT:
     #   Joins available_days to station_days and raw_qc so every day appears,
@@ -1267,55 +1268,90 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     # ---------------------------------------------------------------------
     query = """
         WITH available_days AS (
-            SELECT 
+            -- Generate every calendar day in the selected month.
+            -- Use timestamp without time zone so the calendar is not
+            -- affected by the PostgreSQL session timezone.
+            SELECT
                 gs::date AS day_date,
                 EXTRACT(DAY FROM gs)::int AS custom_day,
                 EXTRACT(DOW FROM gs)::int AS dow
             FROM generate_series(
-                %(query_start_datetime)s::date,
-                (%(query_end_datetime)s::date - INTERVAL '1 day'),
+                %(month_start_date)s::date::timestamp,
+                (%(next_month_date)s::date - 1)::timestamp,
                 INTERVAL '1 day'
             ) AS gs
         ),
 
         station_days AS (
-            SELECT 
-                EXTRACT(DAY FROM station_data.datetime)::int AS day,
+            -- Inventory datetime is a UTC-midnight calendar label.
+            -- Interpret it in UTC before extracting the calendar date.
+            SELECT
+                (station_data.datetime AT TIME ZONE 'UTC')::date AS day_date,
                 TRUNC(station_data.record_count_percentage::numeric, 2) AS percentage,
                 station_data.record_count,
                 station_data.ideal_record_count
             FROM wx_stationdataminimuminterval AS station_data
             WHERE station_data.station_id = %(station_id)s
-                AND station_data.variable_id = %(variable_id)s
-                AND station_data.datetime >= %(query_start_datetime)s
-                AND station_data.datetime < %(query_end_datetime)s
+            AND station_data.variable_id = %(variable_id)s
+            AND station_data.datetime >= %(query_start_datetime)s
+            AND station_data.datetime < %(query_end_datetime)s
+        ),
+
+        raw_local AS (
+            -- Retrieve the month's raw observations once.
+            --
+            -- Preserve the producer's reporting-period convention:
+            --     start < datetime <= end
+            --
+            -- Convert each observation to the station's local wall clock
+            -- without depending on the PostgreSQL session timezone.
+            SELECT
+                (
+                    (rd.datetime AT TIME ZONE 'UTC')
+                    + (%(utc_offset_minutes)s * INTERVAL '1 minute')
+                ) AS local_datetime,
+                rd.manual_flag,
+                rd.quality_flag
+            FROM raw_data rd
+            WHERE rd.station_id = %(station_id)s
+            AND rd.variable_id = %(variable_id)s
+            AND rd.datetime > %(raw_start)s
+            AND rd.datetime <= %(raw_end)s
+        ),
+
+        raw_reporting_days AS (
+            -- Assign observations to their reporting day.
+            --
+            -- An observation exactly at local midnight belongs to the
+            -- reporting day that just ended.
+            --
+            -- Example:
+            --   Sep 2 00:00 local -> Sep 1 reporting day
+            --   Sep 2 01:00 local -> Sep 2 reporting day
+            SELECT
+                CASE
+                    WHEN local_datetime::time = TIME '00:00:00'
+                        THEN local_datetime::date - 1
+                    ELSE local_datetime::date
+                END AS day_date,
+                manual_flag,
+                quality_flag
+            FROM raw_local
         ),
 
         raw_qc AS (
+            -- Aggregate QC once for the entire month.
             SELECT
-                EXTRACT(DAY FROM rd.datetime)::int AS day,
-
-                -- Count all raw_data records for the day.
-                -- raw_data does not have an id column, so we count datetime.
-                COUNT(rd.datetime) AS qc_amount,
-
-                -- Count only records whose effective QC flag is considered passed.
-                -- COALESCE means manual_flag is used when it exists;
-                -- otherwise quality_flag is used.
-                COUNT(rd.datetime) FILTER (
-                    WHERE COALESCE(rd.manual_flag, rd.quality_flag) IN (1, 4)
+                day_date,
+                COUNT(*) AS qc_amount,
+                COUNT(*) FILTER (
+                    WHERE COALESCE(manual_flag, quality_flag) IN (1, 4)
                 ) AS qc_passed_amount
-
-            FROM raw_data rd
-            WHERE rd.station_id = %(station_id)s
-                AND rd.variable_id = %(variable_id)s
-                AND rd.datetime >= %(query_start_datetime)s
-                AND rd.datetime < %(query_end_datetime)s
-
-            GROUP BY EXTRACT(DAY FROM rd.datetime)::int
+            FROM raw_reporting_days
+            GROUP BY day_date
         )
 
-        SELECT 
+        SELECT
             available_days.custom_day,
             available_days.dow,
 
@@ -1323,7 +1359,7 @@ def data_inventory_month_view(year, month, station_id, variable_id):
             COALESCE(station_days.record_count, 0) AS record_count,
             COALESCE(station_days.ideal_record_count, 0) AS ideal_record_count,
 
-            CASE 
+            CASE
                 WHEN COALESCE(raw_qc.qc_amount, 0) = 0 THEN 0
                 ELSE TRUNC(
                     (raw_qc.qc_passed_amount / raw_qc.qc_amount::numeric) * 100,
@@ -1334,10 +1370,10 @@ def data_inventory_month_view(year, month, station_id, variable_id):
         FROM available_days
 
         LEFT JOIN station_days
-            ON station_days.day = available_days.custom_day
+            ON station_days.day_date = available_days.day_date
 
         LEFT JOIN raw_qc
-            ON raw_qc.day = available_days.custom_day
+            ON raw_qc.day_date = available_days.day_date
 
         ORDER BY available_days.custom_day;
     """
@@ -1345,6 +1381,11 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     query_params = {
         "query_start_datetime": query_start_datetime,
         "query_end_datetime": query_end_datetime,
+        "month_start_date": month_start_date,
+        "next_month_date": next_month_date,
+        "raw_start": raw_start,
+        "raw_end": raw_end,
+        "utc_offset_minutes": station.utc_offset_minutes,
         "station_id": station_id,
         "variable_id": variable_id,
     }
@@ -1455,7 +1496,6 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     )
 
     return days
-
 
 
 
@@ -1875,11 +1915,13 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
     try:
         logger.info(f'Exporting data (file "{file_id}")')
 
-        timezone_offset = pytz.timezone(settings.TIMEZONE_NAME)
         start_date_utc = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
         end_date_utc = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
 
         station = Station.objects.get(pk=station_id)
+        station_timezone_offset_min = station.utc_offset_minutes
+        station_local_tz = timezone(timedelta(minutes=station_timezone_offset_min)) # Convert minutes into a timezone object
+
         current_datafile = DataFile.objects.get(pk=file_id)
 
         variable_ids = tuple(variable_ids)
@@ -1906,13 +1948,17 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 converted_start_date = start_date_utc
                 converted_end_date = end_date_utc
 
+            # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+            # the stations local offset. This is why we apply on offset to the start and end dates.
             elif source == 'daily_summary':
                 datetime_variable = 'day'
                 data_source_description = 'Daily summary'
                 date_source = "day::date"
-                converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-                converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+                converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+                converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+            # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+            # the stations local offset. This is why we apply on offset to the start and end dates.
             elif source == 'monthly_summary':
                 # measured_source = '''
                 #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -1923,9 +1969,11 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 datetime_variable = 'date'
                 date_source = "date::date"
                 data_source_description = 'Monthly summary'
-                converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-                converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+                converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+                converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+            # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+            # the stations local offset. This is why we apply on offset to the start and end dates.
             elif source == 'yearly_summary':
                 # measured_source = '''
                 #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -1936,8 +1984,8 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 datetime_variable = 'date'
                 date_source = "date::date"
                 data_source_description = 'Yearly summary'
-                converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-                converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+                converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+                converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
         
         variable_dict = {}
@@ -2265,24 +2313,24 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
             # modify the displayed start and end date in the csv file based on the summary type
             # show the hour, minute, second, year, month, day in the output
             if data_source_description in ["Raw data", "Hourly summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
+                start_date_header = start_date_utc.strftime('%Y-%m-%d %H:%M:%S')
+                end_date_header = end_date_utc.strftime('%Y-%m-%d %H:%M:%S')
             # show just the year, month and day
             elif data_source_description in ["Daily summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d')
+                start_date_header = start_date_utc.strftime('%Y-%m-%d')
+                end_date_header = end_date_utc.strftime('%Y-%m-%d')
             # show just the year and month
             elif data_source_description in ["Monthly summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m')
+                start_date_header = start_date_utc.strftime('%Y-%m')
+                end_date_header = end_date_utc.strftime('%Y-%m')
             # show just the year
             elif data_source_description in ["Yearly summary"]:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y')
-                end_date_header = int(end_date_utc.astimezone(timezone_offset).strftime('%Y')) - 1
+                start_date_header = start_date_utc.strftime('%Y')
+                end_date_header = int(end_date_utc.strftime('%Y')) - 1
             # generic: show everything (hour, minute, second, year, month, day)
             else:
-                start_date_header = start_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
-                end_date_header = end_date_utc.astimezone(timezone_offset).strftime('%Y-%m-%d %H:%M:%S')
+                start_date_header = start_date_utc.strftime('%Y-%m-%d %H:%M:%S')
+                end_date_header = end_date_utc.strftime('%Y-%m-%d %H:%M:%S')
 
             f.write(f'Station:{station.code} - {station.name}\n')
             f.write(f'Data source:{data_source_description}\n')
@@ -2291,12 +2339,13 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
             f.write(f'Longitude:{station.longitude}\n')
             f.write(f'Passed AQC Checks: {current_datafile.aqc_checks}\n')
             f.write(f'Passed MQC Checks: {current_datafile.mqc_checks}\n')
-            f.write(f'Date of completion:{date_of_completion.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}\n')
+            f.write(f'Date of completion (UTC):{date_of_completion.strftime("%Y-%m-%d %H:%M:%S")}\n')
             f.write(f'Prepared by:{current_datafile.prepared_by}\n')
-            f.write(f'Start date:{start_date_header}, End date:{end_date_header}\n\n')
+            f.write(f'Start date (UTC):{start_date_header}, End date (UTC):{end_date_header}\n\n')
             if displayUTC:
-                f.write('Dates are displayed in UTC\n')
-                f.write(f'Start date in UTC:{converted_start_date.strftime("%Y-%m-%d %H:%M:%S")}, End date in UTC:{converted_end_date.strftime("%Y-%m-%d %H:%M:%S")}\n\n')
+                f.write('Dates below are displayed in UTC\n\n')
+            else:
+                f.write(f'Dates below are displayed in stations local time {convert_offset_min_to_hrs(station_timezone_offset_min)}\n\n')
 
             # Check the value of the agg to inform aggregation
             if agg == "min":
@@ -2544,6 +2593,8 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             # get the station object
             station = Station.objects.get(pk=id)
 
+            station_timezone_offset_min = station.utc_offset_minutes # stations utc offset in minutes
+
             # the number of entries in the data
             lines = len(station_data_frames[x].index)
 
@@ -2596,7 +2647,6 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
                     start_col = end_col - num_merge  # updated start column index
 
             date_of_completion = datetime.utcnow()
-            timezone_offset = pytz.timezone(settings.TIMEZONE_NAME)
 
             # add the file headers
             cell = sheet.cell(row=1, column=1, value=f'Station:{station.code} - {station.name}')
@@ -2606,16 +2656,18 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             cell = sheet.cell(row=5, column=1, value=f'Longitude:{station.longitude}')
             cell = sheet.cell(row=6, column=1, value=f'Passed AQC Checks:{aqc_checks}')
             cell = sheet.cell(row=7, column=1, value=f'Passed MQC Checks:{mqc_checks}')
-            cell = sheet.cell(row=8, column=1, value=f'Date of completion:{date_of_completion.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}')
+            cell = sheet.cell(row=8, column=1, value=f'Date of completion (UTC):{date_of_completion.strftime("%Y-%m-%d %H:%M:%S")}')
             cell = sheet.cell(row=9, column=1, value=f'Prepared by:{prepared_by}')
 
             if displayUTC and data_source in ['raw_data','hourly_summary']:
-                cell = sheet.cell(row=11, column=1, value=f'Dates are displayed in UTC')
-                cell = sheet.cell(row=12, column=1, value=f'Start date:{start_date}, End date:{end_date}')
+                cell = sheet.cell(row=11, column=1, value=f'Start date (UTC):{start_date}, End date (UTC):{end_date}')
+                cell = sheet.cell(row=12, column=1, value=f'Dates below are displayed in UTC.')
             else:
                 updated_start_date = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
                 updated_end_date = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
-                cell = sheet.cell(row=11, column=1, value=f'Start date:{updated_start_date.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}, End date:{updated_end_date.astimezone(timezone_offset).strftime("%Y-%m-%d %H:%M:%S")}')
+
+                cell = sheet.cell(row=11, column=1, value=f'Start date (UTC):{updated_start_date.strftime("%Y-%m-%d %H:%M:%S")}, End date (UTC):{updated_end_date.strftime("%Y-%m-%d %H:%M:%S")}')
+                cell = sheet.cell(row=12, column=1, value=f'Dates below are displayed in stations local time {convert_offset_min_to_hrs(station_timezone_offset_min)}')
 
         # Save the workbook
         combined_workbook.save(output_file)
@@ -2638,11 +2690,13 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
 # returns the data frame for each query ran in order to facilitate combining the files later
 def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg, aqc_checks, mqc_checks, displayUTC, data_interval_seconds):
 
-    timezone_offset = pytz.timezone(settings.TIMEZONE_NAME)
     start_date_utc = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
     end_date_utc = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
 
     station = Station.objects.get(pk=station_id)
+    station_timezone_offset_min = station.utc_offset_minutes
+    station_local_tz = timezone(timedelta(minutes=station_timezone_offset_min)) # Convert minutes into a timezone object
+
 
     variable_ids = tuple(variable_ids)
     # variable_ids = ','.join([str(x) for x in variable_ids])
@@ -2668,13 +2722,17 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             converted_start_date = start_date_utc
             converted_end_date = end_date_utc
 
+        # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+        # the stations local offset. This is why we apply on offset to the start and end dates.
         elif source == 'daily_summary':
             datetime_variable = 'day'
             data_source_description = 'Daily summary'
             date_source = "day::date"
-            converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-            converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+            converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+            converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+        # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+        # the stations local offset. This is why we apply on offset to the start and end dates.
         elif source == 'monthly_summary':
             # measured_source = '''
             #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -2685,9 +2743,11 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             datetime_variable = 'date'
             date_source = "date::date"
             data_source_description = 'Monthly summary'
-            converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-            converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+            converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+            converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
+        # This particular summary calculates the date (timezone naive date feild) using the date calculated with 
+        # the stations local offset. This is why we apply on offset to the start and end dates.
         elif source == 'yearly_summary':
             # measured_source = '''
             #     CASE WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
@@ -2698,8 +2758,8 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             datetime_variable = 'date'
             date_source = "date::date"
             data_source_description = 'Yearly summary'
-            converted_start_date = start_date_utc.astimezone(timezone_offset).date()
-            converted_end_date = end_date_utc.astimezone(timezone_offset).date()
+            converted_start_date = start_date_utc.astimezone(station_local_tz).date()
+            converted_end_date = end_date_utc.astimezone(station_local_tz).date()
 
     try:
         variable_dict = {}
@@ -5730,7 +5790,7 @@ def get_maunal_data(station_name, id):
     # keep track of the logs to send back
     def log_message(message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}"
+        formatted_message = f"[{timestamp} (UTC)] {message}"
         logs_manual_wis2_transmit.append(formatted_message)  # Store it in logs_manual_wis2_transmit
         
 
@@ -7050,7 +7110,7 @@ def qc_manual_checks_bulk(
 
 # Get data for the QC manual checks
 @shared_task
-def get_qc_data(sql_string, where_parameters, response):
+def get_qc_data(sql_string, where_parameters, response, station_id):
     with connection.cursor() as cursor:
 
         cursor.execute(sql_string, where_parameters)
@@ -7072,6 +7132,8 @@ def get_qc_data(sql_string, where_parameters, response):
             }
 
             response['results'].append(obj)
+
+        response['station_utc_offset'] = get_station_offset_min(station_id)
 
     return response
 
@@ -7262,3 +7324,59 @@ def save_synop_form(self, records_list, day, station_id, station_utc_offset):
     except Exception as e:
         logger.error(f"Task failed: {repr(e)}")
         raise e
+
+
+def convert_utc_to_offset(utc_dt, offset_minutes):
+    """
+    Convert a UTC datetime to a station's fixed UTC offset.
+
+    Accepts:
+        - A timezone-aware Python datetime
+        - An ISO 8601 datetime string
+        - None
+
+    Returns:
+        An ISO 8601 string in the station's local time,
+        or None if no datetime was provided.
+    """
+
+    # Handle missing datetime values gracefully.
+    if utc_dt is None:
+        return None
+
+    # If the input is a string, parse it into a Python datetime.
+    if isinstance(utc_dt, str):
+        utc_dt = datetime.fromisoformat(
+            utc_dt.replace("Z", "+00:00")
+        )
+
+    # Ensure the input is now a datetime object.
+    if not isinstance(utc_dt, datetime):
+        raise TypeError("utc_dt must be a datetime, ISO string, or None")
+
+    # If the datetime is naive, assume it represents UTC.
+    if utc_dt.tzinfo is None:
+        utc_dt = utc_dt.replace(tzinfo=timezone.utc)
+
+    # Create the station's fixed timezone offset.
+    target_tz = timezone(
+        timedelta(minutes=int(offset_minutes))
+    )
+
+    # Convert to station-local time and return an ISO string.
+    return utc_dt.astimezone(target_tz).isoformat()
+
+
+# convert offset minutes to hours in the str format UTC +4
+def convert_offset_min_to_hrs(offset_minutes):
+    hours = offset_minutes / 60
+    # Use :g format to drop unnecessary trailing zeros (e.g., +6 instead of +6.0, but +9.5 for floats)
+    sign = "+" if hours >= 0 else "-"
+    return f"UTC{sign}{abs(hours):g}"
+
+
+# get station utc offset minutes
+def get_station_offset_min(station_id):
+    station = Station.objects.get(id=int(station_id))
+    
+    return station.utc_offset_minutes

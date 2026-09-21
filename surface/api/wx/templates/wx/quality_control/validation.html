@@ -19,6 +19,19 @@
             ><br /><br />
           </div>
 
+          <!-- Notifying user that the time values entered must be in THE STATIONS LOCAL TIME -->
+          <div style="width: 50%;">
+              <v-alert
+                  type="info"
+                  dense
+                  outlined
+                  text
+                  color="purple"
+              >
+                Note: All dates and times entered must be in the selected <b>station's local time.</b>
+              </v-alert>
+          </div>
+
           <!-- main body -->
           <v-layout column fluid>
 
@@ -29,7 +42,7 @@
               <!-- Station filters -->
               <v-layout dense justify="start" class="mb-3">
                 <!-- Admin Region -->
-                <v-flex lg2 class="text-center">
+                <v-flex lg3 class="text-center">
                   <v-autocomplete
                     item-text="name"
                     item-value="name"
@@ -42,7 +55,7 @@
                 </v-flex>
 
                 <!-- watershed -->
-                <v-flex lg2 ml-3>
+                <v-flex lg3 ml-3>
                   <v-autocomplete
                     item-text="name"
                     item-value="name"
@@ -55,7 +68,7 @@
                 </v-flex>
 
                 <!-- profile -->
-                <v-flex lg2 ml-3 mr-5>
+                <v-flex lg3 ml-3 mr-5>
                   <v-autocomplete
                     item-text="name"
                     item-value="id"
@@ -78,14 +91,14 @@
                 </v-flex>
 
                 <!-- automatic toggle -->
-                <v-flex lg1 ml-5>
+                <!-- <v-flex lg1 ml-5>
                   <v-switch
                     v-model="filter.isAutomatic"
                     inset
                     @change="invertValue(filter.isAutomatic)"
                     label="Automatic"
                   ></v-switch>
-                </v-flex>
+                </v-flex> -->
 
               </v-layout>
 
@@ -112,13 +125,13 @@
                   required
                   hint="*Required"
                   persistent-hint
-                  @change="getStationVariables(currentSelection.stationId)"
+                  @change="getStationVariables(currentSelection.stationId); clear_output_table();"
                   :rules="simpleTextFieldsRules"
                   autocomplete="off"
                 ></v-autocomplete>
               </v-flex>
 
-              <!-- variable -->
+              <!-- variable select-->
               <v-flex pl-5 lg5>
                 <v-autocomplete
                   :items="variables"
@@ -130,6 +143,7 @@
                   hint="*Required"
                   persistent-hint
                   :disabled="!currentSelection.stationId"
+                  @change="clear_output_table();"
                   :rules="simpleTextFieldsRules"
                   autocomplete="off"
                 ></v-autocomplete>
@@ -268,10 +282,11 @@
               </v-alert>
             </v-layout>
 
+            <!-- bluk save btn -->
             <v-layout>
               <v-flex>
                 <v-btn
-                  v-if="selectedRows.length > 1"
+                  :disabled="selectedRows.length <= 1"
                   class="mt-5"
                   outlined
                   raised
@@ -373,7 +388,7 @@
                     </div>
 
                     <div>
-                      <span class="label-text">Final/Overall Quality Flag:</span>
+                      <span class="label-text">Overall AQC Quality Flag:</span>
                       <v-chip 
                         :color="paintFlag(aqcDetailsMetadata.final_flag)" 
                         style="color: white;"
@@ -420,19 +435,10 @@
               </v-card>
             </v-dialog>
 
+
             <!-- OUTPUT TABLE -->
             <v-layout column fluid fill-height>
               <v-flex sm12 md12 lg12 mt-5>
-
-                <v-btn
-                    class="ml-2"
-                    outlined
-                    color="purple"
-                    style="margin-bottom: 10px;"
-                >
-                    Time: Local
-                    <v-icon right dark>mdi-clock-outline</v-icon>
-                </v-btn>
 
                 <v-data-table
                   mt-5
@@ -536,7 +542,10 @@
         },
       },
       data: {
-        timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        surface_default_timezone: "{{ TIMEZONE_NAME|escapejs }}",
+        
+        selected_station_offset: null, // holds the selected stations utc offset in minutes
+
         variables: [],
 
         // Rows selected in v-data-table
@@ -658,7 +667,7 @@
         ],
         filter: {
           isActive: true,
-          isAutomatic: true
+          // isAutomatic: true
         },
         stations: [
           {% for station in station_list %}
@@ -669,6 +678,7 @@
             profile: "{{ station.profile.id | safe }}",
             is_automatic: {{ station.is_automatic | lower }},
             is_active: {{ station.is_active | lower }},
+            station_utc_offset: {{ station.utc_offset_minutes }},
           },
           {% endfor %}
         ],
@@ -693,10 +703,12 @@
         pollingInterval: null,
         pollingDelay: 1000,
       },
+
       computed: {
         baseURL() {
           return "/";
         },
+
 
         stationList () {
           let filteredStations = this.stations;
@@ -710,7 +722,7 @@
           if(this.filter.stationProfile)
             filteredStations = filteredStations.filter(station => station.profile == this.filter.stationProfile);
 
-          filteredStations = filteredStations.filter(station => this.filter.isAutomatic == station.is_automatic);
+          // filteredStations = filteredStations.filter(station => this.filter.isAutomatic == station.is_automatic);
 
           filteredStations = filteredStations.filter(station => this.filter.isActive == station.is_active);
 
@@ -719,6 +731,7 @@
           return filteredStations;
         }
       },
+
       methods: {
         getQualityFlags() {
           this.getAll(`api/quality_flags`).then((data) => {
@@ -743,7 +756,7 @@
         parsePatchParameters(item) {
           let params = "?station_id=" + item.station_id;
           params += "&variable_id=" + item.variable_id;
-          params += "&datetime=" + item.datetime;
+          params += "&datetime=" + item.datetime; // taking datetime in tz aware utc
 
           return params;
         },
@@ -771,9 +784,7 @@
           params +=
           "&start_date=" +
           this.formatDatetimeForRequest(
-            moment(
-              `${this.currentSelection.startDate} ${this.currentSelection.startTime}`
-            ).tz(this.timezone, true)
+            `${this.currentSelection.startDate} ${this.currentSelection.startTime}`
           );
 
           params +=
@@ -782,7 +793,7 @@
             `${this.currentSelection.endDate} ${this.currentSelection.endTime}`
           );
 
-          params += "&is_automatic=" + this.filter.isAutomatic;
+          // params += "&is_automatic=" + this.filter.isAutomatic;
 
           return params;
         },
@@ -832,19 +843,30 @@
         },
 
 
-        formatDatetimeForRequest(datetime) {
-          return moment(datetime)
-            .tz(this.timezone, true)
-            .utc()
-            .format("YYYY-MM-DDTHH:mm:ss[Z]");
+        clear_output_table() {
+          this.rawDataList = [];
         },
 
 
-        formatDatetimeForDataTable(datetime) {
+        formatDatetimeForRequest(datetime) {
+          if(this.currentSelection.stationId != null){
+
+            return moment.utc(datetime).format("YYYY-MM-DDTHH:mm:ss");
+
+          }
+          else {
+            console.error("Current Station Selection is null, cannot format datetime for request.")
+          }
+        },
+
+
+        formatDatetimeForDataTable(datetime, offset_min) {
+          if (!datetime) return "";
+              
           return moment
-            .utc(datetime)
-            .tz(this.timezone)
-            .format("YYYY-MM-DD HH:mm");
+              .utc(datetime)            // 1. Parse input strictly as UTC
+              .utcOffset(offset_min)    // 2. Shift time by offset_min
+              .format("YYYY-MM-DD HH:mm");
         },
 
 
@@ -889,7 +911,7 @@
             measured: item.measured,
             final_flag: item.automatic_flag,
             description: `
-                          The Final/Overall Quality Flag follows a worst-case priority: Bad overrides Suspicious, 
+                          The Overall AQC Quality Flag follows a worst-case priority: Bad overrides Suspicious, 
                           which overrides Good. Data is only flagged as 'Good' if all threshold 
                           checks pass.
                           `,
@@ -899,7 +921,7 @@
             params: {
               station_id: this.currentSelection.stationId,
               variable_id: this.currentSelection.variableId,
-              datetime: this.formatDatetimeForRequest(item.formated_datetime), // UTC aware string. The time must already be in UTC when sent back, as the time displayed is in the local timezone
+              datetime: item.datetime, // sending the utc time instead of the formatted time because this particular view requires tz aware utc values. This saves us from having to re translate the tz on the backend
             }
           })
           .then(res => {
@@ -975,14 +997,15 @@
                 // if polling was for a search action
                 if (this.searchAction) {
                   this.rawDataList = res.data.data.results.map((record) => {
+                    // Store the original editable values so we can detect later changes.
                     record["old"] = {
                       consisted: record.consisted,
                       manual_flag: record.manual_flag,
                       remarks: record.remarks,
                     };
-                    record["formated_datetime"] = this.formatDatetimeForDataTable(
-                      record.datetime
-                    );
+
+                    record["formated_datetime"] = this.formatDatetimeForDataTable(record.datetime, res.data.data.station_utc_offset);
+
                     return record;
                   });
 
@@ -991,6 +1014,8 @@
                 else if (this.savingBulk) {
                   this.savingBulk = false; // reset bulk save
                   this.doSearch(); // reload search
+
+                  return
                 }
                 // for regular single update operations
                 else if(this.updatingItem) {
@@ -1050,11 +1075,21 @@
           const stationId = urlParams.get('station_id')
           const variableId = urlParams.get('variable_id')
           const startDate = urlParams.get('start_date')
+          const startTime = urlParams.get('start_time')
           const endDate = urlParams.get('end_date')
+          const endTime = urlParams.get('end_time')
 
-          if(stationId != null && variableId != null && startDate != null && endDate != null ){
-            this.currentSelection.startDate = moment.utc(startDate).format('YYYY-MM-DD');
-            this.currentSelection.endDate = moment.utc(endDate).format('YYYY-MM-DD');
+          if(
+            stationId != null && variableId != null && 
+            startDate != null && endDate != null && 
+            startTime != null && endTime != null
+          ){
+            this.currentSelection.startDate = startDate;
+            this.currentSelection.endDate = endDate;
+            
+            this.currentSelection.startTime = startTime;
+            this.currentSelection.endTime = endTime;
+
             this.currentSelection.variableId = Number(variableId);
             this.currentSelection.stationId = Number(stationId);
 
@@ -1080,6 +1115,7 @@
           // Show dialog
           this.bulkDialog = true;
         },
+
 
         // Close dialog without saving
         closeBulkSave() {
@@ -1116,8 +1152,11 @@
             this.request_error_message = err?.response?.data?.message || "Bulk save request failed.";
           });
         },
+
       },
+
       mounted() {
+
         this.getQualityFlags();
         axios.defaults.xsrfHeaderName = "X-CSRFToken";
         axios.defaults.xsrfCookieName = "csrftoken";
@@ -1125,9 +1164,13 @@
         window.addEventListener("load", () => {
           this.setParamsAndRunQuery();
         });
+
       },
+
       beforeDestroy() {
+
         this.stopPolling();
+
       }
     });
   </script>

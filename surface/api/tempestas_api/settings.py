@@ -41,7 +41,7 @@ if len(SECRET_ENCRYPTION_KEY) != 44:
 CIPHER_SUITE = Fernet(SECRET_ENCRYPTION_KEY)  # Create a reusable cipher suite
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('SURFACE_DJANGO_DEBUG', 'False').lower() == 'true'
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
@@ -383,9 +383,10 @@ ENTL_SECONDARY_SERVER_HOST = os.getenv('ENTL_SECONDARY_SERVER_HOST')
 ENTL_SECONDARY_SERVER_PORT = os.getenv('ENTL_SECONDARY_SERVER_PORT')
 ENTL_PARTNER_ID = os.getenv('ENTL_PARTNER_ID')
 
-TIMEZONE_NAME = os.getenv('TIMEZONE_NAME')
 MISSING_VALUE = -99.9
 MISSING_VALUE_CODE = '/'
+
+TIMEZONE_NAME = os.getenv('TIMEZONE_NAME')
 TIMEZONE_OFFSET = int(os.getenv('TIMEZONE_OFFSET'))
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

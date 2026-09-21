@@ -8,7 +8,21 @@
     </div>
 
     <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
+        
         <v-app>
+            <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
+            <div style="width: 50%;" class="mb-5">
+                <v-alert
+                    type="info"
+                    dense
+                    outlined
+                    text
+                    color="purple"
+                >
+                    Note: All dates and times shown are in the selected <b>station's local time.</b>
+                </v-alert>
+            </div>
+
             <!-- station and date picker -->
             <form enctype="multipart/form-data" method="POST" class="mb-10">
                 {% csrf_token %}
@@ -78,7 +92,7 @@
             <div class="mt-5">
                 <!-- utc change button -->
                 <v-btn
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2"
                     outlined
                     color="info"
@@ -92,7 +106,7 @@
                 <!-- push to wis2box button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
                 <v-btn 
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     :disabled="!wis2PublishControl.publishing" 
                     @click="handlePushClick()" 
@@ -108,7 +122,7 @@
                 <!-- save button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
                 <v-btn 
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     :disabled="!(draft && valid)" 
                     outlined @click="updateData()" 
@@ -124,7 +138,7 @@
                 <!-- delete rows btn -->
                 {% if request|has_any_feature_permission:"synop-capture-form:delete" %}
                 <v-btn
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     :disabled="!hasSelection || loading"
                     outlined 
@@ -140,7 +154,7 @@
 
                 <!-- theme switch button -->
                 <v-btn
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2"
                     outlined
                     @click="toggleTheme"
@@ -151,32 +165,10 @@
                     <v-icon right dark>sync</v-icon>
                 </v-btn>
 
-                <!-- show graph button -->
-                <!--
-                <v-btn 
-                    v-show="!hideTable && !isBack"
-                    class="ml-2" 
-                    outlined 
-                    @click="nextSlide"
-                    class="btn-outline-default" 
-                    color="black"
-                    style="margin-bottom: 10px;"
-                > 
-                    Show Graph
-
-                    <v-icon
-                        right
-                        dark
-                    >
-                        timeline
-                    </v-icon>
-                </v-btn>
-                -->
-
                 <!-- export csv button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
                 <v-btn 
-                    v-show="!hideTable && !isBack"
+                    v-show="!hideTable"
                     class="ml-2" 
                     outlined 
                     @click="exportToCSV()"
@@ -194,26 +186,6 @@
                     </v-icon>
                 </v-btn>
                 {% endif %}
-
-                <!-- show graph back button -->
-                <v-btn 
-                    v-show="isBack"
-                    class="ml-2" 
-                    outlined 
-                    @click="nextSlide"
-                    class="btn-outline-default" 
-                    color="black"
-                    style="margin-bottom: 10px;"
-                > 
-                    <v-icon
-                        left
-                        dark
-                    >
-                        arrow_back
-                    </v-icon>
-
-                    Back
-                </v-btn>
 
             </div>
 
@@ -284,127 +256,41 @@
                 </v-card>
             </v-dialog>
 
-            <!-- in production dialog -->
-            <v-dialog
-                v-model="inProduction"
-                max-width="400"
+
+            <!-- ag grid -->
+            <!-- Synop table grid container -->
+            <!-- Non Sticky header -->
+            <ag-grid-vue
+                v-show="!hideTable"
+                :row-data="rowData"
+                :column-defs="colDefs"
+                :default-col-def="defaultColDef"
+                :grid-options="gridOptions"
+                style="width: 100%;"
+                :class="tableTheme"
+                @grid-ready="onGridReady"
+                @cell-editing-started="onCellEditingStarted"
+                @cell-editing-stopped="onCellEditingStopped"
+                dom-layout="autoHeight"
             >
-                <v-card>
-                    <v-card-title class="headline"> Alert! </v-card-title>
-                    
-                    <v-card-text style="color: red;">
-                        This feature is in production...
-                    </v-card-text>
+            </ag-grid-vue>
 
-                    <v-card-actions>
-                        <v-spacer></v-spacer>
-
-                        <v-btn text color="grey" @click="inProduction = false">
-                            Cancel
-                        </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
-
-
-            <v-carousel 
-                v-model="currentSlide" 
-                hide-delimiters
-                :show-arrows="false"
-                height="100%" 
+            <!-- Sticky header -->
+            <!-- <ag-grid-vue
+                v-show="!hideTable"
+                :row-data="rowData"
+                :column-defs="colDefs"
+                :default-col-def="defaultColDef"
+                :grid-options="gridOptions"
+                style="height: 100%;"
+                :class="tableTheme"
+                @grid-ready="onGridReady"
+                @cell-editing-started="onCellEditingStarted"
+                @cell-editing-stopped="onCellEditingStopped"
             >
-                <!-- ag grid -->
-                <v-carousel-item>
-
-                    <!-- Synop table grid container -->
-                    <!-- Non Sticky header -->
-                    <ag-grid-vue
-                        v-show="!hideTable"
-                        :row-data="rowData"
-                        :column-defs="colDefs"
-                        :default-col-def="defaultColDef"
-                        :grid-options="gridOptions"
-                        style="width: 100%;"
-                        :class="tableTheme"
-                        @grid-ready="onGridReady"
-                        @cell-editing-started="onCellEditingStarted"
-                        @cell-editing-stopped="onCellEditingStopped"
-                        dom-layout="autoHeight"
-                    >
-                    </ag-grid-vue>
-
-                    <!-- Sticky header -->
-                    <!-- <ag-grid-vue
-                        v-show="!hideTable"
-                        :row-data="rowData"
-                        :column-defs="colDefs"
-                        :default-col-def="defaultColDef"
-                        :grid-options="gridOptions"
-                        style="height: 100%;"
-                        :class="tableTheme"
-                        @grid-ready="onGridReady"
-                        @cell-editing-started="onCellEditingStarted"
-                        @cell-editing-stopped="onCellEditingStopped"
-                    >
-                    </ag-grid-vue> -->
+            </ag-grid-vue> -->
 
 
-                </v-carousel-item>
-
-                <!-- graph -->
-                <v-carousel-item>
-                    <!-- Overlay with Spinner -->
-                    <v-overlay v-show="" absolute opacity="0.3" style="border-radius: 4px;">
-                        <v-progress-circular indeterminate size="70"></v-progress-circular>
-                    </v-overlay>
-
-                    <!-- tab header titles -->
-                    <v-tabs 
-                        v-model="activeTab"
-                        show-arrows
-                        centered
-                        center-active
-                    >
-                        {% for item in ag_grid_config %}
-                            {% if item.var_type == 'numeric' %}
-                                <v-tab key="{{ item.id }}">
-                                    {{ item.name }}
-                                </v-tab>
-                            {% endif %}
-                        {% endfor %}
-                    </v-tabs>
-
-
-                    <!-- tab items -->
-                    <v-tabs-items 
-                        v-model="activeTab" 
-                        continuous
-                    >
-                        {% for item in ag_grid_config %}
-                            {% if item.var_type == 'numeric' %}
-                                <v-tab-item 
-                                    key="{{ item.id }}" 
-                                    class="mt-7"
-                                    eager
-                                    :transition="false"
-                                    :reverse-transition="false"
-                                >
-                                    <!-- graph heading -->
-                                    <div class="text-center">
-                                        <span class="srf-display-2 text-uppercase">{{ item.name }} Graph</span>
-                                    </div>
-
-                                    <!-- the graph -->
-                                    <div>
-                                        <highcharts :options="chartOptions"></highcharts>
-                                    </div>
-                                </v-tab-item>
-                            {% endif %}
-                        {% endfor %}
-                    </v-tabs-items>
-
-                </v-carousel-item>
-            </v-carousel>
 
         </v-app>
 
@@ -467,13 +353,15 @@
     // highchart for use with graph
     Vue.use(HighchartsVue.default);
 
-    // parse the offset string
+    // Parses offset strings like "11:00:00", "1 day, 11:00:00", or "-1 day, 11:00:00" into total minutes.
     function parseOffsetToMinutes(offsetStr) {
-        const match = offsetStr.match(/(-?\d+) day[s]?,\s*(\d{2}):(\d{2}):(\d{2})/);
+        if (!offsetStr || typeof offsetStr !== 'string') return 0;
+
+        const match = offsetStr.trim().match(/^(?:(-?\d+)\s*day[s]?,\s*)?(\d{1,2}):(\d{2}):(\d{2})$/);
 
         if (!match) return 0;
 
-        const days = parseInt(match[1], 10);
+        const days = match[1] ? parseInt(match[1], 10) : 0;
         const hours = parseInt(match[2], 10);
         const minutes = parseInt(match[3], 10);
 
@@ -493,7 +381,7 @@
         if (['SUM', 'AVG', 'MAX', 'MIN', 'STDDEV', 'COUNT'].includes(hour)) {
             return hour;
         }
-        
+
         if(timezoneChange == false)
         {
             const hr = parseInt(hour);
@@ -505,9 +393,9 @@
 
         // Convert hour string to integer
         const localHour = parseInt(hour);
-        
-        // Parse the timezoneDetails.offsetStr: e.g. "-1 day, 18:00:00"
-        const offsetMatch = timezoneDetails.offsetStr.match(/(-?\d+)\sday[s]?,\s(\d+):(\d+):(\d+)/);
+
+        // Parse the timezoneDetails.offsetStr: e.g. "-1 day, 18:00:00" or "18:00:00"
+        const offsetMatch = timezoneDetails.offsetStr.match(/(?:(-?\d+)\s*day[s]?,\s*)?(\d+):(\d+):(\d+)/);
 
         if (!offsetMatch) {
             console.error("Invalid timezone offset format:", timezoneDetails.offsetStr);
@@ -515,7 +403,7 @@
         }
 
         // Extract the components
-        const dayOffset = parseInt(offsetMatch[1]);
+        const dayOffset = offsetMatch[1] ? parseInt(offsetMatch[1], 10) : 0; // If match[1] exists, parse it; otherwise default to 0
         const hourOffset = parseInt(offsetMatch[2]);
         const minuteOffset = parseInt(offsetMatch[3]);
         const secondOffset = parseInt(offsetMatch[4]);
@@ -526,6 +414,7 @@
             minuteOffset * 60 +
             secondOffset) * 1000;
 
+
         // Create a date for today with the given hour (no minutes or seconds)
         const localDate = new Date();
         localDate.setUTCHours(localHour, 0, 0, 0);
@@ -534,8 +423,17 @@
         const utcDate = new Date(localDate.getTime() - totalOffsetMs);
 
         // Format to 24hr string, padded if needed
-        const utcHour = utcDate.getUTCHours().toString().padStart(2, '0');
-        return `${utcHour}:00 UTC`;
+        const utcHour = utcDate
+            .getUTCHours()
+            .toString()
+            .padStart(2, '0');
+
+        const utcMinute = utcDate
+            .getUTCMinutes()
+            .toString()
+            .padStart(2, '0');
+
+        return `${utcHour}:${utcMinute} UTC`;
     };
 
 
@@ -816,9 +714,7 @@
                             // send a request back to the server to retrieve the 24-hour difference
                             axios.post(calc_precip_url, {
                                 date: rowDatetime,
-                                // in the past the current precip value was also sent back to the view to include in the total sum
-                                // this has now been stopped. the code below is the legacy implementation of that:
-                                // precipitation_value: rowData['0']
+                                precipitation_value: rowData['0'] // note that '0' is the variable id
                             })
                             .then(response => {
                                 if (typeof(response.data.dataset) === 'number'){
@@ -930,9 +826,6 @@
             data() {
                 return {
                     statistics: null,
-                    activeTab: 0,
-                    isBack: false, // control for the carousel
-                    currentSlide: 0,
                     snackbar: { show: false, message: '', color: '' },
                     hideTable: true,
                     colDefs: columnDefinitions,
@@ -946,7 +839,6 @@
                     valid: false,
                     datepicker_menu: false,
                     textFieldsRules: [v => (v !== undefined && v !== "") || "This field is required"],
-                    now: moment.utc().add(timezoneDetails.offsetMinutes, 'minutes').format('YYYY-MM-DD'),
                     loading: false,
                     requestedData: {},
                     // AG GRID DATA
@@ -1116,7 +1008,6 @@
                     selectedCount: 0,
                     confirmDeleteDialog: false,
                     pendingDeleteHours: [],
-                    inProduction: false,
                     useUTC: false,
 
                     editorListeners: new Map(), // Map to track active editor listeners (keyed by "rowIndex-colId")
@@ -1546,6 +1437,16 @@
                     return this.now >= date;
                 },
 
+                // calculates allowed dates
+                allowedDates(date) {
+                    const currentDate = moment
+                        .utc()
+                        .utcOffset(timezoneDetails.offsetMinutes)
+                        .format('YYYY-MM-DD');
+
+                    return date <= currentDate;
+                },
+
 
                 // clears previous data in the table and preps it to recieve new data
                 resetData(){
@@ -1730,7 +1631,12 @@
                         'YYYY-MM-DD HH:mm'
                     ).utcOffset(timezoneDetails.offsetMinutes, true);
 
-                    const nowMoment = moment.utc().utcOffset(timezoneDetails.offsetMinutes);
+                    // allow for saving 15 min before the intended time
+                    // eg: data for 1400 can be saved at 1345
+                    const nowMoment = moment
+                        .utc()
+                        .utcOffset(timezoneDetails.offsetMinutes)
+                        .add(15, 'minutes');
 
                     if (rowMoment.isAfter(nowMoment)) {
                         return 'Cannot edit future times';
@@ -1790,18 +1696,6 @@
 
                     // 5) Mark draft + update validity
                     this.markAsDraft();
-                },
-
-
-                // next slide control for the carousel
-                nextSlide() {              
-                    this.isBack = !this.isBack; // update the control var
-                    this.currentSlide = (this.currentSlide + 1) % 2; // update the carousel
-
-                    // if the user hits the back button don't attempt to fetch station publish logs
-                    if (!this.isBack) {
-                        return
-                    }
                 },
 
 
@@ -2082,13 +1976,6 @@
                     this.tableTheme === 'ag-theme-quartz'
                         ? 'ag-theme-balham'
                         : 'ag-theme-quartz';
-                },
-
-
-                // for production show dialog
-                showProduction() {
-                    // open confirmation dialog
-                    this.inProduction = true;
                 },
                 
                 

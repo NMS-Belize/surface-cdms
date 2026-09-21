@@ -59,6 +59,12 @@ urlpatterns = [
     # ----------- #
     # Django views (template-rendered pages for human users)
     
+
+    # Station Map Pages (default page)
+    path('', views.StationsMapView.as_view(), name='stations-map'),
+    path('wx/stations/map/', views.StationsMapView.as_view(), name='stations-map'),
+
+    
     # Permission Management Page
     path('wx/permissions/', views.ManagePermissionsView.as_view(), name='manage-permissions'),
     path('api/groups/', views.GroupsInfo.as_view(), name="groups-info"),
@@ -67,6 +73,7 @@ urlpatterns = [
     path("api/permission_pages/", views.PermissionPagesInfo.as_view(), name="permission-pages-info"),
     path("api/groups/<int:group_id>/page_access/", views.GroupPageAccessView.as_view(), name="group-page-access"),
     
+
     # Configuration / Settings Page
     path('wx/settings/', views.ConfigurationSettingsView.as_view(), name='configuration-settings'),
     path('wx/settings/spatial/files/', views.UploadOrDeleteSpatialFilesView.as_view(), name='upload-document'),
@@ -74,11 +81,6 @@ urlpatterns = [
     path("wx/settings/organization-logo/", views.OrganizationLogoDetailsView.as_view(),name="organization_logo_details",),
     path("wx/settings/organization-logo/update/", views.UploadOrDeleteOrganizationLogoView.as_view(),name="upload_or_delete_organization_logo",),
     path("wx/settings/organization-logo/download/<str:key>/", views.DownloadOrganizationLogoView.as_view(), name="download_organization_logo",),
-
-
-    # Station Map Pages (default page)
-    path('', views.StationsMapView.as_view(), name='stations-map'),
-    path('wx/stations/map/', views.StationsMapView.as_view(), name='stations-map'),
     
 
     # Placeholder pages
@@ -87,7 +89,7 @@ urlpatterns = [
     path('not-auth', views.NotAuthView.as_view(), name='not-auth'),
 
 
-    # Station Create Page
+    # Stations Page
     path('wx/stations/', views.StationListView.as_view(), name='stations-list'),
     path('wx/stations/create/', views.StationCreate.as_view(), name='station-create'),
     path('wx/stations/<int:pk>/', views.StationDetailView.as_view(), name='station-detail'),
@@ -212,9 +214,10 @@ urlpatterns = [
 
     # Data Validation Page
     path('wx/quality_control/validation/', views.QualityControlView.as_view(), name='quality-control'),
-    path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
     path('api/quality_control/', views.qc_list, name='get-update-quality-control'),
+    path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
     path('api/quality_control/bulksave/', views.qc_validate_bulk, name='bulk-update-quality-control'),
+    
     path('wx/quality_control/update_reference_station/', views.update_reference_station, name='update-threshold-reference-station'), # this is used for Range, Step & Persist Threshold   
     path('wx/quality_control/global_threshold/update/', views.update_global_threshold, name='update-global-threshold'), # this is used for Range, Step & Persist Threshold  
 
