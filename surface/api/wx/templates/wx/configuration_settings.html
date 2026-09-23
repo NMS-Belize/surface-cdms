@@ -300,6 +300,13 @@
             <div class="synop-actions">
 
               <button
+                class="btn btn-success synop-action-button"
+                @click="goToSynopForm"
+              >
+                View Capture Form
+              </button>
+
+              <button
                 class="btn btn-ghost synop-action-button"
                 :disabled="!synopDirty || synopSaving"
                 @click="resetSynopOrder"
@@ -539,6 +546,10 @@
 
       mounted() {
         this.getOrganizationLogoDetails();
+
+        window.addEventListener("load", () => {
+          this.setParams();
+        });
       },
 
       methods: {
@@ -937,6 +948,25 @@
           }
         },
 
+        // Go to the synop form
+        goToSynopForm(){
+          const url = `/wx/reports/synop/capture`;
+          window.open(url, '_self');
+        },
+
+        // handle URLs that are passed with data
+        setParams() {
+          const paramString = window.location.search;
+          const urlParams = new URLSearchParams(paramString);
+
+          const settings_tab = urlParams.get('tab')
+          
+          if(settings_tab != null)
+          {
+            this.tab = Number(settings_tab);
+          }
+        },
+
       }
 
     });
@@ -1107,6 +1137,20 @@
     font-weight: 600;
     font-size: 10px;
     transition: all 0.25s ease;
+  }
+
+  /* success (Vuetify 2 default) */
+  .btn-success {
+    background-color: #4caf50;
+    color: white;
+  }
+  .btn-success:hover {
+    background-color: #388e3c;
+    color: #fff;
+  }
+  .btn-success:focus {
+    background-color: #4caf50;
+    color: white;
   }
 
   /* Upload = Primary (blue) */

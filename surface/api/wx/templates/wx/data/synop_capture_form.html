@@ -103,21 +103,34 @@
                     <v-icon right dark>mdi-clock-outline</v-icon>
                 </v-btn>
 
-                <!-- push to wis2box button -->
-                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
-                <v-btn 
+                <!-- go to the configuration page for the synop form -->
+                {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                <v-btn
                     v-show="!hideTable"
                     class="ml-2" 
-                    :disabled="!wis2PublishControl.publishing" 
-                    @click="handlePushClick()" 
-                    class="" 
-                    color="success"
+                    outlined 
+                    @click="goToConfigSynopForm" 
+                    class="btn-outline-default"
+                    color="purple"
                     style="margin-bottom: 10px;"
-                > 
-                    Push to WIS2
-                    <v-icon right dark>send</v-icon>
+                >
+                    Configure Synop Form
+                    <v-icon right dark>mdi-settings</v-icon>
                 </v-btn>
                 {% endif %}
+
+                <!-- theme switch button -->
+                <!-- <v-btn
+                    v-show="!hideTable"
+                    class="ml-2"
+                    outlined
+                    @click="toggleTheme"
+                    color="purple"
+                    style="margin-bottom: 10px;"
+                >
+                    Table Style
+                    <v-icon right dark>sync</v-icon>
+                </v-btn> -->
 
                 <!-- save button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
@@ -152,18 +165,21 @@
                 </v-btn>
                 {% endif %}
 
-                <!-- theme switch button -->
-                <v-btn
+                <!-- push to wis2box button -->
+                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                <v-btn 
                     v-show="!hideTable"
-                    class="ml-2"
-                    outlined
-                    @click="toggleTheme"
-                    color="purple"
+                    class="ml-2" 
+                    :disabled="!wis2PublishControl.publishing" 
+                    @click="handlePushClick()" 
+                    class="" 
+                    color="success"
                     style="margin-bottom: 10px;"
-                >
-                    Table Style
-                    <v-icon right dark>sync</v-icon>
+                > 
+                    Push to WIS2
+                    <v-icon right dark>send</v-icon>
                 </v-btn>
+                {% endif %}
 
                 <!-- export csv button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
@@ -230,10 +246,7 @@
             </v-dialog>  
 
             <!-- deletion confirmation dialog -->
-            <v-dialog
-                v-model="confirmDeleteDialog"
-                max-width="400"
-            >
+            <v-dialog v-model="confirmDeleteDialog" max-width="400">
                 <v-card>
                     <v-card-title class="headline"> Confirm Deletion </v-card-title>
                     
@@ -915,23 +928,28 @@
                 return {
                     statistics: null,
                     snackbar: { show: false, message: '', color: '' },
+                    
                     hideTable: true,
                     colDefs: columnDefinitions,
                     stationList: stationArr, 
+
                     requestData: {
                         date: "{{date|safe}}",
                         stationId: {{ station_id }},
                         interval: 3600
-                    }, 
+                    },
+
                     draft: false,
                     valid: false,
                     datepicker_menu: false,
                     textFieldsRules: [v => (v !== undefined && v !== "") || "This field is required"],
                     loading: false,
                     requestedData: {},
+
                     // AG GRID DATA
                     // Possible themes: (**can append '-dark' to any option) [ag-theme-quartz, ag-theme-balham, ag-theme-material]
                     tableTheme: "ag-theme-balham",
+
                     // grid settings as a whole
                     gridOptions: {
                         suppressMenuHide: true,       // keeps menu icon always visible
@@ -955,7 +973,6 @@
                             markAsDraft: this.markAsDraft.bind(this),
                         },
 
-                    
                         onCellEditingStopped: this.onCellEditingStopped, // wire up the editing hook:
                         rowSelection:"multiple",
                         onSelectionChanged: this.onSelectionChanged, // tell us whenever selection changes
@@ -1119,6 +1136,12 @@
                 };
             },
             methods: {
+
+                //go to synop table configuration page
+                goToConfigSynopForm(){
+                const url = `/wx/settings?tab=2`; // 2 is the synop table configuration tab.
+                window.open(url, '_self');
+                },
 
                 // control for the push now btn in the table
                 handlePushClick() {
@@ -1530,6 +1553,7 @@
                     return this.now >= date;
                 },
 
+                
                 // calculates allowed dates
                 allowedDates(date) {
                     const currentDate = moment
