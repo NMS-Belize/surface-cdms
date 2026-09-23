@@ -74,7 +74,8 @@ from wx.decoders.f2000 import validate_structure as f2000_structure_check
 from wx.forms import StationForm
 from wx.permissions import IsSuperUser
 from wx.models import AdministrativeRegion, StationFile, Decoder, QualityFlag, DataFile, DataFileStation, \
-    DataFileVariable, StationImage, WMOStationType, WMORegion, WMOProgram, StationCommunication, CombineDataFile, ManualStationDataFile
+    DataFileVariable, StationImage, WMOStationType, WMORegion, WMOProgram, StationCommunication, CombineDataFile, \
+    ManualStationDataFile, SynopTableConfiguration
 from wx.models import Country, Unit, Station, Variable, DataSource, StationVariable, StationDataFileStatus,\
     StationProfile, Document, Watershed, Interval, CountryISOCode, Wis2BoxPublish, Wis2PublishOffset, LocalWisCredentials, RegionalWisCredentials,  Wis2BoxPublishLogs, Crop, Soil
 from wx.utils import get_altitude, get_watershed, get_interpolation_image, parse_float_value, \
@@ -11509,15 +11510,27 @@ def get_synop_capture_config():
     #     500, 200
     # ]
 
-    # variable symbols group in order of the physical synop entry form
-    variable_symbols = [
-        'PRECIND', 'LOWCLHFt', 'VISBY-km',
-        'CLDTOT', 'WNDDIR', 'WNDSPD', 'TEMP', 'TDEWPNT', 'TEMPWB',
-        'RH', 'PRESSTN', 'PRESSEA', 'BAR24C', 'PRECIP', 'PREC24H', 'PRECDUR', 'PRSWX',
-        'W1', 'W2', 'Nh', 'CL', 'CM', 'CH', 'STSKY',
-        'DL', 'DM', 'DH', 'TEMPMAX', 'TEMPMIN', 'N1', 'C1', 'hhFt1',
-        'N2', 'C2', 'hhFt2', 'N3', 'C3', 'hhFt3', 'N4', 'C4', 'hhFt4', 'SpPhenom'
-    ]
+    # Get the table order (controlled by var symbol) from the DB
+    config = (
+        SynopTableConfiguration.objects
+        .select_related('variable')
+        .order_by('order')
+    )
+
+    variable_symbols = [item.variable.symbol for item in config]
+
+    # if no order present in table use the default.
+    if not variable_symbols:
+
+        # variable symbols group in order of the physical synop entry form
+        variable_symbols = [
+            'PRECIND', 'LOWCLHFt', 'VISBY-km',
+            'CLDTOT', 'WNDDIR', 'WNDSPD', 'TEMP', 'TDEWPNT', 'TEMPWB',
+            'RH', 'PRESSTN', 'PRESSEA', 'BAR24C', 'PRECIP', 'PREC24H', 'PRECDUR', 'PRSWX',
+            'W1', 'W2', 'Nh', 'CL', 'CM', 'CH', 'STSKY',
+            'DL', 'DM', 'DH', 'TEMPMAX', 'TEMPMIN', 'N1', 'C1', 'hhFt1',
+            'N2', 'C2', 'hhFt2', 'N3', 'C3', 'hhFt3', 'N4', 'C4', 'hhFt4', 'SpPhenom'
+        ]
 
     col_widths = [
         110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 
@@ -12361,6 +12374,56 @@ SPATIAL_SHAPE_FILES = {
 ALLOWED_EXTENSIONS = {".png", ".geojson"}
 
 
+@method_decorator(wx_mapped_permission_required, name="dispatch")
+@method_decorator(require_http_methods(['POST']), name='dispatch')
+class SaveSynopOrderView(WxPermissionRequiredMixin, LoginRequiredMixin, View):
+    def post(self, request):
+        try:
+            payload = json.loads(request.body)
+
+            rows = payload['variables']
+
+            if not isinstance(rows, list) or not rows:
+                raise ValueError('Expected a non-empty variables array')
+
+            ids = [row['variable_id'] for row in rows]
+
+            orders = [row['order'] for row in rows]
+
+            if any(type(value) is not int or value < 0 for value in ids):
+                raise ValueError('Invalid variable ID')
+
+            if len(set(ids)) != len(ids):
+                raise ValueError('Duplicate variable IDs')
+
+            if orders != list(range(1, len(rows) + 1)):
+                raise ValueError('Order must be consecutive, beginning at 1')
+
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return JsonResponse({'success': False, 'message': 'Invalid SYNOP order payload'}, status=400)
+
+        with transaction.atomic():
+            configured_ids = set(
+                SynopTableConfiguration.objects.values_list('variable_id', flat=True)
+            )
+
+            if set(ids) != configured_ids:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'SYNOP configuration changed. Reload the page before saving.',
+                }, status=409)
+
+            # Delete + insert is one atomic operation; any insert failure rolls back.
+            SynopTableConfiguration.objects.all().delete()
+            
+            SynopTableConfiguration.objects.bulk_create([
+                SynopTableConfiguration(variable_id=variable_id, order=i + 1)
+                for i, variable_id in enumerate(ids)
+            ])
+
+        return JsonResponse({'success': True})
+
+
 def stat_file_info(path):
     """Return dict with existence and mtime string for template use"""
     if os.path.exists(path) and os.path.isfile(path):
@@ -12407,7 +12470,24 @@ class ConfigurationSettingsView(WxPermissionRequiredMixin, LoginRequiredMixin,  
             )
 
         ctx = super().get_context_data(**kwargs)
+
         ctx["options_json"] = json.dumps(options)
+
+        # get synop form order:
+        ctx["synop_variables"] = [
+            {
+                "variable_id": row.variable_id,
+                "symbol": row.variable.symbol,
+                "name": row.variable.name,
+                "order": row.order,
+            }
+            for row in (
+                SynopTableConfiguration.objects
+                .select_related("variable")
+                .order_by("order", "pk")
+            )
+        ]
+
         return ctx
 
 

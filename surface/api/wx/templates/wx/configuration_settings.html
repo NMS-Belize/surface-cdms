@@ -11,240 +11,413 @@
 
   <div id="app" class="srf-flex justify-content-between srf-padding" v-cloak>
 
-    <!-- ================================================================================================== -->
-    <!-- ================================================================================================== -->
+    <!-- tab headers -->
+    <v-tabs v-model="tab">
+      <v-tabs-slider color="blue"></v-tabs-slider>
 
-    <!-- shapefile management -->
-    <header>
-      <h5>Shapefile Mangement</h5>
-      <p style="font-size: 16px;">
-        Manage spatial overlays used throughout the system. View, replace, or remove 
-        shapefiles such as administrative regions, rivers, groundwater, and national waters.
-      </p>
+      <!-- v-tab names -->
+      <v-tab>
+        <v-icon left> mdi-office-building </v-icon> Organization Logo
+      </v-tab>
 
-      <p style="color: red;">Size limit: 15.00 MB for each file.</p>
-    </header>
+      <v-tab>
+        <v-icon left> mdi-map-legend </v-icon> Shapefile Mangement
+      </v-tab>
 
-    <!-- Cards grid -->
-    <section class="cards-grid">
-      <article class="doc-card" v-for="(opt, idx) in options" :key="opt.key">
-        <!-- header -->
-        <div class="card-top">
-          <div class="card-title">
-            <div class="title">[[ opt.label ]]</div>
-            <div class="desc">[[ opt.description ]]</div>
-          </div>
+      <v-tab>
+        <v-icon left> mdi-keyboard </v-icon> SYNOP Table Configuration
+      </v-tab>
+    </v-tabs>
 
-          <!-- present or missing pill -->
-          <div class="status-pill" :class="{ present: opt.hasFile, missing: !opt.hasFile }">
-            <!-- tick mark if file is present -->
-            <i v-if="opt.hasFile" class="material-icons-outlined">check_circle</i>
-            <!-- alert indicator if file is missing -->
-            <i v-else class="material-icons-outlined">error</i>
+    <!-- tab items/content -->
+    <v-tabs-items v-model="tab">
 
-            <span class="status-text" v-if="opt.hasFile">Present</span>
-            <span class="status-text" v-else>Missing</span>
-          </div>
+      <!-- Organization Logo content -->
+      <v-tab-item>
+        <div class="config-tab-content">
+          <header>
+            <p>
+              View, replace, or remove organization logo used in reports and displayed throughout SURFACE.
+            </p>
+
+            <p style="color: red;">Size limit: 15.00 MB. PNG only.</p>
+          </header>
+
+          <section class="cards-grid">
+            <article class="doc-card">
+              <!-- header -->
+              <div class="card-top">
+                <div class="card-title">
+                  <div class="title">Organization Logo</div>
+                  <div class="desc">
+                    Upload the organization logo that will be used throughout SURFACE and in generated reports.
+                  </div>
+                </div>
+
+                <div class="status-pill" :class="{ present: logo.hasFile, missing: !logo.hasFile }">
+                  <i v-if="logo.hasFile" class="material-icons-outlined">check_circle</i>
+                  <i v-else class="material-icons-outlined">error</i>
+
+                  <span class="status-text" v-if="logo.hasFile">Present</span>
+                  <span class="status-text" v-else>Missing</span>
+                </div>
+              </div>
+
+              <!-- body -->
+              <div class="card-body">
+                <div v-if="logo.hasFile" class="file-info">
+                  <div class="filename" style="color: rgb(64, 130, 246);">[[ logo.filename ]]</div>
+                  <div class="meta">Uploaded on [[ logo.uploadDate || '—' ]]</div>
+
+                  <div v-if="logo.previewUrl" style="margin-top: 14px;">
+                    <img
+                      :src="logo.previewUrl"
+                      alt="Organization logo"
+                      style="max-width: 220px; max-height: 120px; object-fit: contain; border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fff;"
+                    />
+                  </div>
+                </div>
+
+                <div v-else class="no-file">
+                  <div class="placeholder-icon" aria-hidden="true">
+                    <svg width="48" height="48" viewBox="0 0 24 24">
+                      <path fill="#4b4b4b" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                      <circle fill="orange" cx="8.5" cy="8.5" r="1.5"/>
+                      <path fill="orange" d="M21 15l-5-5L5 21h14c1.1 0 2-.9 2-2v-4z"/>
+                    </svg>
+                  </div>
+                  <div class="orange-muted">No logo uploaded.</div>
+                </div>
+              </div>
+
+              <!-- actions -->
+              <div class="card-actions">
+                <div class="actions-left">
+                  {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                  <label for="organization-logo-file" class="btn btn-upload" :class="{ disabled: logoUploading }">
+                    <span v-if="!logoUploading">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </label>
+
+                  <input
+                    id="organization-logo-file"
+                    type="file"
+                    accept=".png"
+                    :disabled="logoUploading"
+                    @change="uploadLogo"
+                  />
+                  {% endif %}
+
+                  {% if request|has_any_feature_permission:"configuration-settings:delete" %}
+                  <button
+                    class="btn btn-delete"
+                    :disabled="!logo.hasFile || logoDeleting"
+                    @click="deleteLogo"
+                  >
+                    <span v-if="!logoDeleting">Delete</span>
+                    <span v-else>Deleting…</span>
+                  </button>
+                  {% endif %}
+
+                  {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                  <a
+                    v-if="logo.hasFile"
+                    :href="`/wx/settings/organization-logo/download/${logo.key}/`"
+                    target="_blank"
+                    rel="noopener"
+                    class="btn btn-ghost"
+                  >
+                    Download
+                  </a>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          </section>
         </div>
+      </v-tab-item>
+      
+      <!-- Shapefile content -->
+      <v-tab-item>
+        <div class="config-tab-content">
+          <header>
+            <p>
+              Manage spatial overlays used throughout the system. View, replace, or remove 
+              shapefiles such as administrative regions, rivers, groundwater, and national waters.
+            </p>
+            
+            <p style="color: red;">Size limit: 15.00 MB for each file.</p>
+          </header>
+          
+          <!-- shapefile management -->
+          <!-- Cards grid -->
+          <section class="cards-grid">
+            <article class="doc-card" v-for="(opt, idx) in options" :key="opt.key">
+              <!-- header -->
+              <div class="card-top">
+                <div class="card-title">
+                  <div class="title">[[ opt.label ]]</div>
+                  <div class="desc">[[ opt.description ]]</div>
+                </div>
 
-        <!-- body -->
-        <div class="card-body">
-          <div v-if="opt.hasFile" class="file-info">
-            <div class="filename" style="color: rgb(64, 130, 246);">[[ opt.filename ]]</div>
-            <div class="meta">Uploaded on [[ opt.uploadDate || '—' ]]</div>
-          </div>
+                <!-- present or missing pill -->
+                <div class="status-pill" :class="{ present: opt.hasFile, missing: !opt.hasFile }">
+                  <!-- tick mark if file is present -->
+                  <i v-if="opt.hasFile" class="material-icons-outlined">check_circle</i>
+                  <!-- alert indicator if file is missing -->
+                  <i v-else class="material-icons-outlined">error</i>
 
-          <div v-else class="no-file">
-            <div class="placeholder-icon" aria-hidden="true">
-              <svg width="48" height="48" viewBox="0 0 24 24">
-                <path fill="#4b4b4b" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <path fill="orange" d="M14 2v6h6"/>
-              </svg>
+                  <span class="status-text" v-if="opt.hasFile">Present</span>
+                  <span class="status-text" v-else>Missing</span>
+                </div>
+              </div>
+
+              <!-- body -->
+              <div class="card-body">
+                <div v-if="opt.hasFile" class="file-info">
+                  <div class="filename" style="color: rgb(64, 130, 246);">[[ opt.filename ]]</div>
+                  <div class="meta">Uploaded on [[ opt.uploadDate || '—' ]]</div>
+                </div>
+
+                <div v-else class="no-file">
+                  <div class="placeholder-icon" aria-hidden="true">
+                    <svg width="48" height="48" viewBox="0 0 24 24">
+                      <path fill="#4b4b4b" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <path fill="orange" d="M14 2v6h6"/>
+                    </svg>
+                  </div>
+                  <div class="orange-muted">No file uploaded.</div>
+                </div>
+              </div>
+
+              <!-- actions -->
+              <div class="card-actions">
+                <div class="actions-left">
+                  {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                  <!-- Upload / Replace Input -->
+                  <label :for="'file-' + idx" class="btn btn-upload" :class="{ disabled: isUploading(idx) }">
+                    <span v-if="!isUploading(idx)">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </label>
+                  <!-- restrict accepted types to what ALLOWED_EXTENSIONS contains -->
+                  <input
+                    :id="'file-' + idx"
+                    type="file"
+                    :accept="opt.key === 'shape' ? '.png' : '.geojson'"
+                    :disabled="isUploading(idx)"
+                    @change="uploadFile($event, opt, idx)" 
+                  />
+                  {% endif %}
+
+
+                  {% if request|has_any_feature_permission:"configuration-settings:delete" %}
+                  <!-- delete btn -->
+                  <button class="btn btn-delete" 
+                    :disabled="!opt.hasFile || isDeleting(idx)"
+                    @click="openDeleteModal(opt, idx)"
+                  >
+                    <span v-if="!isDeleting(idx)">Delete</span>
+                    <span v-else>Deleting…</span>
+                  </button>
+                  {% endif %}
+
+                  {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                  <!-- dowload btn -->
+                  <a
+                    v-if="opt.hasFile"
+                    :href="`/wx/settings/spatial/files/download/${opt.key}/`"
+                    target="_blank"
+                    rel="noopener"
+                    class="btn btn-ghost"
+                  >
+                    Download
+                  </a>
+                  {% endif %}
+
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <!-- spatial Delete confirmation modal -->
+          <div v-if="deleteModalVisible" class="modal-backdrop" @keydown.esc="cancelDelete" tabindex="-1">
+            <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm delete">
+              <div class="modal-header">
+                <h3>Confirm deletion</h3>
+              </div>
+
+              <div class="modal-body">
+                <p>Are you sure you want to delete <strong>[[ deleteTarget?.label ]]</strong> (<em>[[ deleteTarget?.description ]]</em>)?</p>
+                <p class="muted">This will permanently remove the file.</p>
+              </div>
+
+              <div class="modal-actions">
+                <button class="btn btn-ghost" @click="cancelDelete">Cancel</button>
+                <button class="btn btn-delete" @click="confirmDelete" :disabled="isDeleting(deleteTargetIdx)">
+                  <span v-if="!isDeleting(deleteTargetIdx)">Delete</span>
+                  <span v-else>Deleting…</span>
+                </button>
+              </div>
             </div>
-            <div class="orange-muted">No file uploaded.</div>
           </div>
         </div>
+      </v-tab-item>
 
-        <!-- actions -->
-        <div class="card-actions">
-          <div class="actions-left">
-            {% if request|has_any_feature_permission:"configuration-settings:write" %}
-            <!-- Upload / Replace Input -->
-            <label :for="'file-' + idx" class="btn btn-upload" :class="{ disabled: isUploading(idx) }">
-              <span v-if="!isUploading(idx)">Upload</span>
-              <span v-else>Uploading…</span>
-            </label>
-            <!-- restrict accepted types to what ALLOWED_EXTENSIONS contains -->
-            <input
-              :id="'file-' + idx"
-              type="file"
-              :accept="opt.key === 'shape' ? '.png' : '.geojson'"
-              :disabled="isUploading(idx)"
-              @change="uploadFile($event, opt, idx)" 
-            />
-            {% endif %}
+      <!-- SYNOP configuration content -->
+      <v-tab-item>
+        <div class="config-tab-content">
+          <!-- SYNOP Table Configuration -->
+          <header>
+            <p>
+              Configure the order in which variables appear in the SYNOP table.
+              Drag variables to reorder them, or select a position directly.
+            </p>
+          </header>
 
+          <div class="synop-config">
 
-            {% if request|has_any_feature_permission:"configuration-settings:delete" %}
-            <!-- delete btn -->
-            <button class="btn btn-delete" 
-              :disabled="!opt.hasFile || isDeleting(idx)"
-              @click="openDeleteModal(opt, idx)"
-            >
-              <span v-if="!isDeleting(idx)">Delete</span>
-              <span v-else>Deleting…</span>
-            </button>
-            {% endif %}
-
-            {% if request|has_any_feature_permission:"configuration-settings:write" %}
-            <!-- dowload btn -->
-            <a
-              v-if="opt.hasFile"
-              :href="`/wx/settings/spatial/files/download/${opt.key}/`"
-              target="_blank"
-              rel="noopener"
-              class="btn btn-ghost"
-            >
-              Download
-            </a>
-            {% endif %}
-
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <!-- spatial Delete confirmation modal -->
-    <div v-if="deleteModalVisible" class="modal-backdrop" @keydown.esc="cancelDelete" tabindex="-1">
-      <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Confirm delete">
-        <div class="modal-header">
-          <h3>Confirm deletion</h3>
-        </div>
-
-        <div class="modal-body">
-          <p>Are you sure you want to delete <strong>[[ deleteTarget?.label ]]</strong> (<em>[[ deleteTarget?.description ]]</em>)?</p>
-          <p class="muted">This will permanently remove the file.</p>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn btn-ghost" @click="cancelDelete">Cancel</button>
-          <button class="btn btn-delete" @click="confirmDelete" :disabled="isDeleting(deleteTargetIdx)">
-            <span v-if="!isDeleting(deleteTargetIdx)">Delete</span>
-            <span v-else>Deleting…</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ================================================================================================== -->
-    <!-- ================================================================================================== -->
-
-    <v-divider class="my-6 custom-divider"></v-divider>
-
-    <!-- ================================================================================================== -->
-    <!-- ================================================================================================== -->
-
-    <!-- Organization Logo -->
-    <header>
-      <h5>Organization Logo</h5>
-      <p style="font-size: 16px;">
-        View, replace, or remove organization logo used in reports and displayed throughout SURFACE.
-      </p>
-
-      <p style="color: red;">Size limit: 15.00 MB. PNG only.</p>
-    </header>
-
-    <section class="cards-grid">
-      <article class="doc-card">
-        <!-- header -->
-        <div class="card-top">
-          <div class="card-title">
-            <div class="title">Organization Logo</div>
-            <div class="desc">
-              Upload the organization logo that will be used throughout SURFACE and in generated reports.
-            </div>
-          </div>
-
-          <div class="status-pill" :class="{ present: logo.hasFile, missing: !logo.hasFile }">
-            <i v-if="logo.hasFile" class="material-icons-outlined">check_circle</i>
-            <i v-else class="material-icons-outlined">error</i>
-
-            <span class="status-text" v-if="logo.hasFile">Present</span>
-            <span class="status-text" v-else>Missing</span>
-          </div>
-        </div>
-
-        <!-- body -->
-        <div class="card-body">
-          <div v-if="logo.hasFile" class="file-info">
-            <div class="filename" style="color: rgb(64, 130, 246);">[[ logo.filename ]]</div>
-            <div class="meta">Uploaded on [[ logo.uploadDate || '—' ]]</div>
-
-            <div v-if="logo.previewUrl" style="margin-top: 14px;">
-              <img
-                :src="logo.previewUrl"
-                alt="Organization logo"
-                style="max-width: 220px; max-height: 120px; object-fit: contain; border: 1px solid #ddd; border-radius: 6px; padding: 8px; background: #fff;"
+            <!-- Search and variable count -->
+            <div class="synop-toolbar">
+              <input
+                v-model="synopSearch"
+                type="search"
+                class="synop-search"
+                placeholder="Search variables by name or symbol..."
               />
-            </div>
-          </div>
 
-          <div v-else class="no-file">
-            <div class="placeholder-icon" aria-hidden="true">
-              <svg width="48" height="48" viewBox="0 0 24 24">
-                <path fill="#4b4b4b" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-                <circle fill="orange" cx="8.5" cy="8.5" r="1.5"/>
-                <path fill="orange" d="M21 15l-5-5L5 21h14c1.1 0 2-.9 2-2v-4z"/>
-              </svg>
+              <span class="synop-count" style="font-weight: bold; font-size: 13px;">
+                [[ synopVariables.length ]] variables
+              </span>
             </div>
-            <div class="orange-muted">No logo uploaded.</div>
+
+            <p v-if="synopSearch" class="synop-hint">
+              Clear the search to drag variables. You can still change
+              positions using the dropdown.
+            </p>
+
+            <!-- Actions -->
+            {% if request|has_any_feature_permission:"configuration-settings:write" %}
+            <div class="synop-actions">
+
+              <button
+                class="btn btn-success synop-action-button"
+                @click="goToSynopForm"
+              >
+                View Capture Form
+              </button>
+
+              <button
+                class="btn btn-ghost synop-action-button"
+                :disabled="!synopDirty || synopSaving"
+                @click="resetSynopOrder"
+                style="margin-right: 5px;"
+              >
+                Reset
+              </button>
+
+              <button
+                class="btn btn-upload synop-action-button"
+                :disabled="!synopDirty || synopSaving"
+                @click="saveSynopOrder"
+              >
+                [[ synopSaving ? 'Saving...' : 'Save Order' ]]
+              </button>
+
+              <span v-if="synopDirty" class="synop-unsaved">
+                Unsaved changes
+              </span>
+
+            </div>
+            {% endif %}
+
+            <!-- Table -->
+            <div class="synop-table no-select">
+
+              <div class="synop-grid synop-table-header">
+                <span></span>
+                <span>Order</span>
+                <span>Variable name</span>
+                <span>Symbol</span>
+                <span>Move to</span>
+              </div>
+
+              <div class="synop-list">
+
+                <div
+                  v-for="item in filteredSynopVariables"
+                  :key="item.variable_id"
+                  class="synop-grid synop-row"
+                  :class="{
+                    'synop-drag-over': synopDragOverId === item.variable_id
+                  }"
+                  @dragover.prevent="overSynopDrag(item.variable_id)"
+                  @drop.prevent="dropSynop(item.variable_id)"
+                >
+
+                  <!-- Drag handle -->
+                  <span
+                    class="synop-drag-handle"
+                    :class="{
+                      'synop-drag-disabled':
+                        !synopCanEdit || !!synopSearch || synopSaving
+                    }"
+                    :draggable="
+                      synopCanEdit && !synopSearch && !synopSaving
+                    "
+                    @dragstart="startSynopDrag($event, item.variable_id)"
+                    @dragend="endSynopDrag"
+                    title="Drag to reorder"
+                  >
+                    <i class="material-icons-outlined">drag_indicator</i>
+                  </span>
+
+                  <!-- Current position -->
+                  <span class="synop-position">
+                    [[ item.currentOrder ]]
+                  </span>
+
+                  <!-- Variable name and symbol -->
+                  <span>[[ item.name ]]</span>
+                  <span>[[ item.symbol ]]</span>
+
+                  <!-- Direct position selector -->
+                  <select
+                    class="browser-default synop-position-select"
+                    :value="item.currentOrder"
+                    :disabled="!synopCanEdit || synopSaving"
+                    @change="moveSynopToPosition(
+                      item.variable_id,
+                      $event.target.value
+                    )"
+                  >
+
+                    <option
+                      v-for="position in synopVariables.length"
+                      :key="position"
+                      :value="position"
+                    >
+                      [[ position ]]
+                    </option>
+
+                  </select>
+
+                </div>
+
+                <div
+                  v-if="filteredSynopVariables.length === 0"
+                  class="synop-empty"
+                >
+                  No matching variables found.
+                </div>
+
+              </div>
+            </div>
+
           </div>
         </div>
+      </v-tab-item>
 
-        <!-- actions -->
-        <div class="card-actions">
-          <div class="actions-left">
-            {% if request|has_any_feature_permission:"configuration-settings:write" %}
-            <label for="organization-logo-file" class="btn btn-upload" :class="{ disabled: logoUploading }">
-              <span v-if="!logoUploading">Upload</span>
-              <span v-else>Uploading…</span>
-            </label>
-
-            <input
-              id="organization-logo-file"
-              type="file"
-              accept=".png"
-              :disabled="logoUploading"
-              @change="uploadLogo"
-            />
-            {% endif %}
-
-            {% if request|has_any_feature_permission:"configuration-settings:delete" %}
-            <button
-              class="btn btn-delete"
-              :disabled="!logo.hasFile || logoDeleting"
-              @click="deleteLogo"
-            >
-              <span v-if="!logoDeleting">Delete</span>
-              <span v-else>Deleting…</span>
-            </button>
-            {% endif %}
-
-            {% if request|has_any_feature_permission:"configuration-settings:write" %}
-            <a
-              v-if="logo.hasFile"
-              :href="`/wx/settings/organization-logo/download/${logo.key}/`"
-              target="_blank"
-              rel="noopener"
-              class="btn btn-ghost"
-            >
-              Download
-            </a>
-            {% endif %}
-          </div>
-        </div>
-      </article>
-    </section>
+    </v-tabs-items>
 
     <!-- alerts -->
     <v-alert
@@ -270,11 +443,22 @@
 {% endblock %}
 
 {% block localjavascript %}
+{{ synop_variables|json_script:"synop-variables-data" }}
 <script>
 
   // initial options injected by ConfigurationSettingsView
   const initialOptions = {{ options_json|safe }};
-  // const initialOptions = "";
+
+  const initialSynopVariables = JSON.parse(
+    document.getElementById("synop-variables-data").textContent
+  ).sort((a, b) => a.order - b.order);
+
+  const synopCanEdit =
+    {% if request|has_any_feature_permission:"configuration-settings:write" %}
+      true
+    {% else %}
+      false
+    {% endif %};
 
   (function() {
     new Vue({
@@ -283,6 +467,8 @@
       delimiters: ["[[", "]]"],
       data() {
         return {
+          tab: 1,
+
           options: initialOptions,
           uploading: {},
           deleting: {},
@@ -297,6 +483,16 @@
           alertType: "warning",
           alertTimeout: null,
           alertColor: "red",
+
+          // SYNOP configuration
+          synopVariables: initialSynopVariables.map(item => ({ ...item })),
+          synopOriginal: initialSynopVariables.map(item => ({ ...item })),
+          synopSearch: "",
+          synopCanEdit: synopCanEdit,
+          synopSaving: false,
+          synopDraggedId: null,
+          synopDragOverId: null,
+          synopSaveUrl: "/wx/settings/synop-order/update/",
 
           // Logo control
           logo: {
@@ -317,9 +513,45 @@
           EXT_WHITELIST: { shape: ".png", default: ".geojson" },
         };
       },
+
+      computed: {
+        filteredSynopVariables() {
+          const search = this.synopSearch.trim().toLowerCase();
+
+          return this.synopVariables
+            .map((item, index) => ({
+              ...item,
+              currentOrder: index + 1
+            }))
+            .filter(item =>
+              item.name.toLowerCase().includes(search) ||
+              String(item.symbol || "").toLowerCase().includes(search)
+            );
+        },
+
+        synopDirty() {
+          const currentIds = this.synopVariables.map(
+            item => item.variable_id
+          );
+
+          const originalIds = this.synopOriginal.map(
+            item => item.variable_id
+          );
+
+          return JSON.stringify(currentIds) !==
+                JSON.stringify(originalIds);
+        }
+      
+      },
+
       mounted() {
         this.getOrganizationLogoDetails();
+
+        window.addEventListener("load", () => {
+          this.setParams();
+        });
       },
+
       methods: {
         isUploading(idx) { return !!this.uploading[idx]; },
         isDeleting(idx) { return !!this.deleting[idx]; },
@@ -597,12 +829,161 @@
           this.deleteTargetIdx = null;
         },
 
+        // Move a variable directly to the selected position
+        moveSynopToPosition(variableId, position) {
+          if (!this.synopCanEdit || this.synopSaving) return;
+
+          const from = this.synopVariables.findIndex(
+            item => item.variable_id === variableId
+          );
+
+          const to = Number(position) - 1;
+
+          if (from < 0 || to < 0 ||
+              to >= this.synopVariables.length ||
+              from === to) {
+            return;
+          }
+
+          const [item] = this.synopVariables.splice(from, 1);
+          this.synopVariables.splice(to, 0, item);
+        },
+
+        // Begin dragging
+        startSynopDrag(event, variableId) {
+          if (!this.synopCanEdit ||
+              this.synopSearch ||
+              this.synopSaving) {
+            event.preventDefault();
+            return;
+          }
+
+          this.synopDraggedId = variableId;
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("text/plain", String(variableId));
+        },
+
+        // Highlight the destination row
+        overSynopDrag(variableId) {
+          if (this.synopDraggedId !== null && !this.synopSearch) {
+            this.synopDragOverId = variableId;
+          }
+        },
+
+        // Move the dragged variable into its new position
+        dropSynop(targetId) {
+          if (!this.synopCanEdit ||
+              this.synopSaving ||
+              this.synopSearch ||
+              this.synopDraggedId === null) {
+            this.endSynopDrag();
+            return;
+          }
+
+          const targetIndex = this.synopVariables.findIndex(
+            item => item.variable_id === targetId
+          );
+
+          this.moveSynopToPosition(
+            this.synopDraggedId,
+            targetIndex + 1
+          );
+
+          this.endSynopDrag();
+        },
+
+        endSynopDrag() {
+          this.synopDraggedId = null;
+          this.synopDragOverId = null;
+        },
+
+        // Discard unsaved changes
+        resetSynopOrder() {
+          this.synopVariables = this.synopOriginal.map(
+            item => ({ ...item })
+          );
+        },
+
+        // Save the complete ordering
+        async saveSynopOrder() {
+          if (!this.synopCanEdit || !this.synopDirty || this.synopSaving) {
+            return;
+          }
+
+          const variables = this.synopVariables.map((item, index) => ({
+            variable_id: item.variable_id,
+            order: index + 1
+          }));
+
+          this.synopSaving = true;
+
+          try {
+            const response = await wxFetch(this.synopSaveUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ variables })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+              throw new Error(result.message || "Could not save SYNOP order");
+            }
+
+            // Update the original order only after a successful save
+            this.synopOriginal = this.synopVariables.map(
+              item => ({ ...item })
+            );
+
+            this.showAlert("SYNOP order saved successfully", "success");
+
+          } catch (error) {
+            console.error("SYNOP configuration save failed:", error);
+            this.showAlert(error.message || "Could not save SYNOP order", "error");
+
+          } finally {
+            this.synopSaving = false;
+          }
+        },
+
+        // Go to the synop form
+        goToSynopForm(){
+          const url = `/wx/reports/synop/capture`;
+          window.open(url, '_self');
+        },
+
+        // handle URLs that are passed with data
+        setParams() {
+          const paramString = window.location.search;
+          const urlParams = new URLSearchParams(paramString);
+
+          const settings_tab = urlParams.get('tab')
+          
+          if(settings_tab != null)
+          {
+            this.tab = Number(settings_tab);
+          }
+        },
+
       }
+
     });
   })();
 </script>
 
 <style>
+/* Active tab text and icon */
+.v-tabs .v-tab.v-tab--active,
+.v-tabs .v-tab.v-tab--active .v-icon {
+  color: #1976d2 !important;
+}
+
+.config-tab-content {
+  padding: 20px;
+}
+
 .custom-divider {
   border-top-width: 2px;
   border-radius: 999px;
@@ -758,6 +1139,20 @@
     transition: all 0.25s ease;
   }
 
+  /* success (Vuetify 2 default) */
+  .btn-success {
+    background-color: #4caf50;
+    color: white;
+  }
+  .btn-success:hover {
+    background-color: #388e3c;
+    color: #fff;
+  }
+  .btn-success:focus {
+    background-color: #4caf50;
+    color: white;
+  }
+
   /* Upload = Primary (blue) */
   .btn-upload {
     background-color: #1976d2;
@@ -851,5 +1246,159 @@
 
   /* ensure modal buttons reuse your existing .btn styles */
   .modal-panel .btn { min-width: 92px; }
+
+  /* CSS Class to make text unselectable */
+  .no-select {
+    -webkit-user-select: none !important; /* Safari */
+    -ms-user-select: none !important;     /* IE 10 and Edge */
+    user-select: none !important;         /* Standard syntax for Chrome, Firefox, and Opera */
+  }
+
+  /* SYNOP configuration */
+  .synop-config {
+    margin-top: 18px;
+    padding: 18px;
+    border: 1px solid #d9e1ea;
+    border-radius: 10px;
+  }
+
+  .synop-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  .synop-search {
+    width: 100%;
+    max-width: 360px;
+    padding: 10px 12px;
+    border: 1px solid #dccbe1;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  .synop-count,
+  .synop-hint {
+    color: red;
+    font-size: 13px;
+  }
+
+  .synop-table {
+    border: 1px solid #d9e1ea;
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  .synop-grid {
+    display: grid;
+    grid-template-columns: 36px 55px minmax(160px, 1fr) 90px 90px;
+    align-items: center;
+    gap: 12px;
+    min-width: 500px;
+    padding: 9px 12px;
+  }
+
+  .synop-table-header {
+    background: #e8eef5;
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .synop-list {
+    max-height: 440px;
+    overflow-y: auto;
+  }
+
+  .synop-row {
+    border-top: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 13px;
+  }
+
+  .synop-row:hover {
+    background: #f1f5f9;
+  }
+
+  .synop-drag-over {
+    background: #dbeafe;
+    outline: 2px solid #1976d2;
+    outline-offset: -2px;
+  }
+
+  .synop-drag-handle {
+    cursor: grab;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+  }
+
+  .synop-drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .synop-drag-disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .synop-position {
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .synop-row select {
+    width: 100%;
+    padding: 5px;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    background: #fff;
+  }
+
+  .synop-empty {
+    padding: 24px;
+    text-align: center;
+    color: #64748b;
+  }
+
+  .synop-actions {
+    margin-bottom: 16px;
+  }
+
+  .synop-unsaved {
+    font-size: 13px;
+    font-weight: bold;
+    color: orange;
+  }
+
+  .synop-action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 600px) {
+    .synop-toolbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .synop-search {
+      max-width: none;
+    }
+  }
+
+  .synop-position-select {
+    display: block !important;
+    width: 100%;
+    min-width: 65px;
+    height: 34px;
+    padding: 4px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+  }
 </style>
 {% endblock %}

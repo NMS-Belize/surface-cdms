@@ -81,6 +81,7 @@ urlpatterns = [
     path("wx/settings/organization-logo/", views.OrganizationLogoDetailsView.as_view(),name="organization_logo_details",),
     path("wx/settings/organization-logo/update/", views.UploadOrDeleteOrganizationLogoView.as_view(),name="upload_or_delete_organization_logo",),
     path("wx/settings/organization-logo/download/<str:key>/", views.DownloadOrganizationLogoView.as_view(), name="download_organization_logo",),
+    path('wx/settings/synop-order/update/', views.SaveSynopOrderView.as_view(), name='save_synop_order'),
     
 
     # Placeholder pages

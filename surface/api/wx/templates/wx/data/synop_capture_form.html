@@ -99,25 +99,38 @@
                     @click="toggleTimeMode"
                     style="margin-bottom: 10px;"
                 >
-                    Time: [[ useUTC ? 'UTC' : 'Local' ]]
+                    [[ useUTC ? 'UTC' : 'Local' ]]
                     <v-icon right dark>mdi-clock-outline</v-icon>
                 </v-btn>
 
-                <!-- push to wis2box button -->
-                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
-                <v-btn 
+                <!-- go to the configuration page for the synop form -->
+                {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                <v-btn
                     v-show="!hideTable"
                     class="ml-2" 
-                    :disabled="!wis2PublishControl.publishing" 
-                    @click="handlePushClick()" 
-                    class="" 
-                    color="success"
+                    outlined 
+                    @click="goToConfigSynopForm" 
+                    class="btn-outline-default"
+                    color="purple"
                     style="margin-bottom: 10px;"
-                > 
-                    Push to WIS2
-                    <v-icon right dark>send</v-icon>
+                >
+                    Configure Synop Form
+                    <v-icon right dark>mdi-settings</v-icon>
                 </v-btn>
                 {% endif %}
+
+                <!-- theme switch button -->
+                <!-- <v-btn
+                    v-show="!hideTable"
+                    class="ml-2"
+                    outlined
+                    @click="toggleTheme"
+                    color="purple"
+                    style="margin-bottom: 10px;"
+                >
+                    Table Style
+                    <v-icon right dark>sync</v-icon>
+                </v-btn> -->
 
                 <!-- save button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
@@ -152,18 +165,21 @@
                 </v-btn>
                 {% endif %}
 
-                <!-- theme switch button -->
-                <v-btn
+                <!-- push to wis2box button -->
+                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                <v-btn 
                     v-show="!hideTable"
-                    class="ml-2"
-                    outlined
-                    @click="toggleTheme"
-                    color="purple"
+                    class="ml-2" 
+                    :disabled="!wis2PublishControl.publishing" 
+                    @click="handlePushClick()" 
+                    class="" 
+                    color="success"
                     style="margin-bottom: 10px;"
-                >
-                    Table Style
-                    <v-icon right dark>sync</v-icon>
+                > 
+                    Push to WIS2
+                    <v-icon right dark>send</v-icon>
                 </v-btn>
+                {% endif %}
 
                 <!-- export csv button -->
                 {% if request|has_any_feature_permission:"synop-capture-form:write" %}
@@ -230,10 +246,7 @@
             </v-dialog>  
 
             <!-- deletion confirmation dialog -->
-            <v-dialog
-                v-model="confirmDeleteDialog"
-                max-width="400"
-            >
+            <v-dialog v-model="confirmDeleteDialog" max-width="400">
                 <v-card>
                     <v-card-title class="headline"> Confirm Deletion </v-card-title>
                     
@@ -260,7 +273,7 @@
             <!-- ag grid -->
             <!-- Synop table grid container -->
             <!-- Non Sticky header -->
-            <ag-grid-vue
+            <!-- <ag-grid-vue
                 v-show="!hideTable"
                 :row-data="rowData"
                 :column-defs="colDefs"
@@ -273,22 +286,23 @@
                 @cell-editing-stopped="onCellEditingStopped"
                 dom-layout="autoHeight"
             >
-            </ag-grid-vue>
+            </ag-grid-vue> -->
 
             <!-- Sticky header -->
-            <!-- <ag-grid-vue
+            <ag-grid-vue
                 v-show="!hideTable"
                 :row-data="rowData"
                 :column-defs="colDefs"
                 :default-col-def="defaultColDef"
                 :grid-options="gridOptions"
-                style="height: 100%;"
+                style="width: 100%; height: 80vh;"
                 :class="tableTheme"
                 @grid-ready="onGridReady"
                 @cell-editing-started="onCellEditingStarted"
                 @cell-editing-stopped="onCellEditingStopped"
+                dom-layout="normal"
             >
-            </ag-grid-vue> -->
+            </ag-grid-vue>
 
 
 
@@ -513,7 +527,8 @@
                             width: {{item.col_width}},
 
                             {% if item.var_type == "code" %}
-                                cellEditor: 'agSelectCellEditor',
+                                // cellEditor: 'agSelectCellEditor',
+                                cellEditor: 'filterable-code-editor',
                                 cellEditorParams: {
                                     values: {{ item.dropdown_codes | safe}},
                                     valueListMaxHeight: 240,
@@ -552,7 +567,8 @@
                         width: {{item.col_width}},
 
                         {% if item.var_type == "code" %}
-                            cellEditor: 'agSelectCellEditor',
+                            // cellEditor: 'agSelectCellEditor',
+                            cellEditor: 'filterable-code-editor',
                             cellEditorParams: {
                                 values: {{ item.dropdown_codes | safe}},
                                 valueListMaxHeight: 240,
@@ -807,6 +823,91 @@
     });
 
 
+    // filterable dropdown component
+    Vue.component('filterable-code-editor', {
+        data() {
+            return {
+                params: null,
+                selected: null,
+                search: '',
+            };
+        },
+
+        init(params) {
+            this.params = params;
+            this.selected = params.value == null
+                ? null
+                : String(params.value);
+        },
+
+        computed: {
+            items() {
+                return this.params
+                    ? this.params.values.map(String)
+                    : [];
+            },
+
+            editorWidth() {
+                return this.params
+                    ? this.params.column.getActualWidth()
+                    : 120;
+            }
+        },
+
+        methods: {
+            getValue() {
+                const typed = (this.search || '').trim();
+
+                if (typed) {
+                    const match = this.items.find(
+                        item => item.toLowerCase() === typed.toLowerCase()
+                    );
+
+                    if (match !== undefined) {
+                        return match;
+                    }
+                }
+
+                return this.selected;
+            },
+
+            isPopup() {
+                return true;
+            },
+
+            afterGuiAttached() {
+                this.$nextTick(() => {
+                    this.$refs.autocomplete.focus();
+                });
+            },
+
+            selectValue() {
+                this.$nextTick(() => this.params.stopEditing());
+            }
+        },
+
+        template: `
+            <div :style="{ width: editorWidth + 'px' }">
+                <v-autocomplete
+                    ref="autocomplete"
+                    v-model="selected"
+                    :items="items"
+                    :search-input.sync="search"
+                    :menu-props="{
+                        attach: true,
+                        maxHeight: 240,
+                        maxWidth: editorWidth
+                    }"
+                    dense
+                    solo
+                    hide-details
+                    clearable
+                    @change="selectValue"
+                />
+            </div>
+        `
+    });
+
     // main vue component
     Vue.component('ag-grid-vue', window['ag-grid-vue'].AgGridVue);
     Vue.use(window.vuelidate.default);
@@ -827,48 +928,57 @@
                 return {
                     statistics: null,
                     snackbar: { show: false, message: '', color: '' },
+                    
                     hideTable: true,
                     colDefs: columnDefinitions,
                     stationList: stationArr, 
+
                     requestData: {
                         date: "{{date|safe}}",
                         stationId: {{ station_id }},
                         interval: 3600
-                    }, 
+                    },
+
                     draft: false,
                     valid: false,
                     datepicker_menu: false,
                     textFieldsRules: [v => (v !== undefined && v !== "") || "This field is required"],
                     loading: false,
                     requestedData: {},
+
                     // AG GRID DATA
                     // Possible themes: (**can append '-dark' to any option) [ag-theme-quartz, ag-theme-balham, ag-theme-material]
                     tableTheme: "ag-theme-balham",
+
                     // grid settings as a whole
                     gridOptions: {
                         suppressMenuHide: true,       // keeps menu icon always visible
                         groupHeaderHeight: 60, // Increase col height specifically for group headers
                         rowHeight: 30, // custom row height
-                        rowClassRules: { // tag last 6 rows (statistics) with the CSS class 'grey-row'
+
+                        // tag last 6 rows (statistics) with the CSS class 'grey-row'
+                        rowClassRules: {
                         'grey-row': params => params.node.rowPinned === 'bottom'
                         }, 
+
                         onCellValueChanged: this.onCellValueChanged, // execute on cell value change
                         enableBrowserTooltips: false,   // turn OFF title-based tooltips
                         tooltipShowDelay: 0,    // show tooltip immediately
                         tooltipHideDelay: 20000, // hide tooltip after 20 seconds
+
                         // singleClickEdit: true, // clicking once on a cell opens edit
                         context: {
                             selectedStationData: null,
                             snackbar: this.setSnackbar.bind(this),
                             markAsDraft: this.markAsDraft.bind(this),
                         },
-                        // wire up the editing hook:
-                        onCellEditingStopped: this.onCellEditingStopped,
-                        rowSelection:"multiple",
-                        // tell us whenever selection changes
-                        onSelectionChanged: this.onSelectionChanged,
 
-                        // modifyin the default arrow navigation to skip the first two columns.
+                        onCellEditingStopped: this.onCellEditingStopped, // wire up the editing hook:
+                        rowSelection:"multiple",
+                        onSelectionChanged: this.onSelectionChanged, // tell us whenever selection changes
+                        alwaysShowHorizontalScroll: true, // horizontal scroll should be always visible
+
+                        // modifying the default arrow navigation to skip the first two columns.
                         navigateToNextCell: (params) => {
                             const { nextCellPosition, previousCellPosition, key, api } = params;
                             const visibleCols = api.getAllDisplayedColumns();
@@ -1026,6 +1136,12 @@
                 };
             },
             methods: {
+
+                //go to synop table configuration page
+                goToConfigSynopForm(){
+                const url = `/wx/settings?tab=2`; // 2 is the synop table configuration tab.
+                window.open(url, '_self');
+                },
 
                 // control for the push now btn in the table
                 handlePushClick() {
@@ -1437,6 +1553,7 @@
                     return this.now >= date;
                 },
 
+                
                 // calculates allowed dates
                 allowedDates(date) {
                     const currentDate = moment

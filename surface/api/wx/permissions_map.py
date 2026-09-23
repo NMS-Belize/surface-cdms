@@ -461,6 +461,7 @@ ENDPOINT_PARENT_PAGE = {
     "organization_logo_details": ("configuration-settings", "write"),
     "upload_or_delete_organization_logo": ("configuration-settings", "write"),
     "download_organization_logo": ("configuration-settings", "write"),
+    "save_synop_order": ("configuration-settings", "write"),
 
 
     # # Add more mappings below...
