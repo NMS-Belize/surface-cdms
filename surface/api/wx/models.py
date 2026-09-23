@@ -2626,3 +2626,23 @@ class StagedRawDataTask(BaseModel):
             models.Index(fields=["station_data_file", "station", "variable"]),
             models.Index(fields=["station", "variable", "start_datetime", "end_datetime"]),
         ]
+
+
+class SynopTableConfiguration(BaseModel):
+    variable = models.ForeignKey(Variable,on_delete=models.CASCADE,)
+
+    order = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['order']
+        
+        constraints = [
+            models.UniqueConstraint(
+                fields=['variable'],
+                name='unique_synop_table_variable'
+            ),
+            models.UniqueConstraint(
+                fields=['order'],
+                name='unique_synop_table_order'
+            ),
+        ]

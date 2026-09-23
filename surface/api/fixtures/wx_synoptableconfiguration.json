@@ -1,0 +1,422 @@
+[
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 1,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4041,
+      "order": 1
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 2,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4062,
+      "order": 2
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 3,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4056,
+      "order": 3
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 4,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1001,
+      "order": 4
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 5,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 55,
+      "order": 5
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 6,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 50,
+      "order": 6
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 7,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 10,
+      "order": 7
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 8,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 19,
+      "order": 8
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 9,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 18,
+      "order": 9
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 10,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 30,
+      "order": 10
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 11,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 60,
+      "order": 11
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 12,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 61,
+      "order": 12
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 13,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4057,
+      "order": 13
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 14,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 0,
+      "order": 14
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 15,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4055,
+      "order": 15
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 16,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4043,
+      "order": 16
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 17,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1002,
+      "order": 17
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 18,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1003,
+      "order": 18
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 19,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1004,
+      "order": 19
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 20,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4005,
+      "order": 20
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 21,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1006,
+      "order": 21
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 22,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1007,
+      "order": 22
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 23,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1008,
+      "order": 23
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 24,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4044,
+      "order": 24
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 25,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4045,
+      "order": 25
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 26,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4046,
+      "order": 26
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 27,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4047,
+      "order": 27
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 28,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 16,
+      "order": 28
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 29,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 14,
+      "order": 29
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 30,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1009,
+      "order": 30
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 31,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1010,
+      "order": 31
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 32,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4058,
+      "order": 32
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 33,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1012,
+      "order": 33
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 34,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1013,
+      "order": 34
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 35,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4059,
+      "order": 35
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 36,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1015,
+      "order": 36
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 37,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1016,
+      "order": 37
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 38,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4060,
+      "order": 38
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 39,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1018,
+      "order": 39
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 40,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 1019,
+      "order": 40
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 41,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4061,
+      "order": 41
+    }
+  },
+  {
+    "model": "wx.SynopTableConfiguration",
+    "pk": 42,
+    "fields": {
+      "created_at": "2026-09-22T14:43:00Z",
+      "updated_at": "2026-09-22T14:43:00Z",
+      "variable_id": 4006,
+      "order": 42
+    }
+  }
+]
