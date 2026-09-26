@@ -226,10 +226,10 @@ class Variable(BaseModel):
     step_hourly = models.FloatField(null=True, blank=True, verbose_name = 'Global threshold (Automatic) Step')
 
     persistence = models.FloatField(null=True, blank=True, verbose_name = 'Global threshold (Manual) Persistence Variance')
-    persistence_window = models.IntegerField(null=True, blank=True, verbose_name = 'Global threshold (Manual) Persistence Window (in hours)',)    
+    persistence_window = models.IntegerField(default=96, verbose_name = 'Global threshold (Manual) Persistence Window (In hours. Default is 96 hours)',)    
 
     persistence_hourly = models.FloatField(null=True, blank=True, verbose_name = 'Global threshold (Automatic) Persistence Variance')
-    persistence_window_hourly = models.IntegerField(null=True, blank=True, verbose_name = 'Global threshold (Automatic) Persistence Window (in hours)',)
+    persistence_window_hourly = models.IntegerField(default=1, verbose_name = 'Global threshold (Automatic) Persistence Window (In hours. Default is 1 hour)',)
 
 
     default_representation = models.CharField(
@@ -1185,8 +1185,8 @@ class Flash(BaseModel):
 class QcRangeThreshold(BaseModel):
     station = models.ForeignKey(Station, on_delete=models.CASCADE)
     variable = models.ForeignKey(Variable, on_delete=models.CASCADE)
-    range_min = models.FloatField(null=True, blank=True)
-    range_max = models.FloatField(null=True, blank=True)
+    range_min = models.FloatField()
+    range_max = models.FloatField()
     month = models.IntegerField(default=1)
 
     def __str__(self):
@@ -1200,8 +1200,8 @@ class QcRangeThreshold(BaseModel):
 class QcStepThreshold(BaseModel):
     station = models.ForeignKey(Station, on_delete=models.CASCADE)
     variable = models.ForeignKey(Variable, on_delete=models.CASCADE)
-    step_min = models.FloatField(null=True, blank=True)
-    step_max = models.FloatField(null=True, blank=True)
+    step_min = models.FloatField()
+    step_max = models.FloatField()
 
     class Meta:
         ordering = ('station', 'variable')

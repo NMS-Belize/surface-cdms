@@ -121,42 +121,6 @@
     },
     {
         "model": "wx.wxpermissionpages",
-        "pk": 11,
-        "fields": {
-            "created_at": "2026-03-04T00:00:00Z",
-            "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Range Thresholds",
-            "url_name": "range-threshold",
-            "description": "View and manage range threshold rules for quality control.",
-		    "category_id": 6
-        }
-    },
-    {
-        "model": "wx.wxpermissionpages",
-        "pk": 12,
-        "fields": {
-            "created_at": "2026-03-04T00:00:00Z",
-            "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Step Thresholds",
-            "url_name": "step-threshold",
-            "description": "View and manage step threshold rules for quality control.",
-		    "category_id": 6
-        }
-    },
-    {
-        "model": "wx.wxpermissionpages",
-        "pk": 13,
-        "fields": {
-            "created_at": "2026-03-04T00:00:00Z",
-            "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Persist Thresholds",
-            "url_name": "persist-threshold",
-            "description": "View and manage persist threshold rules for quality control.",
-		    "category_id": 6
-        }
-    },
-    {
-        "model": "wx.wxpermissionpages",
         "pk": 14,
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
@@ -320,6 +284,30 @@
             "name": "Reference Station",
             "url_name": "reference-station",
             "description": "Manage reference stations used in data validation.",
+		    "category_id": 6
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 28,
+        "fields": {
+            "created_at": "2026-09-24T00:00:00Z",
+            "updated_at": "2026-09-24T00:00:00Z",
+            "name": "Global Thresholds",
+            "url_name": "global-threshold",
+            "description": "View and manage global threshold rules for each variable.",
+		    "category_id": 6
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 29,
+        "fields": {
+            "created_at": "2026-09-25T00:00:00Z",
+            "updated_at": "2026-09-25T00:00:00Z",
+            "name": "Custom Thresholds",
+            "url_name": "custom-threshold",
+            "description": "View and manage custom threshold rules for each station.",
 		    "category_id": 6
         }
     }

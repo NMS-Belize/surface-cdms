@@ -1,0 +1,1490 @@
+{% extends "base.html" %}
+{% load wx_filters %}
+
+{% block content %}
+<div class="srf-container">
+  <div id="custom-threshold-app" v-cloak>
+    <v-app id="customThresholdStyle">
+      <v-main fluid fill-height style="background: white;">
+        <v-layout column>
+          <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
+            <span class="srf-display-1 text-uppercase">Custom Threshold Configuration</span>
+          </div>
+
+          <div class="px-4 pb-6">
+            <p class="grey--text text--darken-1 mb-5">
+              Compare Global, Reference, and Custom quality-control thresholds for a station.
+              Only Custom thresholds can be modified here.
+            </p>
+
+            <!-- Station filters and station/variable selection. -->
+            <h3 class="subtitle-1 font-weight-bold mb-2">Station Filters</h3>
+            <v-row dense align="center">
+              <!-- admin region -->
+              <v-col cols="12" sm="6" lg="3">
+                <v-autocomplete
+                  v-model="filter.region"
+                  :items="stationAdminRegionList"
+                  item-text="name"
+                  item-value="name"
+                  label="Administrative Region"
+                  clearable
+                  autocomplete="off"
+                  @change="onFilterChange"
+                ></v-autocomplete>
+              </v-col>
+
+              <!-- station watershed -->
+              <v-col cols="12" sm="6" lg="3">
+                <v-autocomplete
+                  v-model="filter.watershed"
+                  :items="stationWatershedList"
+                  item-text="name"
+                  item-value="name"
+                  label="Watershed"
+                  clearable
+                  autocomplete="off"
+                  @change="onFilterChange"
+                ></v-autocomplete>
+              </v-col>
+
+              <!-- station profile -->
+              <v-col cols="12" sm="6" lg="3">
+                <v-autocomplete
+                  v-model="filter.profile"
+                  :items="stationProfileList"
+                  item-text="name"
+                  item-value="id"
+                  label="Profile"
+                  clearable
+                  autocomplete="off"
+                  @change="onFilterChange"
+                ></v-autocomplete>
+              </v-col>
+
+              <!-- active toggle -->
+              <v-col cols="6" sm="3" lg="1">
+                <v-switch v-model="filter.isActive" label="Active" inset @change="onFilterChange"></v-switch>
+              </v-col>
+
+              <!-- automatic toggle -->
+              <v-col cols="6" sm="3" lg="2">
+                <v-switch v-model="filter.isAutomatic" label="Automatic" inset @change="onFilterChange"></v-switch>
+              </v-col>
+            </v-row>
+
+            <v-row dense align="center" class="mt-2">
+              <!-- stations field -->
+              <v-col cols="12" md="4" lg="3">
+                <v-autocomplete
+                  v-model="stationId"
+                  :items="filteredStations"
+                  item-text="label"
+                  item-value="id"
+                  label="Station"
+                  clearable
+                  autocomplete="off"
+                  :loading="loadingVariables"
+                  @change="onStationChanged"
+                ></v-autocomplete>
+              </v-col>
+
+              <!-- variables field -->
+              <v-col cols="12" md="6" lg="6">
+                <v-autocomplete
+                  v-model="selectedVariableIds"
+                  :items="stationVariables"
+                  item-text="variable_name"
+                  item-value="variable"
+                  label="Station Variables"
+                  placeholder="Select one or more variables"
+                  multiple clearable chips small-chips deletable-chips
+                  autocomplete="off"
+                  :disabled="stationId == null || loadingVariables"
+                  class="scrollable-autocomplete"
+                  @change="clearLoaded"
+                ></v-autocomplete>
+              </v-col>
+
+              <!-- select all & load btns -->
+              <v-col cols="12" md="2" lg="3">
+                <!-- select all btn -->
+                <v-btn
+                  color="primary"
+                  outlined
+                  :disabled="stationId == null || loadingVariables || loading"
+                  @click="selectAllVariables"
+                >
+                  <v-icon dark>done_all</v-icon>
+                </v-btn>
+
+                <v-btn
+                  color="primary" outlined
+                  :loading="loading"
+                  :disabled="stationId == null || !selectedVariableIds.length || loadingVariables || loading"
+                  @click="loadThresholds(false)"
+                >Load Thresholds</v-btn>
+              </v-col>
+            </v-row>
+
+            <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-3"></v-progress-linear>
+
+            <!-- error alert -->
+            <v-alert v-if="pageError" type="error" text dismissible @input="pageError = ''">
+              [[ pageError ]]
+            </v-alert>
+
+            <template v-if="loaded">
+              <!-- Reference station belongs to the selected station, not to a variable. -->
+              <v-card outlined class="mt-5 mb-5 reference-card">
+                <v-card-title class="subtitle-1 font-weight-bold">Reference Station</v-card-title>
+                <v-card-text>
+                  <p class="body-2 mb-3" style="color: red;">
+                    The selected reference station is shared by all variables for
+                    <strong>[[ loadedStationLabel ]]</strong>. Its thresholds appear in the middle column.
+                  </p>
+                  <v-row dense align="center">
+                    <v-col cols="12" md="8" lg="6">
+                      <v-autocomplete
+                        v-model="draftReferenceStationId"
+                        :items="referenceStations"
+                        item-text="label"
+                        item-value="id"
+                        label="Reference Station"
+                        outlined dense clearable
+                        autocomplete="off"
+                        :disabled="savingReference"
+                        hide-details="auto"
+                      ></v-autocomplete>
+                    </v-col>
+                    {% if request|has_any_feature_permission:"quality-control:write" %}
+                    <v-col cols="12" md="4" lg="3">
+                      <v-btn
+                        outlined color="primary"
+                        :loading="savingReference"
+                        :disabled="draftReferenceStationId == null ||
+                          draftReferenceStationId === referenceStationId || savingReference"
+                        @click="saveReferenceStation"
+                      >Save Reference Station</v-btn>
+                    </v-col>
+                    {% endif %}
+                  </v-row>
+                  <p class="caption grey--text mt-2 mb-0">
+                    Current: [[ referenceStationName || 'No reference station' ]]
+                  </p>
+                </v-card-text>
+              </v-card>
+
+              <!-- copy thresholds btn -->
+              {% if request|has_any_feature_permission:"custom-threshold:write" %}
+              <div class="d-flex justify-end mt-4 mb-4">
+                <v-btn
+                  color="primary"
+                  @click="openCopyDialog"
+                >
+                  <v-icon left>mdi-content-copy</v-icon>
+                  Copy Custom Thresholds
+                </v-btn>
+              </div>
+              {% endif %}
+
+              <v-divider></v-divider>
+
+              <!-- variables carousel -->
+              <v-layout column>
+                <v-sheet class="mx-auto" max-width="100%">
+                  <v-slide-group show-arrows="desktop" class="py-2">
+                    <v-slide-item v-for="name in loadedVariableNames" :key="name">
+                      <v-btn
+                        class="ma-2"
+                        outlined
+                        :color="selectedVariableName === name ? 'primary' : undefined"
+                        @click="selectedVariableName = name"
+                      >[[ name ]]</v-btn>
+                    </v-slide-item>
+                  </v-slide-group>
+                </v-sheet>
+              </v-layout>
+
+
+              <!-- Alternate design -->
+              <!-- tab headers -->
+              <!-- <v-tabs v-model="tab">
+                <v-tabs-slider color="blue"></v-tabs-slider>
+
+                <v-tab>
+                  <v-icon left> clear_all </v-icon> Range Check
+                </v-tab>
+
+                <v-tab>
+                  <v-icon left> low_priority </v-icon> Step Check
+                </v-tab>
+
+                <v-tab>
+                  <v-icon left> format_align_left </v-icon> Persistence Check
+                </v-tab>
+              </v-tabs> -->
+              <!-- Alternate design -->
+
+
+              <!-- info tool tip -->
+              <div class="d-flex align-center justify-space-between flex-wrap mt-4 mb-3">
+                <v-btn
+                  x-small
+                  color="purple"
+                  outlined
+                >
+                  [[ selectedVariableName ]]
+                </v-btn>
+
+                <span class="caption grey--text">Global → Reference → Custom</span>
+              </div>
+
+              <!-- Alternate design -->
+              <!-- tab items/content -->
+              <v-tabs-items v-model="tab">
+
+                <!-- range threshold -->
+                <v-tab-item>
+                  <!-- RANGE: the legacy Range page stores custom values per month. -->
+                  <!-- <section class="method-section mb-6">
+                    <p class="caption grey--text mb-2">Monthly thresholds. Global and Reference are read-only.</p>
+                    <v-simple-table class="threshold-compare-table range-table">
+                      <template v-slot:default>
+                        <thead>
+                          <tr class="parent-header">
+                            <th rowspan="2" class="text-center">Month</th>
+                            <th colspan="2" class="text-center group-start">Global</th>
+                            <th colspan="2" class="text-center group-start">Reference</th>
+                            <th colspan="2" class="text-center group-start">Custom</th>
+                            {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                            <th rowspan="2" class="text-center group-start">Actions</th>
+                            {% endif %}
+                          </tr>
+                          <tr class="child-header">
+                            <th class="text-center group-start">Minimum</th>
+                            <th class="text-center">Maximum</th>
+                            <th class="text-center group-start">Minimum</th>
+                            <th class="text-center">Maximum</th>
+                            <th class="text-center group-start">Minimum</th>
+                            <th class="text-center">Maximum</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, index) in getRows('range')" :key="'range-' + index">
+                            <td class="text-center font-weight-medium">[[ row.month_name || '—' ]]</td>
+                            <td class="text-center group-start">[[ cell(row, 'global', 'g_min') ]]</td>
+                            <td class="text-center">[[ cell(row, 'global', 'g_max') ]]</td>
+                            <td class="text-center group-start">[[ cell(row, 'reference', 'r_min') ]]</td>
+                            <td class="text-center">[[ cell(row, 'reference', 'r_max') ]]</td>
+                            <td class="text-center group-start custom-value">[[ cell(row, 'custom', 'c_min') ]]</td>
+                            <td class="text-center custom-value">[[ cell(row, 'custom', 'c_max') ]]</td>
+                            {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                            <td class="text-center group-start actions-cell">
+                              {% if request|has_any_feature_permission:"custom-threshold:write" %}
+                              <v-btn icon color="primary" title="Edit custom Range" @click="openEdit('range', row)">
+                                <v-icon small>mdi-square-edit-outline</v-icon>
+                              </v-btn>
+                              {% endif %}
+                              {% if request|has_any_feature_permission:"custom-threshold:delete" %}
+                              <v-btn icon color="error" title="Delete custom Range" :disabled="!hasCustom(row)" @click="openDelete('range', row)">
+                                <v-icon small>mdi-delete-outline</v-icon>
+                              </v-btn>
+                              {% endif %}
+                            </td>
+                            {% endif %}
+                          </tr>
+                          <tr v-if="!getRows('range').length"><td colspan="8" class="text-center grey--text">No Range thresholds available.</td></tr>
+                        </tbody>
+                      </template>
+                    </v-simple-table>
+                  </section>
+                  <p class="caption grey--text" style="color: red !important;">— indicates a threshold is not configured.</p> -->
+                </v-tab-item>
+
+                <!-- step threshold -->
+                <v-tab-item>
+                  <!-- STEP: global is one step value (+ / -); reference/custom have min step/max step. -->
+                  <!-- <section class="method-section mb-6">
+                    <p class="caption grey--text mb-2">Global and Reference Thresholds are read-only.</p>
+                    <v-simple-table class="threshold-compare-table step-table">
+                      <template v-slot:default>
+                        <thead>
+                          <tr class="parent-header">
+                            <th rowspan="2" class="text-center">Check</th>
+                            <th class="text-center group-start">Global</th>
+                            <th colspan="2" class="text-center group-start">Reference</th>
+                            <th colspan="2" class="text-center group-start">Custom</th>
+                            {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                            <th rowspan="2" class="text-center group-start">Actions</th>
+                            {% endif %}
+                          </tr>
+                          <tr class="child-header">
+                            <th class="text-center group-start">Step <span style="color: #FF9800;">(+ / -)</span></th>
+                            <th class="text-center group-start">Minimum Step</th>
+                            <th class="text-center">Maximum Step</th>
+                            <th class="text-center group-start">Minimum Step</th>
+                            <th class="text-center">Maximum Step</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, index) in getRows('step')" :key="'step-' + index">
+                            <td class="text-center font-weight-medium">Step</td>
+                            <td class="text-center group-start">[[ stepGlobal(row) ]]</td>
+                            <td class="text-center group-start">[[ cell(row, 'reference', 'r_min') ]]</td>
+                            <td class="text-center">[[ cell(row, 'reference', 'r_max') ]]</td>
+                            <td class="text-center group-start custom-value">[[ cell(row, 'custom', 'c_min') ]]</td>
+                            <td class="text-center custom-value">[[ cell(row, 'custom', 'c_max') ]]</td>
+                            {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                            <td class="text-center group-start actions-cell">
+                              {% if request|has_any_feature_permission:"custom-threshold:write" %}
+                              <v-btn icon color="primary" title="Edit custom Step" @click="openEdit('step', row)">
+                                <v-icon small>mdi-square-edit-outline</v-icon>
+                              </v-btn>
+                              {% endif %}
+                              {% if request|has_any_feature_permission:"custom-threshold:delete" %}
+                              <v-btn icon color="error" title="Delete custom Step" :disabled="!hasCustom(row)" @click="openDelete('step', row)">
+                                <v-icon small>mdi-delete-outline</v-icon>
+                              </v-btn>
+                              {% endif %}
+                            </td>
+                            {% endif %}
+                          </tr>
+                          <tr v-if="!getRows('step').length"><td colspan="7" class="text-center grey--text">No Step thresholds available.</td></tr>
+                        </tbody>
+                      </template>
+                    </v-simple-table>
+                  </section>
+                  <p class="caption grey--text" style="color: red !important;">— indicates a threshold is not configured.</p> -->
+                </v-tab-item>
+
+                <!-- persistence threshold -->
+                <v-tab-item>
+                  <!-- PERSIST: minimum variance and window (hours). -->
+                  <!-- <section class="method-section mb-6">
+                    <p class="caption grey--text mb-2">Global and Reference Thresholds are read-only.</p>
+                    <v-simple-table class="threshold-compare-table persist-table">
+                      <template v-slot:default>
+                        <thead>
+                          <tr class="parent-header">
+                            <th rowspan="2" class="text-center">Check</th>
+                            <th colspan="2" class="text-center group-start">Global</th>
+                            <th colspan="2" class="text-center group-start">Reference</th>
+                            <th colspan="2" class="text-center group-start">Custom</th>
+                            {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                            <th rowspan="2" class="text-center group-start">Actions</th>
+                            {% endif %}
+                          </tr>
+                          <tr class="child-header">
+                            <th class="text-center group-start">Min. Variance</th>
+                            <th class="text-center">Window (hrs)</th>
+                            <th class="text-center group-start">Min. Variance</th>
+                            <th class="text-center">Window (hrs)</th>
+                            <th class="text-center group-start">Min. Variance</th>
+                            <th class="text-center">Window (hrs)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, index) in getRows('persist')" :key="'persist-' + index">
+                            <td class="text-center font-weight-medium">Persist</td>
+                            <td class="text-center group-start">[[ cell(row, 'global', 'g_var') ]]</td>
+                            <td class="text-center">[[ cell(row, 'global', 'g_win') ]]</td>
+                            <td class="text-center group-start">[[ cell(row, 'reference', 'r_var') ]]</td>
+                            <td class="text-center">[[ cell(row, 'reference', 'r_win') ]]</td>
+                            <td class="text-center group-start custom-value">[[ cell(row, 'custom', 'c_var') ]]</td>
+                            <td class="text-center custom-value">[[ cell(row, 'custom', 'c_win') ]]</td>
+                            {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                            <td class="text-center group-start actions-cell">
+                              {% if request|has_any_feature_permission:"custom-threshold:write" %}
+                              <v-btn icon color="primary" title="Edit custom Persist" @click="openEdit('persist', row)">
+                                <v-icon small>mdi-square-edit-outline</v-icon>
+                              </v-btn>
+                              {% endif %}
+                              {% if request|has_any_feature_permission:"custom-threshold:delete" %}
+                              <v-btn icon color="error" title="Delete custom Persist" :disabled="!hasCustom(row)" @click="openDelete('persist', row)">
+                                <v-icon small>mdi-delete-outline</v-icon>
+                              </v-btn>
+                              {% endif %}
+                            </td>
+                            {% endif %}
+                          </tr>
+                          <tr v-if="!getRows('persist').length"><td colspan="8" class="text-center grey--text">No Persist thresholds available.</td></tr>
+                        </tbody>
+                      </template>
+                    </v-simple-table>
+                  </section>
+                  <p class="caption grey--text" style="color: red !important;">— indicates a threshold is not configured.</p> -->
+                </v-tab-item>
+
+              </v-tabs-items>
+              <!-- Alternate design -->
+
+
+              <!-- RANGE: the legacy Range page stores custom values per month. -->
+              <section class="method-section mb-6">
+                <h3 class="subtitle-1 font-weight-bold mb-2">Range Check</h3>
+                <p class="caption grey--text mb-2">Monthly thresholds. Global and Reference are read-only.</p>
+                <v-simple-table class="threshold-compare-table range-table">
+                  <template v-slot:default>
+                    <thead>
+                      <tr class="parent-header">
+                        <th rowspan="2" class="text-center">Month</th>
+                        <th colspan="2" class="text-center group-start">Global</th>
+                        <th colspan="2" class="text-center group-start">Reference</th>
+                        <th colspan="2" class="text-center group-start">Custom</th>
+                        {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                        <th rowspan="2" class="text-center group-start">Actions</th>
+                        {% endif %}
+                      </tr>
+                      <tr class="child-header">
+                        <th class="text-center group-start">Minimum</th>
+                        <th class="text-center">Maximum</th>
+                        <th class="text-center group-start">Minimum</th>
+                        <th class="text-center">Maximum</th>
+                        <th class="text-center group-start">Minimum</th>
+                        <th class="text-center">Maximum</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, index) in getRows('range')" :key="'range-' + index">
+                        <td class="text-center font-weight-medium">[[ row.month_name || '—' ]]</td>
+                        <td class="text-center group-start">[[ cell(row, 'global', 'g_min') ]]</td>
+                        <td class="text-center">[[ cell(row, 'global', 'g_max') ]]</td>
+                        <td class="text-center group-start">[[ cell(row, 'reference', 'r_min') ]]</td>
+                        <td class="text-center">[[ cell(row, 'reference', 'r_max') ]]</td>
+                        <td class="text-center group-start custom-value">[[ cell(row, 'custom', 'c_min') ]]</td>
+                        <td class="text-center custom-value">[[ cell(row, 'custom', 'c_max') ]]</td>
+                        {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                        <td class="text-center group-start actions-cell">
+                          {% if request|has_any_feature_permission:"custom-threshold:write" %}
+                          <v-btn icon color="primary" title="Edit custom Range" @click="openEdit('range', row)">
+                            <v-icon small>mdi-square-edit-outline</v-icon>
+                          </v-btn>
+                          {% endif %}
+                          {% if request|has_any_feature_permission:"custom-threshold:delete" %}
+                          <v-btn icon color="error" title="Delete custom Range" :disabled="!hasCustom(row)" @click="openDelete('range', row)">
+                            <v-icon small>mdi-delete-outline</v-icon>
+                          </v-btn>
+                          {% endif %}
+                        </td>
+                        {% endif %}
+                      </tr>
+                      <tr v-if="!getRows('range').length"><td colspan="8" class="text-center grey--text">No Range thresholds available.</td></tr>
+                    </tbody>
+                  </template>
+                </v-simple-table>
+              </section>
+
+              <!-- STEP: global is one step value (+ / -); reference/custom have min step/max step. -->
+              <section class="method-section mb-6">
+                <h3 class="subtitle-1 font-weight-bold mb-2">Step Check</h3>
+                <p class="caption grey--text mb-2">Global and Reference Thresholds are read-only.</p>
+                <v-simple-table class="threshold-compare-table step-table">
+                  <template v-slot:default>
+                    <thead>
+                      <tr class="parent-header">
+                        <th rowspan="2" class="text-center">Check</th>
+                        <th class="text-center group-start">Global</th>
+                        <th colspan="2" class="text-center group-start">Reference</th>
+                        <th colspan="2" class="text-center group-start">Custom</th>
+                        {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                        <th rowspan="2" class="text-center group-start">Actions</th>
+                        {% endif %}
+                      </tr>
+                      <tr class="child-header">
+                        <th class="text-center group-start">Step <span style="color: #FF9800;">(+ / -)</span></th>
+                        <th class="text-center group-start">Minimum Step</th>
+                        <th class="text-center">Maximum Step</th>
+                        <th class="text-center group-start">Minimum Step</th>
+                        <th class="text-center">Maximum Step</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, index) in getRows('step')" :key="'step-' + index">
+                        <td class="text-center font-weight-medium">Step</td>
+                        <td class="text-center group-start">[[ stepGlobal(row) ]]</td>
+                        <td class="text-center group-start">[[ cell(row, 'reference', 'r_min') ]]</td>
+                        <td class="text-center">[[ cell(row, 'reference', 'r_max') ]]</td>
+                        <td class="text-center group-start custom-value">[[ cell(row, 'custom', 'c_min') ]]</td>
+                        <td class="text-center custom-value">[[ cell(row, 'custom', 'c_max') ]]</td>
+                        {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                        <td class="text-center group-start actions-cell">
+                          {% if request|has_any_feature_permission:"custom-threshold:write" %}
+                          <v-btn icon color="primary" title="Edit custom Step" @click="openEdit('step', row)">
+                            <v-icon small>mdi-square-edit-outline</v-icon>
+                          </v-btn>
+                          {% endif %}
+                          {% if request|has_any_feature_permission:"custom-threshold:delete" %}
+                          <v-btn icon color="error" title="Delete custom Step" :disabled="!hasCustom(row)" @click="openDelete('step', row)">
+                            <v-icon small>mdi-delete-outline</v-icon>
+                          </v-btn>
+                          {% endif %}
+                        </td>
+                        {% endif %}
+                      </tr>
+                      <tr v-if="!getRows('step').length"><td colspan="7" class="text-center grey--text">No Step thresholds available.</td></tr>
+                    </tbody>
+                  </template>
+                </v-simple-table>
+              </section>
+
+              <!-- PERSIST: minimum variance and window (hours). -->
+              <section class="method-section mb-6">
+                <h3 class="subtitle-1 font-weight-bold mb-2">Persist Check</h3>
+                <p class="caption grey--text mb-2">Global and Reference Thresholds are read-only.</p>
+                <v-simple-table class="threshold-compare-table persist-table">
+                  <template v-slot:default>
+                    <thead>
+                      <tr class="parent-header">
+                        <th rowspan="2" class="text-center">Check</th>
+                        <th colspan="2" class="text-center group-start">Global</th>
+                        <th colspan="2" class="text-center group-start">Reference</th>
+                        <th colspan="2" class="text-center group-start">Custom</th>
+                        {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                        <th rowspan="2" class="text-center group-start">Actions</th>
+                        {% endif %}
+                      </tr>
+                      <tr class="child-header">
+                        <th class="text-center group-start">Min. Variance</th>
+                        <th class="text-center">Window (hrs)</th>
+                        <th class="text-center group-start">Min. Variance</th>
+                        <th class="text-center">Window (hrs)</th>
+                        <th class="text-center group-start">Min. Variance</th>
+                        <th class="text-center">Window (hrs)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, index) in getRows('persist')" :key="'persist-' + index">
+                        <td class="text-center font-weight-medium">Persist</td>
+                        <td class="text-center group-start">[[ cell(row, 'global', 'g_var') ]]</td>
+                        <td class="text-center">[[ cell(row, 'global', 'g_win') ]]</td>
+                        <td class="text-center group-start">[[ cell(row, 'reference', 'r_var') ]]</td>
+                        <td class="text-center">[[ cell(row, 'reference', 'r_win') ]]</td>
+                        <td class="text-center group-start custom-value">[[ cell(row, 'custom', 'c_var') ]]</td>
+                        <td class="text-center custom-value">[[ cell(row, 'custom', 'c_win') ]]</td>
+                        {% if request|has_any_feature_permission:"custom-threshold:write" or request|has_any_feature_permission:"custom-threshold:delete" %}
+                        <td class="text-center group-start actions-cell">
+                          {% if request|has_any_feature_permission:"custom-threshold:write" %}
+                          <v-btn icon color="primary" title="Edit custom Persist" @click="openEdit('persist', row)">
+                            <v-icon small>mdi-square-edit-outline</v-icon>
+                          </v-btn>
+                          {% endif %}
+                          {% if request|has_any_feature_permission:"custom-threshold:delete" %}
+                          <v-btn icon color="error" title="Delete custom Persist" :disabled="!hasCustom(row)" @click="openDelete('persist', row)">
+                            <v-icon small>mdi-delete-outline</v-icon>
+                          </v-btn>
+                          {% endif %}
+                        </td>
+                        {% endif %}
+                      </tr>
+                      <tr v-if="!getRows('persist').length"><td colspan="8" class="text-center grey--text">No Persist thresholds available.</td></tr>
+                    </tbody>
+                  </template>
+                </v-simple-table>
+              </section>
+
+              <p class="caption grey--text" style="color: red !important;">— indicates a threshold is not configured.</p>
+            </template>
+
+            <v-alert v-else-if="!loading && !pageError" type="info" text class="mt-5">
+              Select a station and one or more variables, then click Load Thresholds.
+            </v-alert>
+          </div>
+
+          <!-- Single reusable custom edit dialog. No Global editing on this page. -->
+          <v-dialog v-model="editDialog" max-width="560px" :persistent="savingCustom">
+            <v-card>
+              <v-card-title class="d-flex align-start">
+                <div>
+                  <div class="headline">Edit Custom [[ methodTitle(editMethod) ]]</div>
+
+                  <!-- variable name -->
+                  <v-btn
+                    x-small
+                    color="purple"
+                    outlined
+                  >
+                    [[ selectedVariableName ]]
+                  </v-btn>
+
+                  <span> · </span>
+
+                  <!-- station label -->
+                  <v-btn
+                    x-small
+                    color="success"
+                    outlined
+                  >
+                    [[ loadedStationLabel ]]
+                  </v-btn>
+
+                  <span v-if="editMethod === 'range'"> · </span>
+
+                  <!-- month name (only for range) -->
+                  <v-btn
+                    v-if="editMethod === 'range'"
+                    x-small
+                    color="blue-grey"
+                    outlined
+                  >
+                    [[ editingRow && editingRow.month_name ]]
+                  </v-btn>
+                </div>
+
+                <v-spacer></v-spacer>
+
+                <v-btn icon :disabled="savingCustom" @click="editDialog = false"><v-icon>mdi-close</v-icon></v-btn>
+              </v-card-title>
+
+              <v-divider></v-divider>
+
+              <v-card-text class="pt-5">
+                <v-alert v-if="dialogError" type="error" dense text>[[ dialogError ]]</v-alert>
+
+                <!-- reusable two feilds -->
+                <v-row dense>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model="customForm.first"
+                      :label="fieldLabels(editMethod)[0]"
+                      type="number" step="any" outlined dense
+                      :disabled="savingCustom"
+                      hide-details="auto"
+                    ></v-text-field>
+                  </v-col>
+
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model="customForm.second"
+                      :label="fieldLabels(editMethod)[1]"
+                      type="number" :step="editMethod === 'persist' ? 1 : 'any'" outlined dense
+                      :disabled="savingCustom"
+                      hide-details="auto"
+                    ></v-text-field>
+                  </v-col>
+                </v-row>
+
+                <!-- if range -->
+                <template v-if="editMethod === 'range'">
+                  <v-checkbox
+                    v-model="applyRangeToAll"
+                    label="Apply to all months"
+                    color="primary"
+                    class="mt-3"
+                    :disabled="savingCustom || rangeMonthNames.length !== 12"
+                    hide-details
+                  ></v-checkbox>
+
+                  <v-alert
+                    v-if="applyRangeToAll"
+                    type="warning"
+                    text
+                    dense
+                    class="mt-3"
+                  >
+                    This will overwrite the custom Range thresholds
+                    for all 12 months.
+                  </v-alert>
+                </template>
+
+                <!-- if persist -->
+                <p v-if="editMethod === 'persist'" class="caption grey--text mt-2 mb-0">
+                  Window is in hours.
+                </p>
+
+                <p v-if="customValidationError" class="error--text caption mt-2 mb-0">
+                  [[ customValidationError ]]
+                </p>
+              </v-card-text>
+
+              <v-divider></v-divider>
+
+              <v-card-actions>
+                <v-spacer></v-spacer>
+
+                <v-btn color="error" :disabled="savingCustom" @click="editDialog = false">Cancel</v-btn>
+
+                <v-btn
+                  color="primary"
+                  :loading="savingCustom"
+                  :disabled="!!customValidationError || savingCustom"
+                  @click="saveCustom"
+                >
+                  [[ editMethod === 'range' && applyRangeToAll
+                      ? 'Save All Months'
+                      : 'Save Changes' ]]
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <!-- delete threshold dialog -->
+          <v-dialog v-model="deleteDialog" max-width="460px" :persistent="deletingCustom">
+            <v-card>
+              <v-card-title class="headline">Delete Custom Threshold</v-card-title>
+
+              <v-card-text class="pt-3">
+                Delete the custom [[ methodTitle(deleteMethod) ]] threshold for
+                <strong>[[ selectedVariableName ]]</strong><span v-if="deleteMethod === 'range' && deletingRow"> ([[ deletingRow.month_name ]])</span>?
+                
+                <br/>Global and Reference thresholds will not be changed.
+                <v-alert v-if="dialogError" type="error" dense text class="mt-3">[[ dialogError ]]</v-alert>
+              </v-card-text>
+
+              <v-card-actions>
+                <v-spacer></v-spacer>
+
+                <v-btn color="info" :disabled="deletingCustom" @click="deleteDialog = false">Cancel</v-btn>
+
+                <v-btn color="error" :loading="deletingCustom" @click="deleteCustom">Delete</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <!-- copy thresholds dialog -->
+          <v-dialog v-model="copyDialog" max-width="650px" :persistent="copying">
+            <v-card>
+              <!-- Header -->
+              <v-card-title class="d-flex align-center">
+                <div>
+                  <div class="headline">Copy Custom Thresholds</div>
+
+                  <span class="subtitle-2 grey--text mt-1">Destination: </span>
+
+                  <!-- station label -->
+                  <v-btn
+                    x-small
+                    color="success"
+                    outlined
+                  >
+                    [[ loadedStationLabel ]]
+                  </v-btn>
+                </div>
+
+                <v-spacer></v-spacer>
+
+                <v-btn icon :disabled="copying" @click="closeCopyDialog">
+                  <v-icon>mdi-close</v-icon>
+                </v-btn>
+              </v-card-title>
+
+              <v-divider></v-divider>
+
+              <v-card-text class="pt-5">
+                <v-alert v-if="copyError" type="error" text dense>
+                  [[ copyError ]]
+                </v-alert>
+
+                <!-- Source station -->
+                <v-autocomplete
+                  v-model="copySourceStationId"
+                  :items="copySourceStations"
+                  item-text="label"
+                  item-value="id"
+                  label="Copy from station"
+                  placeholder="Select a source station"
+                  outlined
+                  dense
+                  clearable
+                  :disabled="copying"
+                  no-data-text="No other stations of the same type"
+                ></v-autocomplete>
+
+                <!-- Copy information -->
+                <v-alert type="info" text class="mt-3">
+                  <div class="font-weight-bold mb-2">
+                    How copying works
+                  </div>
+
+                  <p>
+                    You can only copy thresholds between stations of
+                    the same type (Automatic or Manual).
+                  </p>
+
+                  <p>
+                    Only variables shared by both stations will be copied.
+                    For example, if Station A has Air Temperature,
+                    Precipitation and Wind Speed, but Station B only
+                    supports Air Temperature and Precipitation, only
+                    those two shared variables will be copied.
+                  </p>
+
+                  <p>
+                    Range: All existing monthly custom thresholds
+                    from the source station will be copied.
+                    Months without source thresholds will remain unchanged
+                    at the destination.
+                  </p>
+
+                  <p>
+                    Step and Persist: Existing source custom thresholds
+                    will be copied for shared variables.
+                  </p>
+
+                  <p class="mb-0">
+                    Global thresholds and reference-station assignments
+                    will not be modified.
+                  </p>
+                </v-alert>
+
+                <!-- Overwrite warning -->
+                <v-alert type="warning" text dense>
+                  Existing destination custom thresholds will be overwritten
+                  where the source station has matching records.
+                  Destination-only records will remain unchanged.
+                </v-alert>
+              </v-card-text>
+
+              <v-divider></v-divider>
+
+              <v-card-actions>
+                <v-spacer></v-spacer>
+
+                <v-btn color="error" :disabled="copying" @click="closeCopyDialog">
+                  Cancel
+                </v-btn>
+
+                <v-btn
+                  color="primary"
+                  :loading="copying"
+                  :disabled="copySourceStationId == null || copying"
+                  @click="copyCustomThresholds"
+                >
+                  Copy
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <v-snackbar v-model="snackbar" color="success" timeout="3500">
+            [[ snackbarText ]]
+            <template v-slot:action="{ attrs }">
+              <v-btn text v-bind="attrs" @click="snackbar = false">Close</v-btn>
+            </template>
+          </v-snackbar>
+        </v-layout>
+      </v-main>
+    </v-app>
+  </div>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#custom-threshold-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data() {
+      return {
+        filter: { region: null, watershed: null, profile: null, isActive: true, isAutomatic: true },
+
+        stationId: null,
+
+        stations: [
+          {% for station in station_list %}
+          {
+            id: {{ station.id }},
+            label: '{{ station.name|escapejs }} - {{ station.code|escapejs }}',
+            region: '{{ station.region|default_if_none:""|escapejs }}',
+            watershed: '{{ station.watershed|default_if_none:""|escapejs }}',
+            profile: '{{ station.profile.id|default_if_none:"" }}',
+            is_automatic: {{ station.is_automatic|yesno:"true,false" }},
+            is_active: {{ station.is_active|yesno:"true,false" }}
+          },
+          {% endfor %}
+        ],
+
+        referenceStations: [
+          {% for station in reference_station_list %}
+          { id: {{ station.id }}, label: '{{ station.name|escapejs }} - {{ station.code|escapejs }}' },
+          {% endfor %}
+        ],
+
+        stationProfileList: [
+          {% for profile in station_profile_list %}
+          { id: {{ profile.id }}, name: '{{ profile.name|escapejs }}' },
+          {% endfor %}
+        ],
+
+        stationWatershedList: [
+          {% for watershed in station_watershed_list %}
+          { id: {{ watershed.id }}, name: '{{ watershed.watershed|escapejs }}' },
+          {% endfor %}
+        ],
+
+        stationAdminRegionList: [
+          {% for region in station_admin_region_list %}
+          { id: {{ region.id }}, name: '{{ region.name|escapejs }}' },
+          {% endfor %}
+        ],
+
+        stationVariables: [],
+        selectedVariableIds: [],
+        loadedVariableIds: [],
+        loadedVariableNames: [],
+        selectedVariableName: null,
+        loadedStationId: null,
+        loadedStationLabel: '',
+        referenceStationId: null,
+        referenceStationName: '',
+        draftReferenceStationId: null,
+        applyRangeToAll: false,
+        tab: 0,
+        copySourceStationId: null,
+        copyDialog: false,
+        copying: false,
+        copyError: '',
+
+        // Each legacy GET returns data.variable_data keyed by variable name.
+        records: { range: {}, step: {}, persist: {} },
+        loaded: false,
+        loading: false,
+        loadingVariables: false,
+        savingReference: false,
+        pageError: '',
+        editDialog: false,
+        editMethod: null,
+        editingRow: null,
+        customForm: { first: '', second: '' },
+        savingCustom: false,
+        deleteDialog: false,
+        deleteMethod: null,
+        deletingRow: null,
+        deletingCustom: false,
+        dialogError: '',
+        snackbar: false,
+        snackbarText: '',
+      };
+    },
+
+    computed: {
+      filteredStations() {
+        return this.stations.filter(station =>
+          (!this.filter.region || station.region === this.filter.region) &&
+          (!this.filter.watershed || station.watershed === this.filter.watershed) &&
+          (this.filter.profile == null || String(station.profile) === String(this.filter.profile)) &&
+          station.is_active === this.filter.isActive &&
+          station.is_automatic === this.filter.isAutomatic
+        );
+      },
+
+      customValidationError() {
+        if (!this.editDialog) return '';
+        const first = this.customForm.first;
+        const second = this.customForm.second;
+        if (first === '' || first == null || second === '' || second == null) {
+          return 'Both values are required.';
+        }
+        const a = Number(first);
+        const b = Number(second);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return 'Enter valid numbers.';
+        if ((this.editMethod === 'range' || this.editMethod === 'step') && a > b) {
+          return 'Minimum cannot exceed maximum.';
+        }
+        if (this.editMethod === 'persist' && (a < 0 || b <= 0 || !Number.isInteger(b))) {
+          return 'Minimum variance must be non-negative; window must be a positive whole number of hours.';
+        }
+        return '';
+      },
+
+      rangeMonthNames() {
+        const rows = this.records.range[this.selectedVariableName] || [];
+
+        return [...new Set(
+          rows
+            .map(row => row.month_name)
+            .filter(name => name != null && String(name).trim() !== '')
+        )];
+      },
+    
+      destinationStation() {
+        return this.stations.find(
+          station => station.id === this.loadedStationId
+        );
+      },
+
+      // only allow copying for stations of the same type
+      copySourceStations() {
+        const target = this.destinationStation;
+
+        if (!target) return [];
+
+        return this.stations.filter(station =>
+          station.id !== target.id &&
+          station.is_automatic === target.is_automatic
+        );
+      },
+    },
+
+    methods: {
+      onFilterChange() {
+        if (this.stationId != null && !this.filteredStations.some(station => station.id === this.stationId)) {
+          this.stationId = null;
+          this.stationVariables = [];
+          this.selectedVariableIds = [];
+          this.clearLoaded();
+        }
+      },
+      
+      clearLoaded() {
+        this.loaded = false;
+        this.records = { range: {}, step: {}, persist: {} };
+        this.loadedVariableNames = [];
+        this.selectedVariableName = null;
+        this.referenceStationId = null;
+        this.referenceStationName = '';
+        this.draftReferenceStationId = null;
+        this.pageError = '';
+      },
+      
+      async onStationChanged() {
+        this.stationVariables = [];
+        this.selectedVariableIds = [];
+        this.clearLoaded();
+        if (this.stationId == null) return;
+        const requestedId = this.stationId;
+        this.loadingVariables = true;
+        try {
+          // The existing stations_variables endpoint may be paginated.
+          let url = '/api/stations_variables/?station_id=' + encodeURIComponent(requestedId);
+          const items = [];
+          while (url) {
+            const response = await axios.get(url);
+            if (requestedId !== this.stationId) return;
+            const page = response.data;
+            if (Array.isArray(page)) {
+              items.push(...page);
+              url = null;
+            } else {
+              items.push(...(page.results || []));
+              url = page.next || null;
+            }
+          }
+          if (requestedId === this.stationId) this.stationVariables = items;
+        } catch (error) {
+          this.pageError = this.getError(error);
+        } finally {
+          if (requestedId === this.stationId) this.loadingVariables = false;
+        }
+      },
+      
+      getError(error) {
+        return (error.response && error.response.data &&
+          (error.response.data.detail || error.response.data.error)) ||
+          error.message || 'An unexpected error occurred.';
+      },
+      
+      formatValue(value) {
+        return value == null || value === '' ? '—' : value;
+      },
+      
+      cell(row, source, field) {
+        const value = row && row[source] && row[source].children && row[source].children[field];
+        return this.formatValue(value);
+      },
+
+      selectAllVariables() {
+        for (const value of this.stationVariables) {
+          if (!this.selectedVariableIds.includes(value.variable)) {
+            this.selectedVariableIds.push(value.variable);
+          }
+        }
+      },
+
+      stepGlobal(row) {
+          const values = row?.global?.children || {};
+          const value = values.g_max ?? values.g_min;
+
+          return value == null || value === ''
+              ? '—'
+              : `±${value}`;
+      },
+      
+      hasCustom(row) {
+        const values = row && row.custom && row.custom.children || {};
+        return Object.values(values).some(value => value != null && value !== '');
+      },
+      
+      getRows(method) {
+        const value = this.records[method][this.selectedVariableName];
+
+        if (Array.isArray(value)) return value;
+
+        // Handle a single row if an endpoint returns an object rather than a list.
+        return value && typeof value === 'object' ? [value] : [];
+      },
+      
+      methodTitle(method) {
+        return ({ range: 'Range', step: 'Step', persist: 'Persist' })[method] || '';
+      },
+      
+      fieldLabels(method) {
+        if (method === 'persist') return ['Minimum Variance', 'Window (hours)'];
+        return ['Minimum', 'Maximum'];
+      },
+      
+      getParams() {
+        return {
+          station_id: this.loadedStationId || this.stationId,
+          variable_ids: (this.loadedVariableIds.length ? this.loadedVariableIds : this.selectedVariableIds).join(',')
+        };
+      },
+      
+      async loadThresholds(keepSelection) {
+        this.pageError = '';
+        this.loading = true;
+
+        const params = keepSelection ? this.getParams() : {
+          station_id: this.stationId,
+          variable_ids: this.selectedVariableIds.join(',')
+        };
+
+        const oldSelection = keepSelection ? this.selectedVariableName : null;
+
+        try {
+          const [rangeRes, stepRes, persistRes] = await Promise.all([
+            axios.get('/wx/quality_control/range_threshold/get/', { params }),
+            axios.get('/wx/quality_control/step_threshold/get/', { params }),
+            axios.get('/wx/quality_control/persist_threshold/get/', { params }),
+          ]);
+
+          const data = [rangeRes, stepRes, persistRes].map(res => res.data.data || {});
+          this.records = {
+            range: data[0].variable_data || {},
+            step: data[1].variable_data || {},
+            persist: data[2].variable_data || {},
+          };
+
+          const names = new Set([
+            ...Object.keys(this.records.range),
+            ...Object.keys(this.records.step),
+            ...Object.keys(this.records.persist)
+          ]);
+
+          // Preserve the order in the variable selector when possible.
+          const ids = keepSelection ? this.loadedVariableIds : this.selectedVariableIds;
+          
+          const ordered = this.stationVariables
+            .filter(item => ids.some(id => String(id) === String(item.variable)))
+            .map(item => item.variable_name)
+            .filter(name => names.has(name));
+
+          this.loadedVariableNames = [...new Set([...ordered, ...names])];
+          this.selectedVariableName = names.has(oldSelection) ? oldSelection : this.loadedVariableNames[0] || null;
+
+          if (!this.selectedVariableName) throw new Error('No threshold data was returned for the selected variables.');
+
+          this.loadedStationId = params.station_id;
+          this.loadedVariableIds = [...ids];
+          this.loadedStationLabel = (this.stations.find(item => item.id === this.loadedStationId) || {}).label || '';
+
+          const source = data.find(item => item.reference_station_id != null) || data[0];
+
+          this.referenceStationId = source.reference_station_id == null ? null : Number(source.reference_station_id);
+          this.referenceStationName = source.reference_station_name || '';
+          this.draftReferenceStationId = this.referenceStationId;
+          this.loaded = true;
+        } 
+        catch (error) {
+          if (!keepSelection) this.clearLoaded();
+
+          this.pageError = this.getError(error);
+        } 
+        finally {
+          this.loading = false;
+        }
+      },
+      
+      async refreshMethod(method) {
+        const response = await axios.get(`/wx/quality_control/${method}_threshold/get/`, { params: this.getParams() });
+        this.$set(this.records, method, response.data.data.variable_data || {});
+      },
+      
+      async saveReferenceStation() {
+        if (this.draftReferenceStationId == null || this.savingReference) return;
+        this.savingReference = true;
+        this.pageError = '';
+        try {
+          await axios.post('/wx/quality_control/update_reference_station/', null, {
+            params: {
+              station_id: this.loadedStationId,
+              new_reference_station_id: this.draftReferenceStationId
+            }
+          });
+          await this.loadThresholds(true);
+          if (!this.pageError) {
+            this.snackbarText = 'Reference station updated.';
+            this.snackbar = true;
+          }
+        } catch (error) {
+          this.pageError = this.getError(error);
+        } finally {
+          this.savingReference = false;
+        }
+      },
+      
+      openEdit(method, row) {
+        this.editMethod = method;
+        this.editingRow = row;
+        this.applyRangeToAll = false;
+
+        const values = (row && row.custom && row.custom.children) || {};
+
+        if (method === 'persist') {
+          this.customForm = {
+            first: values.c_var == null ? '' : String(values.c_var),
+            second: values.c_win == null ? '' : String(values.c_win),
+          };
+        } else {
+          this.customForm = {
+            first: values.c_min == null ? '' : String(values.c_min),
+            second: values.c_max == null ? '' : String(values.c_max),
+          };
+        }
+
+        this.dialogError = '';
+        this.editDialog = true;
+      },
+      
+      async saveCustom() {
+        if (this.savingCustom || this.customValidationError) return;
+
+        const method = this.editMethod;
+        const endpoint = `/wx/quality_control/${method}_threshold/update/`;
+
+        const params = {
+          station_id: this.loadedStationId,
+          variable_name: this.selectedVariableName,
+        };
+
+        if (method === 'persist') {
+          params.new_var = this.customForm.first;
+          params.new_win = this.customForm.second;
+        } else {
+          params.new_min = this.customForm.first;
+          params.new_max = this.customForm.second;
+        }
+
+        const allMonths = method === 'range' && this.applyRangeToAll;
+
+        if (allMonths && this.rangeMonthNames.length !== 12) {
+          this.dialogError = 'All 12 months must be loaded first.';
+          return;
+        }
+
+        this.dialogError = '';
+        this.savingCustom = true;
+
+        let savedCount = 0;
+        let failedMonth = null;
+
+        try {
+          if (method === 'range') {
+            const months = allMonths
+              ? this.rangeMonthNames
+              : [this.editingRow.month_name];
+
+            for (const month of months) {
+              failedMonth = month;
+
+              await axios.post(endpoint, null, {
+                params: {
+                  ...params,
+                  month_name: month,
+                },
+              });
+
+              savedCount++;
+            }
+          } else {
+            await axios.post(endpoint, null, { params });
+          }
+
+          this.editDialog = false;
+
+          try {
+            await this.refreshMethod(method);
+          } catch (error) {
+            this.pageError =
+              'Changes saved, but the table could not refresh: ' +
+              this.getError(error);
+          }
+
+          this.snackbarText = allMonths
+            ? 'Custom Range thresholds saved for all 12 months.'
+            : `${this.methodTitle(method)} custom thresholds saved.`;
+
+          this.snackbar = true;
+
+        } catch (error) {
+          this.dialogError = allMonths
+            ? `${savedCount} of 12 months updated. Failed at ${failedMonth}: ${this.getError(error)}. You can retry.`
+            : this.getError(error);
+
+          if (savedCount > 0) {
+            try {
+              await this.refreshMethod(method);
+            } catch (refreshError) {
+              this.pageError =
+                'Some months saved, but the table could not refresh: ' +
+                this.getError(refreshError);
+            }
+          }
+        } finally {
+          this.savingCustom = false;
+        }
+      },
+      
+      openDelete(method, row) {
+        this.deleteMethod = method;
+        this.deletingRow = row;
+        this.dialogError = '';
+        this.deleteDialog = true;
+      },
+      
+      async deleteCustom() {
+        if (this.deletingCustom) return;
+        const method = this.deleteMethod;
+        const params = {
+          station_id: this.loadedStationId,
+          variable_name: this.selectedVariableName,
+        };
+        if (this.deletingRow.month_name != null) params.month_name = this.deletingRow.month_name;
+        this.deletingCustom = true;
+        this.dialogError = '';
+        try {
+          await axios.post(`/wx/quality_control/${method}_threshold/delete/`, null, { params });
+          this.deleteDialog = false;
+          try {
+            await this.refreshMethod(method);
+          } catch (refreshError) {
+            this.pageError = 'Deleted, but the table could not refresh: ' + this.getError(refreshError);
+          }
+          this.snackbarText = `${this.methodTitle(method)} custom thresholds deleted.`;
+          this.snackbar = true;
+        } catch (error) {
+          this.dialogError = this.getError(error);
+        } finally {
+          this.deletingCustom = false;
+        }
+      },
+    
+      openCopyDialog() {
+        this.copySourceStationId = null;
+        this.copyError = '';
+        this.copyDialog = true;
+      },
+
+      closeCopyDialog() {
+        if (this.copying) return;
+
+        this.copyDialog = false;
+        this.copySourceStationId = null;
+        this.copyError = '';
+      },
+
+      async copyCustomThresholds() {
+        if (this.copying || this.copySourceStationId == null) return;
+
+        this.copying = true;
+        this.copyError = '';
+
+        try {
+          const response = await axios.post(
+            '/wx/quality_control/custom_threshold/copy/',
+            {
+              source_station_id: this.copySourceStationId,
+              target_station_id: this.loadedStationId,
+              overwrite: true
+            }
+          );
+
+          this.copyDialog = false;
+          this.copySourceStationId = null;
+
+          // Refresh the currently loaded destination thresholds.
+          await this.loadThresholds(true);
+
+          this.snackbarText =
+            `Custom thresholds copied for ${response.data.shared_variables} shared variables.`;
+
+          this.snackbar = true;
+
+        } catch (error) {
+          this.copyError = this.getError(error);
+        } finally {
+          this.copying = false;
+        }
+      },
+          
+    },
+    
+    mounted() {
+      axios.defaults.xsrfHeaderName = 'X-CSRFToken';
+      axios.defaults.xsrfCookieName = 'csrftoken';
+    }
+  });
+</script>
+
+<style>
+  /* Let Vuetify calculate the height of the outlined field */
+  .scrollable-autocomplete .v-input__slot {
+      max-height: none !important;
+  }
+
+  /* Keep scrolling entirely below the floating label */
+  .scrollable-autocomplete .v-select__selections {
+      max-height: 150px;
+      min-height: 32px !important;
+
+      overflow-y: auto;
+      overflow-x: hidden;
+
+      /* Space outside the scrollable area */
+      /* margin-top: 8px;
+      margin-bottom: 4px; */
+
+      /* Remove Vuetify's internal vertical padding */
+      padding: 0 4px 0 0 !important;
+
+      align-content: flex-start;
+      align-self: flex-start;
+  }
+
+  #customThresholdStyle .reference-card {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 5px;
+  }
+  #customThresholdStyle .method-section h3 { margin-bottom: 8px; }
+  #customThresholdStyle .threshold-compare-table {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 5px;
+    overflow-x: auto;
+  }
+  #customThresholdStyle .threshold-compare-table table {
+    min-width: 850px;
+    border-collapse: collapse;
+  }
+  #customThresholdStyle .step-table table { min-width: 750px; }
+  #customThresholdStyle .threshold-compare-table th,
+  #customThresholdStyle .threshold-compare-table td {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+  #customThresholdStyle .threshold-compare-table thead th {
+    font-weight: bold;
+    height: 44px;
+    white-space: nowrap;
+  }
+  #customThresholdStyle .threshold-compare-table .parent-header th { background: #f4f6f9; }
+  #customThresholdStyle .threshold-compare-table .child-header th { background: #f9fafb; }
+  #customThresholdStyle .threshold-compare-table .group-start {
+    border-left: 2px solid rgba(0, 0, 0, 0.19);
+  }
+  #customThresholdStyle .threshold-compare-table .custom-value { background: #fbfcff; }
+  #customThresholdStyle .threshold-compare-table .actions-cell { white-space: nowrap; }
+  #customThresholdStyle .threshold-compare-table tbody tr:hover td { background: #f9fafb; }
+</style>
+{% endblock %}

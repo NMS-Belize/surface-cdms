@@ -4581,7 +4581,6 @@ def load_reference_stations(request):
             'name': station.name,
             'latitude': station.latitude,
             'longitude': station.longitude,
-            'is_active': station.is_active,
             'variable_ids': station_variables_map.get(station.id, []),
         })
 
@@ -4607,7 +4606,7 @@ def create_reference_station(request):
     - is_active
     - variable_ids
 
-    The backend always sets:
+    We set:
     - is_reference=True
     - utc_offset_minutes=settings.TIMEZONE_OFFSET
     """
@@ -5340,6 +5339,163 @@ def save_reference_station_thresholds(request, id):
         'message': 'Reference station thresholds saved successfully.'
     }, status=200)
 
+
+class customThresholdView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
+    template_name = 'wx/quality_control/custom_threshold.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
+        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
+        context['station_profile_list'] = StationProfile.objects.all()
+        context['station_watershed_list'] = Watershed.objects.all()
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()  
+
+        return context
+
+
+@require_http_methods(["POST"])
+@wx_mapped_permission_required
+def copy_custom_thresholds(request):
+    try:
+        data = json.loads(request.body)
+
+        source_id = int(data["source_station_id"])
+        target_id = int(data["target_station_id"])
+        overwrite = data.get("overwrite", False)
+
+        if source_id <= 0 or target_id <= 0:
+            raise ValueError("Invalid station ID.")
+
+        if not isinstance(overwrite, bool):
+            raise ValueError("overwrite must be a boolean.")
+
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return JsonResponse(
+            {"detail": "Invalid request parameters."},
+            status=400
+        )
+
+    if source_id == target_id:
+        return JsonResponse(
+            {"detail": "Source and destination must differ."},
+            status=400
+        )
+
+    # Verify both stations exist.
+    try:
+        source = Station.objects.get(pk=source_id)
+        target = Station.objects.get(pk=target_id)
+    except Station.DoesNotExist:
+        return JsonResponse(
+            {"detail": "Station not found."},
+            status=404
+        )
+
+    # Keep automatic and manual configurations separate.
+    if source.is_automatic != target.is_automatic:
+        return JsonResponse(
+            {"detail": "Stations must be of the same type."},
+            status=400
+        )
+
+    # Only copy variables configured at BOTH stations.
+    source_variables = set(
+        StationVariable.objects.filter(
+            station_id=source_id
+        ).values_list("variable_id", flat=True)
+    )
+
+    target_variables = set(
+        StationVariable.objects.filter(
+            station_id=target_id
+        ).values_list("variable_id", flat=True)
+    )
+
+    shared_variables = source_variables & target_variables
+
+    results = {
+        "range": {"created": 0, "updated": 0, "skipped": 0},
+        "step": {"created": 0, "updated": 0, "skipped": 0},
+        "persist": {"created": 0, "updated": 0, "skipped": 0},
+    }
+
+    def copy_records(model, method, lookup_fields, value_fields):
+        records = model.objects.filter(
+            station_id=source_id,
+            variable_id__in=shared_variables
+        )
+
+        for record in records.iterator():
+            lookup = {
+                "station_id": target_id,
+            }
+
+            for field in lookup_fields:
+                lookup[field] = getattr(record, field)
+
+            values = {
+                field: getattr(record, field)
+                for field in value_fields
+            }
+
+            if overwrite:
+                _, created = model.objects.update_or_create(
+                    **lookup,
+                    defaults=values
+                )
+            else:
+                _, created = model.objects.get_or_create(
+                    **lookup,
+                    defaults=values
+                )
+
+            if created:
+                results[method]["created"] += 1
+            elif overwrite:
+                results[method]["updated"] += 1
+            else:
+                results[method]["skipped"] += 1
+
+    # All three operations succeed together or roll back together.
+    with transaction.atomic():
+
+        # Range: separate record for each month.
+        copy_records(
+            QcRangeThreshold,
+            "range",
+            lookup_fields=["variable_id", "month"],
+            value_fields=["range_min", "range_max"]
+        )
+
+        # Step: one record per station and variable.
+        copy_records(
+            QcStepThreshold,
+            "step",
+            lookup_fields=["variable_id"],
+            value_fields=["step_min", "step_max"]
+        )
+
+        # Persist: one record per station and variable.
+        copy_records(
+            QcPersistThreshold,
+            "persist",
+            lookup_fields=["variable_id"],
+            value_fields=["minimum_variance", "window"]
+        )
+
+    return JsonResponse({
+        "detail": "Custom thresholds copied successfully.",
+        "source_station_id": source_id,
+        "target_station_id": target_id,
+        "shared_variables": len(shared_variables),
+        "results": results,
+    })
+
+
+class globalThresholdView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
+    template_name = 'wx/quality_control/global_threshold.html'
 
 
 class QualityControlView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
@@ -8747,6 +8903,7 @@ def update_reference_station(request):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
+
 @require_http_methods(["POST"])
 @wx_mapped_permission_required
 def update_global_threshold(request):
@@ -8793,6 +8950,43 @@ def update_global_threshold(request):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
+@require_http_methods(["GET"])
+@wx_mapped_permission_required
+def get_global_thresholds(request):
+    """List the range, step, and persist values for every variable/mode."""
+    fields = (
+        "id", "name",
+        "range_min", "range_max", "step", "persistence", "persistence_window",
+        "range_min_hourly", "range_max_hourly", "step_hourly",
+        "persistence_hourly", "persistence_window_hourly",
+    )
+    variables = Variable.objects.order_by("name").values(*fields)
+
+    return JsonResponse({
+        "variables": [
+            {
+                "id": variable["id"],
+                "name": variable["name"],
+                "manual": {
+                    "range_min": variable["range_min"],
+                    "range_max": variable["range_max"],
+                    "step": variable["step"],
+                    "minimum_variance": variable["persistence"],
+                    "window": variable["persistence_window"],
+                },
+                "automatic": {
+                    "range_min": variable["range_min_hourly"],
+                    "range_max": variable["range_max_hourly"],
+                    "step": variable["step_hourly"],
+                    "minimum_variance": variable["persistence_hourly"],
+                    "window": variable["persistence_window_hourly"],
+                },
+            }
+            for variable in variables
+        ]
+    })
+
+
 
 @api_view(['GET'])
 def range_threshold_view(request): # Get global ranges for synop and daily data captures
@@ -8819,20 +9013,6 @@ def range_threshold_view(request): # Get global ranges for synop and daily data 
 
     return Response(result, status=status.HTTP_200_OK)
 
-
-class get_range_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/quality_control/range_threshold.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        context['station_admin_region_list'] = AdministrativeRegion.objects.all()  
-
-        return context
 
 
 def get_range_threshold_list(station_id, variable_id, is_reference=False):
@@ -9031,22 +9211,6 @@ def delete_range_threshold(request):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
-
-class get_step_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/quality_control/step_threshold.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        ontext['station_admin_region_list'] = AdministrativeRegion.objects.all()  
-
-        return context
-
-
 def get_step_threshold_entry(station_id, variable_id, is_reference=False):
     try:
         threshold = QcStepThreshold.objects.get(station_id=station_id, variable_id=variable_id)
@@ -9199,22 +9363,6 @@ def delete_step_threshold(request):
 
     response = {}
     return JsonResponse(response, status=status.HTTP_200_OK)
-
-
-
-class get_persist_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/quality_control/persist_threshold.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        context['station_admin_region_list'] = AdministrativeRegion.objects.all() 
-
-        return context
 
 
 def get_persist_threshold_entry(station_id, variable_id, is_reference=False):

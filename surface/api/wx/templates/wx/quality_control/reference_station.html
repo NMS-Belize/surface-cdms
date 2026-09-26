@@ -5,40 +5,56 @@
     <v-app>
 
       <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-        <span class="srf-display-1 text-uppercase">Reference Stations</span>
-
-        <br /><br />
-
+        <span class="srf-display-1 text-uppercase">Reference Station & Threshold Configuration</span>
       </div>
 
-        <!-- Add reference btn -->
-        <v-card-title>
-            <v-spacer></v-spacer>
-            
-            {% if request|has_any_feature_permission:"reference-station:write" %}
-            <v-btn
-                color="primary"
-                @click="openCreateDialog"
-            >
-                Add Reference Station
-            </v-btn>
-            {% endif %}
+      <div class="px-4">
+        <p class="grey--text text--darken-1 mb-1">
+          Manage reference stations and configure their Range, Step, and Persist quality-control thresholds.
+        </p>
+      </div>
 
-        </v-card-title>
+      <!-- Search and main action -->
+      <div class="reference-toolbar px-4 mt-5 mb-3">
+        <v-text-field
+          v-model="stationSearch"
+          prepend-inner-icon="mdi-magnify"
+          label="Search reference stations"
+          placeholder="Search by code or name"
+          outlined
+          dense
+          clearable
+          hide-details
+          class="reference-search"
+        ></v-text-field>
 
-        <!-- station table -->
-        <v-card flat class="mt-4">
+        {% if request|has_any_feature_permission:"reference-station:write" %}
+        <v-btn color="primary" @click="openCreateDialog">
+          <v-icon left>mdi-plus</v-icon>
+          Add Reference Station
+        </v-btn>
+        {% endif %}
+      </div>
+
+      <!-- Station table -->
+      <v-card flat class="px-4">
                 
             <v-data-table
                 :headers="stationHeaders"
                 :items="referenceStations"
+                :search="stationSearch"
                 :loading="loadingStations"
                 item-key="id"
-                class="elevation-1"
+                sort-by="name"
+                no-data-text="No reference stations found."
+                no-results-text="No stations match your search."
+                loading-text="Loading reference stations..."
+                class="reference-station-table elevation-0"
             >
 
                 <!-- Actions column -->
                 <template v-slot:item.actions="{ item }">
+                  <div class="reference-actions">
 
                     <!-- edit btn -->
                     {% if request|has_any_feature_permission:"reference-station:write" %}
@@ -48,6 +64,7 @@
                         color="primary"
                         @click="openEditDialog(item)"
                     >
+                        <v-icon small left>mdi-pencil-outline</v-icon>
                         Edit
                     </v-btn>
                     {% endif %}
@@ -57,9 +74,10 @@
                     <v-btn
                         small
                         outlined
-                        color="purple"
+                        color="primary"
                         @click="openThresholdDialog(item)"
                     >
+                        <v-icon small left>tune</v-icon>
                         Thresholds
                     </v-btn>
                     {% endif %}
@@ -69,13 +87,14 @@
                     <v-btn
                         small
                         outlined
-                        color="red"
-                        @click="deleteReferenceStation(item)"
+                        color="error"
+                        @click="openDeleteDialog(item)"
                     >
+                        <v-icon small left>mdi-delete-outline</v-icon>
                         Delete
                     </v-btn>
                     {% endif %}
-
+                  </div>
                 </template>
 
             </v-data-table>
@@ -86,131 +105,146 @@
         <!-- Create/Edit Reference Station Dialog -->
         <v-dialog
             v-model="stationDialog"
-            max-width="760px"
-            persistent
+            max-width="800px"
+            :persistent="savingStation"
         >
             <v-card class="reference-station-dialog">
                 <!-- card title -->
-                <v-card-title class="reference-dialog-title">
-                    [[ dialogMode === 'create' ? 'Create Reference Station' : 'Modify Reference Station' ]]
+                <v-card-title>
+                    <div>
+                        <div class="dialog-title">
+                          [[ dialogMode === 'create' ? 'Create Reference Station' : 'Edit Reference Station' ]]
+                        </div>
+                        <div class="dialog-subtitle">
+                          Set the station details, location, and available variables.
+                        </div>
+                    </div>
+
+                    <v-spacer></v-spacer>
+
+                    <v-btn icon aria-label="Close dialog" :disabled="savingStation" @click="closeStationDialog">
+                        <v-icon>mdi-close</v-icon>
+                    </v-btn>
                 </v-card-title>
 
+                <v-divider></v-divider>
+
                 <!-- card body -->
-                <v-card-text class="reference-dialog-text">
+                <v-card-text class="pa-5 pt-4 reference-dialog-text">
 
                     <v-form
                         ref="stationFormRef"
                         v-model="stationFormValid"
                     >
 
-                        <v-container fluid class="reference-station-form-container">
-                            <v-row>
+                      <v-row>
 
-                                <!-- Code -->
-                                <v-col cols="12" md="6">
-                                    <v-text-field
-                                        v-model="stationForm.code"
-                                        label="Code"
-                                        outlined
-                                        dense
-                                        :rules="stationRules.code"
-                                    ></v-text-field>
-                                </v-col>
+                          <!-- Code -->
+                          <v-col cols="12" md="6">
+                              <v-text-field
+                                  v-model="stationForm.code"
+                                  label="Code"
+                                  outlined
+                                  dense
+                                  :rules="stationRules.code"
+                              ></v-text-field>
+                          </v-col>
 
-                                <!-- Name -->
-                                <v-col cols="12" md="6">
-                                    <v-text-field
-                                        v-model="stationForm.name"
-                                        label="Name"
-                                        outlined
-                                        dense
-                                        :rules="stationRules.name"
-                                    ></v-text-field>
-                                </v-col>
+                          <!-- Name -->
+                          <v-col cols="12" md="6">
+                              <v-text-field
+                                  v-model="stationForm.name"
+                                  label="Name"
+                                  outlined
+                                  dense
+                                  :rules="stationRules.name"
+                              ></v-text-field>
+                          </v-col>
 
-                                <!-- lat -->
-                                <v-col cols="12" md="6">
-                                    <v-text-field
-                                        id="id_latitude"
-                                        v-model="stationForm.latitude"
-                                        label="Latitude"
-                                        type="number"
-                                        outlined
-                                        dense
-                                        :rules="stationRules.latitude"
-                                        @input="updateMapFromLatitude"
-                                    ></v-text-field>
-                                </v-col>
+                          <!-- Map -->
+                          <v-col cols="12">
+                              <h6 class="map-title">Select station location on the map</h6>
 
-                                <!-- lng -->
-                                <v-col cols="12" md="6">
-                                    <v-text-field
-                                        id="id_longitude"
-                                        v-model="stationForm.longitude"
-                                        label="Longitude"
-                                        type="number"
-                                        outlined
-                                        dense
-                                        :rules="stationRules.longitude"
-                                        @input="updateMapFromLongitude"
-                                    ></v-text-field>
-                                </v-col>
+                              <div class="map-wrapper">
+                                  <div id="mapid" class="map-small" style="border-radius: 10px !important; border: 2px solid rgba(0, 0, 0, 0.18) !important;"></div>
+                              </div>
 
-                                <!-- var selector -->
-                                <v-col cols="12">
-                                    <v-card outlined class="pa-3 mb-3" style="border-color: white;">
+                              <small class="map-help-text" style="color: red;">
+                                  Click on the map to set the station latitude and longitude.
+                              </small>
+                          </v-col>
 
-                                        <div class="d-flex align-center justify-space-between mb-2">
-                                        <div>
-                                            <h6 class="mb-1">Station Variables</h6>
-                                            <small style="color: red;">
-                                                Select the variables associated with this reference station.
-                                            </small>
-                                        </div>
+                          <!-- lat -->
+                          <v-col cols="12" md="6">
+                              <v-text-field
+                                  id="id_latitude"
+                                  v-model="stationForm.latitude"
+                                  label="Latitude"
+                                  type="number"
+                                  outlined
+                                  dense
+                                  :rules="stationRules.latitude"
+                                  @input="updateMapFromLatitude"
+                              ></v-text-field>
+                          </v-col>
 
-                                        <v-checkbox
-                                            v-model="selectAllVariables"
-                                            label="Select all"
-                                            hide-details
-                                            class="ma-0 pa-0"
-                                            @change="toggleSelectAllVariables"
-                                        ></v-checkbox>
-                                        </div>
+                          <!-- lng -->
+                          <v-col cols="12" md="6">
+                              <v-text-field
+                                  id="id_longitude"
+                                  v-model="stationForm.longitude"
+                                  label="Longitude"
+                                  type="number"
+                                  outlined
+                                  dense
+                                  :rules="stationRules.longitude"
+                                  @input="updateMapFromLongitude"
+                              ></v-text-field>
+                          </v-col>
 
-                                        <v-autocomplete
-                                            v-model="stationForm.variable_ids"
-                                            :items="availableVariables"
-                                            item-text="display_name"
-                                            item-value="id"
-                                            label="Variables"
-                                            multiple
-                                            chips
-                                            small-chips
-                                            deletable-chips
-                                            outlined
-                                            dense
-                                            :loading="loadingVariables"
-                                            @change="updateSelectAllVariablesState"
-                                        ></v-autocomplete>
-
-                                    </v-card>
-                                </v-col>
-
-                                <!-- Map -->
-                                <v-col cols="12">
-                                    <h6 class="map-title">Select station location on the map</h6>
-
-                                    <div class="map-wrapper">
-                                        <div id="mapid" class="map-small" style="border-radius: 20px !important; border: 2px solid rgba(0, 0, 0, 0.628) !important;"></div>
-                                    </div>
-
-                                    <small class="map-help-text" style="color: red;">
-                                        Click on the map to set the station latitude and longitude.
+                          <!-- var selector -->
+                          <v-col cols="12">
+                              <div class="d-flex align-center justify-space-between mb-2">
+                                <div>
+                                    <h6 class="mb-1">Station Variables</h6>
+                                    <small class="grey--text text--darken-1">
+                                        Select the variables available for this reference station.
                                     </small>
-                                </v-col>
+                                </div>
 
-                            </v-row>
-                        </v-container>
+                                <v-checkbox
+                                    v-model="selectAllVariables"
+                                    label="Select all"
+                                    hide-details
+                                    class="ma-0 pa-0"
+                                    @change="toggleSelectAllVariables"
+                                    :disabled="loadingVariables || !availableVariables.length"
+                                ></v-checkbox>
+                              </div>
+
+                                <small class="grey--text text--darken-1" style="color: red !important;">
+                                  Only select variables you intend of setting thresholds for. Saving will not be allowed with incomplete thresholds!
+                                </small>
+
+                              <v-autocomplete
+                                  v-model="stationForm.variable_ids"
+                                  :items="availableVariables"
+                                  item-text="display_name"
+                                  item-value="id"
+                                  label="Variables"
+                                  multiple
+                                  chips
+                                  small-chips
+                                  deletable-chips
+                                  dense
+                                  outlined
+                                  class="scrollable-autocomplete"
+                                  :loading="loadingVariables"
+                                  @change="updateSelectAllVariablesState"
+                              ></v-autocomplete>
+                          </v-col>
+
+                      </v-row>
 
                     </v-form>
 
@@ -223,6 +257,7 @@
                     <!-- cancel btn -->
                     <v-btn
                         color="error"
+                        :disabled="savingStation"
                         @click="closeStationDialog"
                     >
                         Cancel
@@ -232,9 +267,10 @@
                     <v-btn
                         color="primary"
                         :loading="savingStation"
+                        :disabled="savingStation"
                         @click="saveStation"
                     >
-                        Save
+                        [[ dialogMode === 'create' ? 'Create Station' : 'Save Changes' ]]
                     </v-btn>
                 </v-card-actions>
 
@@ -246,37 +282,37 @@
         <v-dialog
             v-model="thresholdDialog"
             max-width="1100px"
-            persistent
+            :persistent="savingThresholds"
         >
-            <v-card>
+            <v-card class="reference-threshold-dialog">
 
                 <!-- header -->
                 <v-card-title>
                     <div>
-                        <div class="threshold-dialog-title">
+                        <div class="dialog-title">
                             Reference Station:
 
-                            <span style="color: #2196F3;">
+                            <span class="primary--text">
                                 [[ selectedThresholdStation ? selectedThresholdStation.name : '' ]]
                             </span>
                         </div>
 
-                        <div class="threshold-dialog-subtitle">
-                        Select variables, then configure Range, Step, and Persist thresholds.
+                        <div class="dialog-subtitle">
+                          Select variables, then configure their Range, Step, and Persist thresholds.
                         </div>
                     </div>
 
                     <v-spacer></v-spacer>
 
-                    <v-btn icon @click="closeThresholdDialog">
-                        <v-icon>close</v-icon>
+                    <v-btn icon aria-label="Close dialog" :disabled="savingThresholds" @click="closeThresholdDialog">
+                        <v-icon>mdi-close</v-icon>
                     </v-btn>
                 </v-card-title>
 
                 <v-divider></v-divider>
 
                 <!-- dialog body -->
-                <v-card-text>
+                <v-card-text class="pa-5 pt-4">
 
                     <!-- alert -->
                     <v-alert
@@ -298,22 +334,24 @@
                     </v-overlay>
 
                     <!-- Variable selector -->
-                    <v-card outlined class="pa-3 mb-3" style="border-color: white;">
-                        <div class="d-flex align-center justify-space-between mb-2">
-                        <div>
-                            <h6 class="mb-1">Variables</h6>
-                            <small class="text--darken-1" style="color: red;">
-                                Select the variables you want to configure for this reference station.
-                            </small>
-                        </div>
+                    <v-card outlined class="threshold-variable-panel pa-4 mb-4">
 
-                        <v-checkbox
-                            v-model="thresholdSelectAllVariables"
-                            label="Select all"
-                            hide-details
-                            class="ma-0 pa-0"
-                            @change="toggleThresholdSelectAllVariables"
-                        ></v-checkbox>
+                        <div class="d-flex align-center justify-space-between mb-2">
+                          <div>
+                              <h6 class="mb-1"> Station Variables</h6>
+                              <small class="grey--text text--darken-1">
+                                  Select which variables to include when saving thresholds.
+                              </small>
+                          </div>
+
+                          <v-checkbox
+                              v-model="thresholdSelectAllVariables"
+                              label="Select all"
+                              hide-details
+                              class="ma-0 pa-0"
+                              @change="toggleThresholdSelectAllVariables"
+                              :disabled="loadingThresholds || !thresholdVariables.length"
+                          ></v-checkbox>
                         </div>
 
                         <v-autocomplete
@@ -326,46 +364,69 @@
                             outlined
                             clearable
                             chips
+                            dense
                             small-chips
                             deletable-chips
                             autocomplete="off"
+                            class="scrollable-autocomplete"
                             @change="handleThresholdVariableSelectionChange"
                         ></v-autocomplete>
 
                     </v-card>
+  
+                    <!-- saving alert -->
+                    <v-alert 
+                      type="info" 
+                      text 
+                      dense 
+                      class="mt-4 mb-0"
+                    >
+                      Save applies Range, Step, and Persist thresholds to
+                      <strong>all selected variables</strong>, not just the current tab.
+                    </v-alert>
+
+                    <!-- card actions -->
+                    <v-card-actions class="px-5 pb-4 pt-3">
+                        <v-spacer></v-spacer>
+
+                        <v-btn color="error" :disabled="savingThresholds" @click="closeThresholdDialog">
+                            Cancel
+                        </v-btn>
+
+                        <v-btn
+                            color="primary"
+                            :loading="savingThresholds"
+                            :disabled="savingThresholds || loadingThresholds || !selectedThresholdVariableIds.length"
+                            @click="saveThresholds"
+                        >
+                            Save Thresholds
+                        </v-btn>
+                    </v-card-actions>
 
                     <!-- Variable tabs -->
-                    <v-sheet
-                        v-if="selectedThresholdVariableIds.length"
-                        class="mb-3"
-                    >
-                        <v-slide-group show-arrows>
-                        <v-slide-item
-                            v-for="variable in selectedThresholdVariables"
-                            :key="variable.id"
-                        >
-                            <v-btn
-                            class="ma-1"
-                            small
-                            outlined
-                            :color="selectedThresholdVariableId === variable.id ? 'primary' : ''"
-                            @click="selectedThresholdVariableId = variable.id"
+                    <v-layout column>
+                      <v-sheet
+                          v-if="selectedThresholdVariableIds.length"
+                          class="mx-auto mt-4 mb-3" max-width="100%"
+                      >
+                          <v-slide-group show-arrows="desktop">
+                            <v-slide-item
+                                v-for="variable in selectedThresholdVariables"
+                                :key="variable.id"
                             >
-                            [[ variable.name ]]
-                            </v-btn>
-                        </v-slide-item>
-                        </v-slide-group>
-                    </v-sheet>
-
-                    <!-- alert -->
-                    <v-alert
-                        v-else
-                        type="info"
-                        outlined
-                        dense
-                    >
-                        Select at least one variable to edit thresholds.
-                    </v-alert>
+                                <v-btn
+                                  class="ma-1"
+                                  small
+                                  outlined
+                                  :color="selectedThresholdVariableId === variable.id ? 'primary' : undefined"
+                                  @click="selectedThresholdVariableId = variable.id"
+                                >
+                                [[ variable.name ]]
+                                </v-btn>
+                            </v-slide-item>
+                          </v-slide-group>
+                      </v-sheet>
+                    </v-layout>
 
 
                     <!-- only show if a variable has been selected -->
@@ -373,13 +434,31 @@
                       v-if="selectedThresholdVariableId != null"
                     >
 
+                      <div class="d-flex align-center justify-space-between flex-wrap mb-3">
+                        <v-btn
+                          x-small
+                          color="purple"
+                          outlined
+                        >
+                          [[ selectedThresholdVariableName ]]
+                        </v-btn>
+
+                        <span class="caption grey--text">
+                          Reference thresholds
+                        </span>
+                      </div>
+
                       <!-- Threshold type tabs -->
                       <v-tabs
                         v-model="thresholdTypeTab"
+                        color="primary"
+                        background-color="transparent"
+                        show-arrows
                       >
-                          <v-tab>Range</v-tab>
-                          <v-tab>Step</v-tab>
-                          <v-tab>Persist</v-tab>
+                          <v-tabs-slider color="primary"></v-tabs-slider>
+                          <v-tab active-class="primary--text">Range</v-tab>
+                          <v-tab active-class="primary--text">Step</v-tab>
+                          <v-tab active-class="primary--text">Persist</v-tab>
                       </v-tabs>
 
                       <!-- Threshold tabs -->
@@ -388,51 +467,140 @@
                       >
 
                           <!-- Range Thresholds -->
-                          <v-tab-item>
+                          <v-tab-item :transition="false" :reverse-transition="false">
                             <v-card flat class="mt-4 reference-station-dialog">
-                                <v-data-table
-                                    :headers="rangeThresholdHeaders"
-                                    :items="selectedVariableRangeThresholds"
-                                    :items-per-page="12"
-                                    :footer-props="{
-                                    'items-per-page-options': [12, 24]
-                                    }"
-                                    class="elevation-1"
-                                    dense
-                                >
 
-                                <template v-slot:item.range_min="{ item }">
-                                    <v-text-field
-                                        v-model="item.range_min"
-                                        type="number"
-                                        dense
-                                        outlined
-                                        hide-details
-                                    ></v-text-field>
-                                </template>
+                              <!-- bulk update -->
+                              <v-card outlined class="pa-4 mb-4">
+                                  <div class="d-flex align-center mb-2">
+                                      <v-icon color="primary" left>
+                                          mdi-calendar-month
+                                      </v-icon>
 
-                                <template v-slot:item.range_max="{ item }">
-                                    <v-text-field
-                                        v-model="item.range_max"
-                                        type="number"
-                                        dense
-                                        outlined
-                                        hide-details
-                                    ></v-text-field>
-                                </template>
-                                </v-data-table>
+                                      <span class="subtitle-1 font-weight-bold">
+                                          Apply to All Months
+                                      </span>
+                                  </div>
+
+                                  <p class="grey--text text--darken-1 mb-4">
+                                      Set the same Range minimum and maximum for all
+                                      12 months of the selected variable.
+                                  </p>
+
+                                  <v-alert
+                                      v-if="bulkRangeError"
+                                      type="error"
+                                      text
+                                      dense
+                                  >
+                                      [[ bulkRangeError ]]
+                                  </v-alert>
+
+                                  <v-row align="center">
+                                      <v-col cols="12" sm="4">
+                                          <v-text-field
+                                              v-model="bulkRange.min"
+                                              label="Range Minimum"
+                                              type="number"
+                                              outlined
+                                              dense
+                                              hide-details
+                                          ></v-text-field>
+                                      </v-col>
+
+                                      <v-col cols="12" sm="4">
+                                          <v-text-field
+                                              v-model="bulkRange.max"
+                                              label="Range Maximum"
+                                              type="number"
+                                              outlined
+                                              dense
+                                              hide-details
+                                          ></v-text-field>
+                                      </v-col>
+
+                                      <v-col cols="12" sm="4">
+                                          <v-btn
+                                              color="primary"
+                                              outlined
+                                              block
+                                              :disabled="
+                                                  loadingThresholds ||
+                                                  savingThresholds ||
+                                                  selectedVariableRangeThresholds.length !== 12
+                                              "
+                                              @click="applyRangeToAllMonths"
+                                          >
+                                              <v-icon left>mdi-check-all</v-icon>
+                                              Apply to 12 Months
+                                          </v-btn>
+                                      </v-col>
+                                  </v-row>
+
+                                  <v-alert
+                                      v-if="selectedVariableRangeThresholds.length !== 12"
+                                      type="warning"
+                                      text
+                                      dense
+                                      class="mt-3 mb-0"
+                                  >
+                                      All 12 months must be loaded before applying
+                                      a bulk update.
+                                  </v-alert>
+
+                                  <div class="caption grey--text mt-3">
+                                      This will replace the monthly values shown below.
+                                      Click Save Selected Thresholds to save your changes.
+                                  </div>
+                              </v-card>
+
+                              <!-- range months table -->
+                              <v-data-table
+                                  :headers="rangeThresholdHeaders"
+                                  :items="selectedVariableRangeThresholds"
+                                  :items-per-page="12"
+                                  hide-default-footer
+                                  disable-pagination
+                                  class="reference-threshold-table elevation-0"
+                                  no-data-text="No monthly Range thresholds for this variable."
+                                  dense
+                              >
+
+                              <template v-slot:item.range_min="{ item }">
+                                  <v-text-field
+                                      v-model="item.range_min"
+                                      type="number"
+                                      dense
+                                      outlined
+                                      hide-details
+                                      class="threshold-field"
+                                  ></v-text-field>
+                              </template>
+
+                              <template v-slot:item.range_max="{ item }">
+                                  <v-text-field
+                                      v-model="item.range_max"
+                                      type="number"
+                                      dense
+                                      outlined
+                                      hide-details
+                                      class="threshold-field"
+                                  ></v-text-field>
+                              </template>
+                              </v-data-table>
                             </v-card>
                           </v-tab-item>
 
                           <!-- Step Thresholds -->
-                          <v-tab-item>
+                          <v-tab-item :transition="false" :reverse-transition="false">
                             <v-card flat class="mt-4 reference-station-dialog">
                                 <v-data-table
                                 :headers="stepThresholdHeaders"
                                 :items="selectedVariableStepThresholds"
                                 hide-default-footer
                                 disable-pagination
-                                class="elevation-1"
+                                class="reference-threshold-table elevation-0"
+                                no-data-text="No Step thresholds for this variable."
                                 dense
                                 >
                                 <template v-slot:item.step_min="{ item }">
@@ -442,6 +610,7 @@
                                     dense
                                     outlined
                                     hide-details
+                                    class="threshold-field"
                                     ></v-text-field>
                                 </template>
 
@@ -452,6 +621,7 @@
                                     dense
                                     outlined
                                     hide-details
+                                    class="threshold-field"
                                     ></v-text-field>
                                 </template>
                                 </v-data-table>
@@ -459,14 +629,15 @@
                           </v-tab-item>
 
                           <!-- Persist Thresholds -->
-                          <v-tab-item>
+                          <v-tab-item :transition="false" :reverse-transition="false">
                             <v-card flat class="mt-4 reference-station-dialog">
                                 <v-data-table
                                 :headers="persistThresholdHeaders"
                                 :items="selectedVariablePersistThresholds"
                                 hide-default-footer
                                 disable-pagination
-                                class="elevation-1"
+                                class="reference-threshold-table elevation-0"
+                                no-data-text="No Persist thresholds for this variable."
                                 dense
                                 >
                                 <template v-slot:item.minimum_variance="{ item }">
@@ -476,6 +647,7 @@
                                     dense
                                     outlined
                                     hide-details
+                                    class="threshold-field"
                                     ></v-text-field>
                                 </template>
 
@@ -486,6 +658,7 @@
                                     dense
                                     outlined
                                     hide-details
+                                    class="threshold-field"
                                     ></v-text-field>
                                 </template>
                                 </v-data-table>
@@ -499,30 +672,40 @@
 
                 </v-card-text>
 
-                <v-divider></v-divider>
-
-                <v-card-actions>
-                    <v-spacer></v-spacer>
-
-                    <v-btn
-                        color="error"
-                        @click="closeThresholdDialog"
-                    >
-                        Cancel
-                    </v-btn>
-
-                    <v-btn
-                        color="primary"
-                        :loading="savingThresholds"
-                        @click="saveThresholds"
-                    >
-                        Save Thresholds
-                    </v-btn>
-                </v-card-actions>
-
             </v-card>
         </v-dialog>
 
+
+      <!-- Confirm reference-station deletion -->
+      <v-dialog v-model="deleteDialog" max-width="480px" :persistent="deletingStation">
+        <v-card>
+          <v-card-title class="d-flex align-center">
+            <div>
+              <div class="dialog-title">Delete Reference Station</div>
+              <div class="dialog-subtitle">Confirm before removing this station.</div>
+            </div>
+            <v-spacer></v-spacer>
+            <v-btn icon aria-label="Close dialog" :disabled="deletingStation" @click="closeDeleteDialog">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-divider></v-divider>
+          <v-card-text class="pt-5 pb-0">
+            <v-alert v-if="deleteError" type="error" text dense>[[ deleteError ]]</v-alert>
+            <p v-if="stationPendingDeletion">
+              Delete <strong>[[ stationPendingDeletion.name ]]</strong>
+              ([[ stationPendingDeletion.code ]])?
+            </p>
+          </v-card-text>
+          <v-card-actions class="px-5 pb-4">
+            <v-spacer></v-spacer>
+            <v-btn color="info" :disabled="deletingStation" @click="closeDeleteDialog">Cancel</v-btn>
+            <v-btn color="error" :loading="deletingStation" @click="deleteReferenceStation">
+              Delete Station
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <!-- Snackbar -->
       <v-snackbar
@@ -597,6 +780,11 @@
 
       // List of reference stations loaded from the backend.
       referenceStations: [],
+      stationSearch: '',
+      deleteDialog: false,
+      stationPendingDeletion: null,
+      deletingStation: false,
+      deleteError: '', 
 
       // Table headers.
       stationHeaders: [
@@ -619,18 +807,18 @@
       // Frontend validation rules.
       stationRules: {
         code: [
-          v => !!v || 'Code is required.',
+          v => !!String(v == null ? '' : v).trim() || 'Code is required.',
         ],
         name: [
-          v => !!v || 'Name is required.',
+          v => !!String(v == null ? '' : v).trim() || 'Name is required.',
         ],
         latitude: [
           v => v !== '' && v !== null && v !== undefined || 'Latitude is required.',
-          v => Number(v) >= -90 && Number(v) <= 90 || 'Latitude must be between -90 and 90.',
+          v => Number.isFinite(Number(v)) && Number(v) >= -90 && Number(v) <= 90 || 'Latitude must be a number between -90 and 90.',
         ],
         longitude: [
           v => v !== '' && v !== null && v !== undefined || 'Longitude is required.',
-          v => Number(v) >= -180 && Number(v) <= 180 || 'Longitude must be between -180 and 180.',
+          v => Number.isFinite(Number(v)) && Number(v) >= -180 && Number(v) <= 180 || 'Longitude must be a number between -180 and 180.',
         ],
       },
 
@@ -662,48 +850,52 @@
       loadingVariables: false,
       selectAllVariables: false,
 
-        // Threshold dialog state.
-        selectedThresholdVariableId: null,
-        thresholdTypeTab: 0,
-        thresholdDialog: false,
-        thresholdTab: 0,
-        loadingThresholds: false,
-        savingThresholds: false,
-        selectedThresholdStation: null,
+      // Threshold dialog state.
+      selectedThresholdVariableId: null,
+      thresholdTypeTab: 0,
+      thresholdDialog: false,
+      thresholdTab: 0,
+      loadingThresholds: false,
+      savingThresholds: false,
+      selectedThresholdStation: null,
 
-        // Threshold variables.
-        thresholdVariables: [],
-        selectedThresholdVariableIds: [],
-        thresholdSelectAllVariables: false,
+      // Threshold variables.
+      thresholdVariables: [],
+      selectedThresholdVariableIds: [],
+      thresholdSelectAllVariables: false,
 
-        // Threshold table data.
-        rangeThresholds: [],
-        stepThresholds: [],
-        persistThresholds: [],
+      // Threshold table data.
+      rangeThresholds: [],
+      stepThresholds: [],
+      persistThresholds: [],
 
-        // Threshold error state.
-        thresholdError: false,
-        thresholdErrorMessage: '',
+      // Threshold error state.
+      thresholdError: false,
+      thresholdErrorMessage: '',
 
-        // Threshold table headers.
-        rangeThresholdHeaders: [
-        { text: 'Variable', value: 'variable_name' },
-        { text: 'Month', value: 'month_name' },
-        { text: 'Range Min', value: 'range_min' },
-        { text: 'Range Max', value: 'range_max' },
-        ],
+      // Threshold table headers.
+      rangeThresholdHeaders: [
+      { text: 'Month', value: 'month_name' },
+      { text: 'Range Min', value: 'range_min' },
+      { text: 'Range Max', value: 'range_max' },
+      ],
 
-        stepThresholdHeaders: [
-        { text: 'Variable', value: 'variable_name' },
-        { text: 'Step Min', value: 'step_min' },
-        { text: 'Step Max', value: 'step_max' },
-        ],
+      stepThresholdHeaders: [
+      { text: 'Step Min', value: 'step_min' },
+      { text: 'Step Max', value: 'step_max' },
+      ],
 
-        persistThresholdHeaders: [
-        { text: 'Variable', value: 'variable_name' },
-        { text: 'Minimum Variance', value: 'minimum_variance' },
-        { text: 'Window', value: 'window' },
-        ],
+      persistThresholdHeaders: [
+      { text: 'Minimum Variance', value: 'minimum_variance' },
+      { text: 'Window (in hours)', value: 'window' },
+      ],
+
+      // bulk set range
+      bulkRange: {
+          min: '',
+          max: '',
+      },
+      bulkRangeError: '',
     },
 
     methods: {
@@ -914,7 +1106,7 @@
           if (this.map) {
             this.map.invalidateSize();
 
-            if (this.stationForm.latitude && this.stationForm.longitude) {
+            if (this.hasValidStationCoordinates()) {
               this.addOrMoveStationMarker(
                 parseFloat(this.stationForm.latitude),
                 parseFloat(this.stationForm.longitude)
@@ -935,7 +1127,7 @@
 
           const osm = new L.TileLayer(osmUrl, {
             minZoom: 1,
-            maxZoom: 100,
+            maxZoom: 19,
             attribution: osmAttrib
           });
 
@@ -990,7 +1182,7 @@
           this.map.invalidateSize();
 
           // If editing, show existing marker.
-          if (this.stationForm.latitude && this.stationForm.longitude) {
+          if (this.hasValidStationCoordinates()) {
             this.addOrMoveStationMarker(
               parseFloat(this.stationForm.latitude),
               parseFloat(this.stationForm.longitude)
@@ -1032,6 +1224,15 @@
         }
       },
 
+      hasValidStationCoordinates() {
+        const { latitude, longitude } = this.stationForm;
+        if ([latitude, longitude].some(v => v === '' || v == null)) return false;
+        const lat = Number(latitude);
+        const lng = Number(longitude);
+        return Number.isFinite(lat) && Number.isFinite(lng) &&
+          lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+      },
+
       updateMapFromLatitude() {
         /*
           If latitude is typed manually, update marker when longitude
@@ -1041,7 +1242,7 @@
         const lat = parseFloat(this.stationForm.latitude);
         const lng = parseFloat(this.stationForm.longitude);
 
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (this.hasValidStationCoordinates()) {
           this.addOrMoveStationMarker(lat, lng);
         }
       },
@@ -1055,54 +1256,54 @@
         const lat = parseFloat(this.stationForm.latitude);
         const lng = parseFloat(this.stationForm.longitude);
 
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (this.hasValidStationCoordinates()) {
           this.addOrMoveStationMarker(lat, lng);
         }
       },
     
-      deleteReferenceStation(station) {
-            /*
-                Delete a reference station after confirming with the user.
+      openDeleteDialog(station) {
+        this.stationPendingDeletion = station;
+        this.deleteError = '';
+        this.deleteDialog = true;
+      },
 
-                If the station is connected to other records, the backend will return
-                a friendly error message instead of allowing the page to crash.
-            */
-            this.loading = true;
+      closeDeleteDialog() {
+        if (this.deletingStation) return;
+        this.deleteDialog = false;
+        this.stationPendingDeletion = null;
+        this.deleteError = '';
+      },
 
-            const csrfToken = this.getCookie('csrftoken');
+      async deleteReferenceStation() {
+        if (this.deletingStation || !this.stationPendingDeletion) return;
 
-            fetch(`${this.urls.deleteReferenceStationBase}${station.id}/`, {
-                method: "DELETE",
-                headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken,
-                },
-            })
-            .then(response => {
-                return response.json().then(data => {
-                    if (!response.ok) {
-                    throw new Error(data.message || 'Request failed.');
-                    }
+        this.deletingStation = true;
+        this.deleteError = '';
+        const stationId = this.stationPendingDeletion.id;
 
-                    this.loading = false;
+        try {
+          const response = await fetch(`${this.urls.deleteReferenceStationBase}${stationId}/`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': this.getCookie('csrftoken'),
+            },
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.message || data.detail || 'Failed to delete reference station.');
+          }
 
-                    return data;
-            });
-            })
-            .then(data => {
-                this.showSnackbar(data.message, 'success');
-                this.loadReferenceStations();
-
-                this.loading = false;
-            })
-            .catch(error => {
-                console.error(error);
-                this.showSnackbar(error.message || 'Failed to delete reference station.', 'error');
-
-                this.loading = false;
-            });
-
-        },
+          this.deleteDialog = false;
+          this.stationPendingDeletion = null;
+          this.showSnackbar(data.message || 'Reference station deleted.');
+          this.loadReferenceStations();
+        } catch (error) {
+          this.deleteError = error.message || 'Failed to delete reference station.';
+        } finally {
+          this.deletingStation = false;
+        }
+      },
     
       loadVariables() {
             /*
@@ -1155,7 +1356,7 @@
 
         this.selectedThresholdStation = station;
         this.thresholdDialog = true;
-        this.thresholdTab = 0;
+        this.thresholdTypeTab = 0;
         this.thresholdError = false;
         this.thresholdErrorMessage = '';
 
@@ -1168,6 +1369,7 @@
             */
 
             this.thresholdDialog = false;
+            this.thresholdTypeTab = 0;
             this.selectedThresholdStation = null;
             this.thresholdVariables = [];
             this.selectedThresholdVariableIds = [];
@@ -1204,7 +1406,7 @@
                 ? this.selectedThresholdVariableIds[0]
                 : null;
 
-                this.thresholdSelectAllVariables = true;
+                this.thresholdSelectAllVariables = this.thresholdVariables.length > 0;
 
                 this.rangeThresholds = data.thresholds.range;
                 this.stepThresholds = data.thresholds.step;
@@ -1248,7 +1450,7 @@
             );
 
             if (
-                this.selectedThresholdVariableId &&
+                this.selectedThresholdVariableId != null &&
                 !this.selectedThresholdVariableIds.includes(this.selectedThresholdVariableId)
             ) {
                 this.selectedThresholdVariableId = this.selectedThresholdVariableIds.length
@@ -1256,9 +1458,58 @@
                 : null;
             }
 
-            if (!this.selectedThresholdVariableId && this.selectedThresholdVariableIds.length) {
+            if (this.selectedThresholdVariableId == null && this.selectedThresholdVariableIds.length) {
                 this.selectedThresholdVariableId = this.selectedThresholdVariableIds[0];
             }
+        },
+
+        validateThresholdPayload(payload) {
+            const isFilled = value =>
+                value !== null &&
+                value !== undefined &&
+                String(value).trim() !== '';
+
+            const isNumber = value =>
+                isFilled(value) &&
+                Number.isFinite(Number(value));
+
+            // Range
+            for (const row of payload.range) {
+                if (!isNumber(row.range_min) || !isNumber(row.range_max)) {
+                    return `${row.variable_name || 'Variable'}: Both Range minimum and maximum are required (${row.month_name || row.month}).`;
+                }
+
+                if (Number(row.range_min) > Number(row.range_max)) {
+                    return `${row.variable_name || 'Variable'}: Range minimum cannot exceed maximum (${row.month_name || row.month}).`;
+                }
+            }
+
+            // Step
+            for (const row of payload.step) {
+                if (!isNumber(row.step_min) || !isNumber(row.step_max)) {
+                    return `${row.variable_name || 'Variable'}: Both Step minimum and maximum are required.`;
+                }
+
+                if (Number(row.step_min) > Number(row.step_max)) {
+                    return `${row.variable_name || 'Variable'}: Step minimum cannot exceed maximum.`;
+                }
+            }
+
+            // Persist
+            for (const row of payload.persist) {
+                if (!isNumber(row.minimum_variance) ||
+                    Number(row.minimum_variance) < 0) {
+                    return `${row.variable_name || 'Variable'}: Minimum variance must be a non-negative number.`;
+                }
+
+                if (!isNumber(row.window) ||
+                    !Number.isInteger(Number(row.window)) ||
+                    Number(row.window) <= 0) {
+                    return `${row.variable_name || 'Variable'}: Persist window must be a positive whole number of hours.`;
+                }
+            }
+
+            return '';
         },
 
         saveThresholds() {
@@ -1272,7 +1523,7 @@
             return;
         }
 
-        this.savingThresholds = true;
+        if (!this.selectedThresholdVariableIds.length || this.savingThresholds) return;
 
         const csrfToken = this.getCookie('csrftoken');
 
@@ -1287,6 +1538,17 @@
             this.selectedThresholdVariableIds.includes(row.variable_id)
             ),
         };
+
+        const validationMessage = this.validateThresholdPayload(payload);
+        if (validationMessage) {
+          this.thresholdErrorMessage = validationMessage;
+          this.thresholdError = true;
+          return;
+        }
+
+        this.thresholdError = false;
+        this.thresholdErrorMessage = '';
+        this.savingThresholds = true;
 
         fetch(`${this.urls.saveThresholdsBase}${this.selectedThresholdStation.id}/thresholds/save/`, {
             method: "POST",
@@ -1319,10 +1581,69 @@
             });
         },
 
+        applyRangeToAllMonths() {
+            this.bulkRangeError = '';
+
+            const min = this.bulkRange.min;
+            const max = this.bulkRange.max;
+
+            // Both values are mandatory.
+            if (
+                min === '' || min == null ||
+                max === '' || max == null
+            ) {
+                this.bulkRangeError =
+                    'Both minimum and maximum are required.';
+                return;
+            }
+
+            const minValue = Number(min);
+            const maxValue = Number(max);
+
+            if (
+                !Number.isFinite(minValue) ||
+                !Number.isFinite(maxValue)
+            ) {
+                this.bulkRangeError = 'Enter valid numbers.';
+                return;
+            }
+
+            if (minValue > maxValue) {
+                this.bulkRangeError =
+                    'Minimum cannot exceed maximum.';
+                return;
+            }
+
+            const rows = this.selectedVariableRangeThresholds;
+
+            if (rows.length !== 12) {
+                this.bulkRangeError =
+                    'All 12 months must be loaded.';
+                return;
+            }
+
+            // Update every month for the currently selected variable.
+            rows.forEach(row => {
+                row.range_min = minValue;
+                row.range_max = maxValue;
+            });
+
+            this.showSnackbar(
+                'Applied to all 12 months. Save your thresholds to keep these changes.',
+                'info'
+            );
+        },
 
     },
 
     computed: {
+
+        selectedThresholdVariableName() {
+          const variable = this.thresholdVariables.find(
+            item => item.id === this.selectedThresholdVariableId
+          );
+          return variable ? variable.name : '';
+        },
 
         selectedThresholdVariables() {
         /*
@@ -1366,6 +1687,18 @@
 
     },
 
+
+    watch: {
+        selectedThresholdVariableId() {
+            this.bulkRange = {
+                min: '',
+                max: '',
+            };
+
+            this.bulkRangeError = '';
+        },
+    },
+
     mounted() {
       /*
         Load table data when page opens.
@@ -1378,6 +1711,125 @@
 </script>
 
 <style>
+
+/* Reference station table */
+.reference-toolbar {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+}
+.reference-search { max-width: 420px; flex: 1 1 260px; }
+.reference-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.reference-actions .v-btn { margin: 0 !important; }
+.reference-threshold-dialog .v-card__text { max-height: 70vh; overflow-y: auto; }
+.threshold-variable-panel { background: #f9fafb !important; border-color: #e5e7eb !important; }
+.reference-threshold-table {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 5px;
+    overflow: hidden;
+}
+.reference-threshold-table .v-data-table__wrapper { overflow-x: auto; }
+.reference-threshold-table table { min-width: 460px; border-collapse: collapse; }
+.reference-threshold-table th,
+.reference-threshold-table td {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 8px 12px !important;
+    text-align: center !important;
+    font-size: 14px !important;
+}
+.reference-threshold-table thead th {
+    background: #f4f6f9;
+    font-weight: bold !important;
+    color: #222 !important;
+}
+.reference-threshold-table tbody tr:hover { background: #f9fafb !important; }
+.reference-threshold-table .threshold-field { max-width: 170px; margin: 4px auto; }
+.reference-threshold-table .v-data-table__wrapper .v-input__slot { margin-bottom: 0; }
+@media (max-width: 600px) {
+    .reference-toolbar .v-btn { width: 100%; }
+    .reference-search { max-width: none; }
+}
+
+.reference-station-table {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+/* Allow horizontal scrolling on smaller screens */
+.reference-station-table .v-data-table__wrapper {
+    overflow-x: auto;
+}
+
+.reference-station-table table {
+    min-width: 780px;
+    border-collapse: collapse;
+}
+
+/* Bordered cells, matching the Global Thresholds table */
+.reference-station-table th,
+.reference-station-table td {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 12px 10px !important;
+    font-size: 14px !important;
+}
+
+/* Header styling */
+.reference-station-table thead th {
+    background: #f4f6f9;
+    font-weight: bold !important;
+    height: 44px;
+    white-space: nowrap;
+    text-align: center !important;
+}
+
+/* Center table values */
+.reference-station-table tbody td {
+    text-align: center;
+}
+
+/* Row hover */
+.reference-station-table tbody tr:hover {
+    background: #f9fafb !important;
+}
+
+/* Action buttons */
+.reference-station-table tbody td .v-btn {
+    margin: 2px 4px;
+}
+
+    /* Let Vuetify calculate the height of the outlined field */
+    .scrollable-autocomplete .v-input__slot {
+        max-height: none !important;
+    }
+
+    /* Keep scrolling entirely below the floating label */
+    .scrollable-autocomplete .v-select__selections {
+        max-height: 150px;
+        min-height: 32px !important;
+
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        /* Space outside the scrollable area */
+        margin-top: 8px;
+        margin-bottom: 4px;
+
+        /* Remove Vuetify's internal vertical padding */
+        padding: 0 4px 0 0 !important;
+
+        align-content: flex-start;
+        align-self: flex-start;
+    }
+
     .reference-station-dialog .v-text-field input,
     .reference-station-dialog .v-text-field input:focus,
     .reference-station-dialog .v-text-field input[type="text"],
@@ -1400,12 +1852,12 @@
         border-width: 1px !important;
     }
 
-    .threshold-dialog-title {
+    .dialog-title {
         font-size: 18px;
         font-weight: 500;
     }
 
-    .threshold-dialog-subtitle {
+    .dialog-subtitle {
         margin-top: 3px;
         font-size: 13px;
         color: #777;
@@ -1422,10 +1874,6 @@
 
   .srf-container {
     padding: 20px;
-  }
-
-  .reference-dialog-title {
-    padding: 20px 24px 8px 24px !important;
   }
 
   .reference-dialog-text {
@@ -1461,11 +1909,11 @@
     display: block;
     margin-top: 5px;
     font-size: 12px;
+    color: #6b7280;
   }
 
   .map-wrapper {
     border: 1px solid #bdbdbd;
-    border-radius: 4px;
     padding: 4px;
     background: #ffffff;
   }
@@ -1473,6 +1921,7 @@
   .map-small {
     height: 300px;
     width: 100%;
+    border-radius: 5px !important;
   }
 
   .fullscreen-button-width {

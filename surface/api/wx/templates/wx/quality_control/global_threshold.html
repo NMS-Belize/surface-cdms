@@ -1,0 +1,613 @@
+{% extends "base.html" %} {% load wx_filters %} {% block content %}
+<div class="srf-container">
+  <div id="global-threshold-app" v-cloak>
+    <v-app id="globalThresholdStyle">
+      <v-main fluid fill-height style="background: white;">
+        <v-layout column>
+          <!-- page title -->
+          <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
+            <span class="srf-display-1 text-uppercase">Global Threshold Configuration</span>
+          </div>
+
+          <div class="px-4 pb-6">
+            <p class="grey--text text--darken-1 mb-5">
+              Configure default Range, Step, and Persist quality-control thresholds.
+            </p>
+
+            <!-- Select multiple variables, then load them into the switcher. -->
+            <v-layout row wrap align-center>
+              <!-- The variable picker -->
+              <v-flex xs12 md9 lg8 class="pr-md-4">
+                <v-autocomplete
+                  v-model="selectedVariableIds"
+                  :items="variables"
+                  item-text="name"
+                  item-value="id"
+                  label="Variables"
+                  placeholder="Select variables to configure"
+                  multiple
+                  clearable
+                  chips
+                  small-chips
+                  deletable-chips
+                  autocomplete="off"
+                  :disabled="loading"
+                  class="scrollable-autocomplete"
+                ></v-autocomplete>
+              </v-flex>
+
+              <v-flex xs12 md3>
+                <!-- select all btn -->
+                <v-btn
+                  color="primary"
+                  outlined
+                  :disabled="loading"
+                  @click="selectAllVariables"
+                >
+                  <v-icon dark>done_all</v-icon>
+                </v-btn>
+
+                <!-- Load btn -->
+                <v-btn
+                  color="primary"
+                  outlined
+                  :disabled="loading || selectedVariableIds.length === 0"
+                  @click="loadSelectedVariables"
+                >
+                  Load Variables
+                </v-btn>
+              </v-flex>
+            </v-layout>
+
+            <!-- progress spinner -->
+            <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4"></v-progress-linear>
+
+            <!-- error alert -->
+            <v-alert v-if="pageError" type="error" dismissible class="mt-3" @input="pageError = ''">
+              [[ pageError ]]
+            </v-alert>
+
+            <v-layout v-if="displayedVariables.length > 0" column>
+              <!-- Same multi-variable switching idea as the Step Check page. -->
+              <v-sheet class="mx-auto mt-4" max-width="100%">
+                <v-slide-group show-arrows="desktop" class="py-2">
+                  <v-slide-item v-for="variable in displayedVariables" :key="variable.id">
+                    <v-btn
+                      class="ma-2"
+                      outlined
+                      :color="selectedVariableId === variable.id ? 'primary' : undefined"
+                      @click="selectedVariableId = variable.id"
+                    >
+                      [[ variable.name ]]
+                    </v-btn>
+                  </v-slide-item>
+                </v-slide-group>
+              </v-sheet>
+
+              <template v-if="selectedVariable">
+                <!-- minor info text -->
+                <div class="d-flex align-center justify-space-between flex-wrap mt-5 mb-3">
+                  <v-btn
+                    x-small
+                    color="purple"
+                    outlined
+                  >
+                    [[ selectedVariable.name ]]
+                  </v-btn>
+
+                  <span class="caption grey--text">Automatic and manual thresholds</span>
+                </div>
+
+                <!-- Grouped header table: one row per station type. -->
+                <v-simple-table class="global-threshold-table">
+                  <template v-slot:default>
+                    <thead>
+                      <tr class="parent-header">
+                        <th rowspan="2" class="text-center">Station Type</th>
+                        <th colspan="2" class="text-center group-start">Range</th>
+                        <th rowspan="2" class="text-center group-start">Step <span style="color: #FF9800;">(+ / -)</span></th>
+                        <th colspan="2" class="text-center group-start">Persist</th>
+                        {% if request|has_any_feature_permission:"global-threshold:write" %}
+                        <th rowspan="2" class="text-center group-start">Actions</th>
+                        {% endif %}
+                      </tr>
+                      <tr class="child-header">
+                        <th class="text-center group-start">Minimum</th>
+                        <th class="text-center">Maximum</th>
+                        <th class="text-center group-start">Minimum Variance</th>
+                        <th class="text-center">Window (hrs)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="mode in stationModes" :key="mode.key">
+                        <td class="text-center font-weight-medium">[[ mode.label ]]</td>
+                        <td class="text-center group-start">
+                          [[ formatValue(selectedVariable[mode.key].range_min) ]]
+                        </td>
+                        <td class="text-center">
+                          [[ formatValue(selectedVariable[mode.key].range_max) ]]
+                        </td>
+                        <td class="text-center group-start">
+                          ± [[ formatValue(selectedVariable[mode.key].step) ]]
+                        </td>
+                        <td class="text-center group-start">
+                          [[ formatValue(selectedVariable[mode.key].minimum_variance) ]]
+                        </td>
+                        <td class="text-center">
+                          [[ formatValue(selectedVariable[mode.key].window) ]]
+                        </td>
+                        {% if request|has_any_feature_permission:"global-threshold:write" %}
+                        <td class="text-center group-start">
+                          <v-tooltip bottom>
+                            <template v-slot:activator="{ on }">
+                              <v-btn icon color="primary" v-on="on" @click="openEditDialog(mode)">
+                                <v-icon small>mdi-square-edit-outline</v-icon>
+                              </v-btn>
+                            </template>
+                            <span>Edit [[ mode.label ]] thresholds</span>
+                          </v-tooltip>
+                        </td>
+                        {% endif %}
+                      </tr>
+                    </tbody>
+                  </template>
+                </v-simple-table>
+
+                <!-- minor info text -->
+                <p class="caption grey--text mt-2" style="color: red !important;">— indicates a threshold is not configured.</p>
+              </template>
+
+            </v-layout>
+
+            <!-- initial select alert -->
+            <v-alert v-else-if="!loading && variables.length > 0" type="info" text class="mt-4">
+              Select one or more variables and click Load Variables.
+            </v-alert>
+
+            <!-- no var alert -->
+            <v-alert v-else-if="!loading && !pageError" type="info" text class="mt-4">
+              No variables are available.
+            </v-alert>
+          </div>
+
+          <!-- Each QC method has its own Save button because the existing POST endpoint updates one method at a time. -->
+          {% if request|has_any_feature_permission:"global-threshold:write" %}
+          <v-dialog v-model="editDialog" max-width="600px" :persistent="savingMethod !== null">
+            <v-card>
+              <v-card-title class="d-flex align-start">
+                <div>
+                  <div class="headline">Edit Global Thresholds</div>
+
+                  <v-btn
+                    x-small
+                    color="purple"
+                    outlined
+                  >
+                    [[ editingVariableName ]]
+                  </v-btn>
+                  <span> · </span>
+                  <v-btn
+                    x-small
+                    color="red"
+                    outlined
+                  >
+                    [[ editingIsAutomatic ? 'Automatic' : 'Manual' ]]
+                  </v-btn>
+                </div>
+
+                <v-spacer></v-spacer>
+
+                <v-btn icon :disabled="savingMethod !== null" @click="closeEditDialog">
+                  <v-icon>mdi-close</v-icon>
+                </v-btn>
+              </v-card-title>
+              
+              <v-divider></v-divider>
+
+              <v-card-text class="pt-5">
+                <v-alert v-if="dialogError" type="error" dense text dismissible @input="dialogError = ''">
+                  [[ dialogError ]]
+                </v-alert>
+
+                <!-- RANGE -->
+                <div class="d-flex align-center justify-space-between mb-2">
+                  <h3 class="subtitle-1 font-weight-bold">Range Check</h3>
+                </div>
+                <v-row dense>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model="form.range_min"
+                      label="Minimum"
+                      type="number"
+                      step="any"
+                      outlined
+                      dense
+                      :disabled="savingMethod !== null"
+                      :error="rangeHasInput && rangeOrderInvalid"
+                      hide-details="auto"
+                    ></v-text-field>
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model="form.range_max"
+                      label="Maximum"
+                      type="number"
+                      step="any"
+                      outlined
+                      dense
+                      :disabled="savingMethod !== null"
+                      :error="rangeHasInput && rangeOrderInvalid"
+                      hide-details="auto"
+                    ></v-text-field>
+                  </v-col>
+                </v-row>
+                <p v-if="rangeOrderInvalid" class="error--text caption mb-1">
+                  Minimum must not exceed maximum.
+                </p>
+                <div class="text-right mb-4">
+                  <v-btn
+                    color="primary"
+                    outlined
+                    small
+                    :disabled="!canSaveRange || savingMethod !== null"
+                    :loading="savingMethod === 'range'"
+                    @click="saveMethod('range')"
+                  >Save Range</v-btn>
+                </div>
+
+                <v-divider class="mb-4"></v-divider>
+
+                <!-- STEP -->
+                <h3 class="subtitle-1 font-weight-bold mb-2">Step Check</h3>
+                <v-text-field
+                  v-model="form.step"
+                  label="Step Threshold (+ / -)"
+                  type="number"
+                  step="any"
+                  min="0"
+                  outlined
+                  dense
+                  :disabled="savingMethod !== null"
+                  hint="Maximum & Minimum allowed variation between consecutive readings. Example: A limit of 5 permits values between -5 and 5."
+                  persistent-hint
+                ></v-text-field>
+                <div class="text-right mb-4">
+                  <v-btn
+                    color="primary"
+                    outlined
+                    small
+                    :disabled="!canSaveStep || savingMethod !== null"
+                    :loading="savingMethod === 'step'"
+                    @click="saveMethod('step')"
+                  >Save Step</v-btn>
+                </div>
+
+                <v-divider class="mb-4"></v-divider>
+
+                <!-- PERSIST -->
+                <h3 class="subtitle-1 font-weight-bold mb-2">Persist Check</h3>
+                <v-row dense>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model="form.minimum_variance"
+                      label="Minimum Variance"
+                      type="number"
+                      step="any"
+                      min="0"
+                      outlined
+                      dense
+                      :disabled="savingMethod !== null"
+                      hide-details="auto"
+                    ></v-text-field>
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model="form.window"
+                      label="Window (hrs)"
+                      type="number"
+                      step="any"
+                      min="0"
+                      outlined
+                      dense
+                      :disabled="savingMethod !== null"
+                      hide-details="auto"
+                    ></v-text-field>
+                  </v-col>
+                </v-row>
+                <div class="text-right">
+                  <v-btn
+                    color="primary"
+                    outlined
+                    small
+                    :disabled="!canSavePersist || savingMethod !== null"
+                    :loading="savingMethod === 'persist'"
+                    @click="saveMethod('persist')"
+                  >Save Persist</v-btn>
+                </div>
+              </v-card-text>
+
+              <v-card-actions class="justify-end">
+                <v-btn color="error" :disabled="savingMethod !== null" @click="closeEditDialog">Close</v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+          {% endif %}
+
+           <!-- snackbar notifications -->
+          <v-snackbar v-model="snackbar" :timeout="3500" color="success" bottom>
+            [[ snackbarText ]]
+            <template v-slot:action="{ attrs }">
+              <v-btn text v-bind="attrs" @click="snackbar = false">Close</v-btn>
+            </template>
+          </v-snackbar>
+
+        </v-layout>
+      </v-main>
+    </v-app>
+  </div>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#global-threshold-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+
+    data() {
+      return {
+        variables: [],
+        selectedVariableIds: [],      // Currently checked in autocomplete
+        displayedVariableIds: [],     // Loaded into the variable switcher
+        selectedVariableId: null,     // Currently visible table
+        stationModes: [
+          { key: 'automatic', label: 'Automatic', isAutomatic: true },
+          { key: 'manual', label: 'Manual', isAutomatic: false },
+        ],
+        loading: false,
+        pageError: '',
+        editDialog: false,
+        editingVariableId: null,
+        editingVariableName: '',
+        editingIsAutomatic: false,
+        form: {
+          range_min: '',
+          range_max: '',
+          step: '',
+          minimum_variance: '',
+          window: '',
+        },
+        savingMethod: null,
+        dialogError: '',
+        snackbar: false,
+        snackbarText: '',
+      };
+    },
+
+    computed: {
+      displayedVariables() {
+        return this.displayedVariableIds
+          .map(id => this.variables.find(variable => variable.id === id))
+          .filter(Boolean);
+      },
+      selectedVariable() {
+        return this.variables.find(variable => variable.id === this.selectedVariableId) || null;
+      },
+      rangeHasInput() {
+        return this.form.range_min !== '' || this.form.range_max !== '';
+      },
+      rangeOrderInvalid() {
+        return this.isNumber(this.form.range_min) &&
+          this.isNumber(this.form.range_max) &&
+          Number(this.form.range_min) > Number(this.form.range_max);
+      },
+      canSaveRange() {
+        return this.isNumber(this.form.range_min) &&
+          this.isNumber(this.form.range_max) &&
+          !this.rangeOrderInvalid;
+      },
+      canSaveStep() {
+        return this.isNumber(this.form.step) && Number(this.form.step) >= 0;
+      },
+      canSavePersist() {
+        return this.isNumber(this.form.minimum_variance) &&
+          Number(this.form.minimum_variance) >= 0 &&
+          this.isNumber(this.form.window) && Number(this.form.window) > 0;
+      },
+    },
+
+    methods: {
+      isNumber(value) {
+        // Number('') === 0, so blank and null must be rejected explicitly.
+        return value !== '' && value !== null && value !== undefined &&
+          String(value).trim() !== '' && Number.isFinite(Number(value));
+      },
+
+      formatValue(value) {
+        return value === null || value === undefined || value === '' ? '—' : value;
+      },
+
+      selectAllVariables() {
+        for (const value of this.variables) {
+          if (!this.selectedVariableIds.includes(value.id)) {
+                this.selectedVariableIds.push(value.id);
+              }
+        }
+      },
+
+      toInput(value) {
+        return value === null || value === undefined ? '' : String(value);
+      },
+
+      getError(error) {
+        const data = error && error.response && error.response.data;
+        if (data && typeof data.detail === 'string') return data.detail;
+        if (data && typeof data.error === 'string') return data.error;
+        return 'The request could not be completed. Please try again.';
+      },
+
+      async fetchVariables() {
+        this.loading = true;
+        this.pageError = '';
+        try {
+          const response = await axios.get('/wx/quality_control/global_threshold/get/');
+          this.variables = response.data.variables || [];
+        } catch (error) {
+          this.pageError = this.getError(error);
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      loadSelectedVariables() {
+        this.displayedVariableIds = [...this.selectedVariableIds];
+
+        // Select the first loaded variable if the previous one was deselected.
+        if (!this.displayedVariableIds.includes(this.selectedVariableId)) {
+          this.selectedVariableId = this.displayedVariableIds.length
+            ? this.displayedVariableIds[0]
+            : null;
+        }
+      },
+
+      openEditDialog(mode) {
+        if (!this.selectedVariable) return;
+        this.editingVariableId = this.selectedVariable.id;
+        this.editingVariableName = this.selectedVariable.name;
+        this.editingIsAutomatic = mode.isAutomatic;
+        const values = this.selectedVariable[mode.key];
+        this.form = {
+          range_min: this.toInput(values.range_min),
+          range_max: this.toInput(values.range_max),
+          step: this.toInput(values.step),
+          minimum_variance: this.toInput(values.minimum_variance),
+          window: this.toInput(values.window),
+        };
+        this.dialogError = '';
+        this.editDialog = true;
+      },
+      
+      closeEditDialog() {
+        if (this.savingMethod !== null) return;
+        this.editDialog = false;
+        this.dialogError = '';
+      },
+
+      async saveMethod(method) {
+        if (this.savingMethod !== null) return;
+        if (method === 'range' && !this.canSaveRange) return;
+        if (method === 'step' && !this.canSaveStep) return;
+        if (method === 'persist' && !this.canSavePersist) return;
+
+        const params = {
+          qc_method: method,
+          variable_name: this.editingVariableName,
+          // The existing view explicitly compares against the string "true".
+          is_automatic: String(this.editingIsAutomatic),
+        };
+        const updated = {};
+
+        if (method === 'range') {
+          params.range_min = this.form.range_min;
+          params.range_max = this.form.range_max;
+          updated.range_min = this.form.range_min;
+          updated.range_max = this.form.range_max;
+        } else if (method === 'step') {
+          params.step = this.form.step;
+          updated.step = this.form.step;
+        } else if (method === 'persist') {
+          params.minimum_variance = this.form.minimum_variance;
+          params.window = this.form.window;
+          updated.minimum_variance = this.form.minimum_variance;
+          updated.window = this.form.window;
+        } else {
+          return;
+        }
+
+        this.savingMethod = method;
+        this.dialogError = '';
+        try {
+          // The existing POST view reads request.GET, not request.POST / JSON.
+          await axios.post('/wx/quality_control/global_threshold/update/', null, { params });
+
+          // Update only the saved section; leave other unsaved dialog inputs intact.
+          const variable = this.variables.find(item => item.id === this.editingVariableId);
+          if (variable) {
+            Object.assign(variable[this.editingIsAutomatic ? 'automatic' : 'manual'], updated);
+          }
+          const labels = { range: 'Range', step: 'Step', persist: 'Persist' };
+          this.snackbarText = `${labels[method]} thresholds saved successfully.`;
+          this.snackbar = true;
+        } catch (error) {
+          this.dialogError = this.getError(error);
+        } finally {
+          this.savingMethod = null;
+        }
+      },
+    },
+
+    mounted() {
+      axios.defaults.xsrfHeaderName = 'X-CSRFToken';
+      axios.defaults.xsrfCookieName = 'csrftoken';
+      this.fetchVariables();
+    },
+  });
+</script>
+
+<style>
+  /* Let Vuetify calculate the height of the outlined field */
+  .scrollable-autocomplete .v-input__slot {
+      max-height: none !important;
+  }
+
+  /* Keep scrolling entirely below the floating label */
+  .scrollable-autocomplete .v-select__selections {
+      max-height: 150px;
+      min-height: 32px !important;
+
+      overflow-y: auto;
+      overflow-x: hidden;
+
+      /* Space outside the scrollable area */
+      margin-top: 8px;
+      margin-bottom: 4px;
+
+      /* Remove Vuetify's internal vertical padding */
+      padding: 0 4px 0 0 !important;
+
+      align-content: flex-start;
+      align-self: flex-start;
+  }
+
+  #globalThresholdStyle .global-threshold-table {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 5px;
+    overflow-x: auto;
+  }
+  #globalThresholdStyle .global-threshold-table table {
+    min-width: 780px;
+    border-collapse: collapse;
+  }
+  #globalThresholdStyle .global-threshold-table th,
+  #globalThresholdStyle .global-threshold-table td {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+  #globalThresholdStyle .global-threshold-table thead th {
+    font-weight: bold;
+    height: 44px;
+    white-space: nowrap;
+  }
+  #globalThresholdStyle .global-threshold-table .parent-header th {
+    background: #f4f6f9;
+  }
+  #globalThresholdStyle .global-threshold-table .child-header th {
+    background: #f9fafb;
+  }
+  #globalThresholdStyle .global-threshold-table .group-start {
+    border-left: 2px solid rgba(0, 0, 0, 0.19);
+  }
+</style>
+{% endblock %}

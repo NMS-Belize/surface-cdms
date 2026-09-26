@@ -310,7 +310,15 @@ ENDPOINT_PARENT_PAGE = {
     "get-update-quality-control": ("quality-control", "write"),
     "bulk-update-quality-control": ("quality-control", "write"),
     "update-threshold-reference-station": ("quality-control", "write"),
-    "update-global-threshold": ("quality-control", "write"),
+
+
+    # -------------------------------------------------------------------------
+    # Global Threshold Page (global-threshold)
+    # -------------------------------------------------------------------------
+    # Page:
+    #   global-threshold (GET page)
+    "update-global-threshold": ("global-threshold", "write"),
+    "get-global-thresholds": ("global-threshold", "read"),
 
 
     # -------------------------------------------------------------------------
@@ -329,33 +337,20 @@ ENDPOINT_PARENT_PAGE = {
 
 
     # -------------------------------------------------------------------------
-    # Range Threshold Page (range-threshold)
+    # Custom Threshold Page (custom-threshold)
     # -------------------------------------------------------------------------
     # Page:
-    #   range-threshold (GET page)
-    "range-threshold-get": ("range-threshold", "read"),
-    "range-threshold-update": ("range-threshold", "write"),
-    "range-threshold-delete": ("range-threshold", "delete"),
-
-
-    # -------------------------------------------------------------------------
-    # Step Threshold Page (step-threshold)
-    # -------------------------------------------------------------------------
-    # Page:
-    #   step-threshold (GET page)
-    "step-threshold-get": ("step-threshold", "read"),
-    "step-threshold-update": ("step-threshold", "write"),
-    "step-threshold-delete": ("step-threshold", "delete"),
-
-
-    # -------------------------------------------------------------------------
-    # Persist Threshold Page (persist-threshold)
-    # -------------------------------------------------------------------------
-    # Page:
-    #   persist-threshold (GET page)
-    "persist-threshold-get": ("persist-threshold", "read"),
-    "persist-threshold-update": ("persist-threshold", "write"),
-    "persist-threshold-delete": ("persist-threshold", "delete"),
+    #   custom-threshold (GET page)
+    "copy-custom-threshold": ("custom-threshold", "write"),
+    "range-threshold-get": ("custom-threshold", "read"),
+    "range-threshold-update": ("custom-threshold", "write"),
+    "range-threshold-delete": ("custom-threshold", "delete"),
+    "step-threshold-get": ("custom-threshold", "read"),
+    "step-threshold-update": ("custom-threshold", "write"),
+    "step-threshold-delete": ("custom-threshold", "delete"),
+    "persist-threshold-get": ("custom-threshold", "read"),
+    "persist-threshold-update": ("custom-threshold", "write"),
+    "persist-threshold-delete": ("custom-threshold", "delete"),
 
 
     # -------------------------------------------------------------------------
