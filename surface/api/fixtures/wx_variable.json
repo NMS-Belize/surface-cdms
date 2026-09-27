@@ -23,8 +23,8 @@
         "step_hourly": 20.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -53,8 +53,8 @@
         "step_hourly": 0.8,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -83,8 +83,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -113,8 +113,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -143,8 +143,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -173,8 +173,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -203,8 +203,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -233,8 +233,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -263,8 +263,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -293,8 +293,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -323,8 +323,8 @@
         "step_hourly": 3.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "T'T' TTT"
     }
@@ -353,8 +353,8 @@
         "step_hourly": 37.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -383,8 +383,8 @@
         "step_hourly": 3.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -413,8 +413,8 @@
         "step_hourly": 37.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -443,8 +443,8 @@
         "step_hourly": 3.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "TnTnTn"
     }
@@ -473,8 +473,8 @@
         "step_hourly": 37.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -503,8 +503,8 @@
         "step_hourly": 3.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "TxTxTx"
     }
@@ -533,8 +533,8 @@
         "step_hourly": 37.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -563,8 +563,8 @@
         "step_hourly": 3.0,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "T'T' TTT"
     }
@@ -593,8 +593,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "T'dT'd Td TdTd"
     }
@@ -623,8 +623,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -653,8 +653,8 @@
         "step_hourly": 0.5,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -683,8 +683,8 @@
         "step_hourly": 1.8,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -713,8 +713,8 @@
         "step_hourly": 0.5,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -743,8 +743,8 @@
         "step_hourly": 1.8,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -773,8 +773,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -803,8 +803,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -833,8 +833,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -863,8 +863,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -893,8 +893,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -923,8 +923,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -953,8 +953,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -983,8 +983,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1013,8 +1013,8 @@
         "step_hourly": 10,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1043,8 +1043,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1074,7 +1074,7 @@
         "persistence": 0.1,
         "persistence_hourly": 0.1,
         "persistence_window": 96,
-        "persistence_window_hourly": null,
+        "persistence_window_hourly": 1,
         "default_representation": "bar",
         "synoptic_code_form": null
     }
@@ -1103,8 +1103,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "bar",
         "synoptic_code_form": null
     }
@@ -1133,8 +1133,8 @@
         "step_hourly": 50.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "(fmfm) f f"
     }
@@ -1163,8 +1163,8 @@
         "step_hourly": 20.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1193,8 +1193,8 @@
         "step_hourly": 50.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1223,8 +1223,8 @@
         "step_hourly": 50.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1253,8 +1253,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1283,8 +1283,8 @@
         "step_hourly": 60.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "ddd dd"
     }
@@ -1313,8 +1313,8 @@
         "step_hourly": 60.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1343,8 +1343,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1373,8 +1373,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1403,8 +1403,8 @@
         "step_hourly": 60.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1433,8 +1433,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "POPOPOPO"
     }
@@ -1463,8 +1463,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "PHPHPHPH PPPP"
     }
@@ -1493,8 +1493,8 @@
         "step_hourly": 0.3,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1523,8 +1523,8 @@
         "step_hourly": 0.1,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1553,8 +1553,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1583,8 +1583,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1613,8 +1613,8 @@
         "step_hourly": 1000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1643,8 +1643,8 @@
         "step_hourly": 1000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1673,8 +1673,8 @@
         "step_hourly": 1000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1703,8 +1703,8 @@
         "step_hourly": 1000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1733,8 +1733,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1763,8 +1763,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1793,8 +1793,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1823,8 +1823,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1853,8 +1853,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1883,8 +1883,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1913,8 +1913,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1943,8 +1943,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -1973,8 +1973,8 @@
         "step_hourly": null,
         "persistence": 0.1,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2003,8 +2003,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2033,8 +2033,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2063,8 +2063,8 @@
         "step_hourly": null,
         "persistence": 0.1,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2093,8 +2093,8 @@
         "step_hourly": null,
         "persistence": 0.1,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2123,8 +2123,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2153,8 +2153,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2183,8 +2183,8 @@
         "step_hourly": 4.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2213,8 +2213,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2243,8 +2243,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "(VV) VV"
     }
@@ -2273,8 +2273,8 @@
         "step_hourly": 8.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "N"
     }
@@ -2303,8 +2303,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "ww"
     }
@@ -2333,8 +2333,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "W1"
     }
@@ -2363,8 +2363,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "W2"
     }
@@ -2393,8 +2393,8 @@
         "step_hourly": 8.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2423,8 +2423,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "CL"
     }
@@ -2453,8 +2453,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "CM"
     }
@@ -2483,8 +2483,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "CH"
     }
@@ -2513,8 +2513,8 @@
         "step_hourly": 8.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "NS"
     }
@@ -2543,8 +2543,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "C"
     }
@@ -2573,8 +2573,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "hShS"
     }
@@ -2603,8 +2603,8 @@
         "step_hourly": 5.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "NS"
     }
@@ -2633,8 +2633,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "C"
     }
@@ -2663,8 +2663,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "hShS"
     }
@@ -2693,8 +2693,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "NS"
     }
@@ -2723,8 +2723,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "C"
     }
@@ -2753,8 +2753,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "hShS"
     }
@@ -2783,8 +2783,8 @@
         "step_hourly": 8.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "NS"
     }
@@ -2813,8 +2813,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "C"
     }
@@ -2843,8 +2843,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "hShS"
     }
@@ -2873,8 +2873,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "Nh"
     }
@@ -2903,8 +2903,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "9SPSPsPsP"
     }
@@ -2933,8 +2933,8 @@
         "step_hourly": 5.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2963,8 +2963,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -2993,8 +2993,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3023,8 +3023,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3053,8 +3053,8 @@
         "step_hourly": 10.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3083,8 +3083,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3113,8 +3113,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3143,8 +3143,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3173,8 +3173,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3203,8 +3203,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3233,8 +3233,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3263,8 +3263,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3293,8 +3293,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3323,8 +3323,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3353,8 +3353,8 @@
         "step_hourly": 3.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3383,8 +3383,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3413,8 +3413,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3443,8 +3443,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3473,8 +3473,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3503,8 +3503,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3533,8 +3533,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3563,8 +3563,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3593,8 +3593,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3623,8 +3623,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3653,8 +3653,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3683,8 +3683,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3713,8 +3713,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3743,8 +3743,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3773,8 +3773,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3803,8 +3803,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3833,8 +3833,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": null
     }
@@ -3863,8 +3863,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -3893,8 +3893,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "iW"
     }
@@ -3923,8 +3923,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "iR"
     }
@@ -3953,8 +3953,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "iX"
     }
@@ -3983,8 +3983,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "Tr"
     }
@@ -4013,8 +4013,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "CS"
     }
@@ -4043,8 +4043,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "DL"
     }
@@ -4073,8 +4073,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "DM"
     }
@@ -4103,8 +4103,8 @@
         "step_hourly": 9.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "DH"
     }
@@ -4133,8 +4133,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "h"
     }
@@ -4163,8 +4163,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "w'w'"
     }
@@ -4193,8 +4193,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "column",
         "synoptic_code_form": "RRR"
     }
@@ -4223,8 +4223,8 @@
         "step_hourly": null,
         "persistence": 0.1,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": null
     }
@@ -4254,7 +4254,7 @@
         "persistence": 0.1,
         "persistence_hourly": 0.1,
         "persistence_window": 96,
-        "persistence_window_hourly": null,
+        "persistence_window_hourly": 1,
         "default_representation": "bar",
         "synoptic_code_form": null
     }
@@ -4284,7 +4284,7 @@
         "persistence": 0.1,
         "persistence_hourly": 0.1,
         "persistence_window": 96,
-        "persistence_window_hourly": null,
+        "persistence_window_hourly": 1,
         "default_representation": "bar",
         "synoptic_code_form": null
     }
@@ -4313,8 +4313,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "R24R24R24R24"
     }
@@ -4343,8 +4343,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "(VV) VV [In Kilometers]"
     }
@@ -4373,8 +4373,8 @@
         "step_hourly": 0.5,
         "persistence": 0.1,
         "persistence_hourly": 0.1,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "P24P24P24"
     }
@@ -4403,8 +4403,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "Level 1 [in feet]"
     }
@@ -4433,8 +4433,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "Level 2 [in feet]"
     }
@@ -4463,8 +4463,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "Level 3 [in feet]"
     }
@@ -4493,8 +4493,8 @@
         "step_hourly": 65000.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "Level 4 [in feet]"
     }
@@ -4523,8 +4523,8 @@
         "step_hourly": null,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": "h [in feet]"
     }
@@ -4553,8 +4553,8 @@
         "step_hourly": 60.0,
         "persistence": null,
         "persistence_hourly": null,
-        "persistence_window": null,
-        "persistence_window_hourly": null,
+        "persistence_window": 96,
+        "persistence_window_hourly": 1,
         "default_representation": "line",
         "synoptic_code_form": ""
     }

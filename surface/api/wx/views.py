@@ -37,7 +37,7 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404, redirect
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import connection, transaction, IntegrityError
+from django.db import connection, transaction, IntegrityError, DatabaseError
 from django.utils.dateparse import parse_datetime
 from django.http import HttpResponse, JsonResponse, FileResponse, HttpResponseNotAllowed, HttpResponseBadRequest, Http404
 from django.utils.http import http_date
@@ -102,6 +102,7 @@ from simple_history.utils import update_change_reason
 from django.db.models.functions import Cast
 from django.db.models import IntegerField, Q, Case, When, IntegerField
 from django.utils.timezone import localtime
+from django.utils import timezone as dj_timezone
 
 
 from wx.models import WMOCodeValue
@@ -2943,6 +2944,12 @@ class StationCreate(LoginRequiredMixin, SuccessMessageMixin, CreateView):
 
         return response
 
+    # go to the station variable page after creating a station
+    def get_success_url(self):
+        return reverse(
+            'stationvariable-list',
+            kwargs={'pk': self.object.pk}
+        )
 
     # fxn to check if station was successfully added to oscar
     def check_oscar_push(self, oscar_response):
@@ -4034,6 +4041,7 @@ class StationFileList(LoginRequiredMixin, ListView):
         
         # context['station'] = station
         context['station'] = station if not station.is_reference else None
+        context['is_station_files_page'] = True
 
         return context
 
@@ -4059,6 +4067,7 @@ class StationFileCreate(LoginRequiredMixin, SuccessMessageMixin, CreateView):
         # context['station'] = station
 
         context['station'] = station if not station.is_reference else None
+        context['is_station_files_page'] = True
 
         return context
 
@@ -4092,75 +4101,243 @@ class StationFileDelete(LoginRequiredMixin, DeleteView):
         return reverse('stationfiles-list', kwargs={'pk': self.kwargs.get('pk_station')})
 
 
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class StationVariableListView(LoginRequiredMixin, ListView):
-    model = StationVariable
-
-    def get_queryset(self):
-        queryset = StationVariable.objects.filter(station__id=self.kwargs.get('pk'))
-        return queryset
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        station = Station.objects.get(pk=self.kwargs.get(
-            'pk'))  # the self.kwargs is different from **kwargs, and gives access to the named url parameters
-        # context['station'] = station
-        context['station'] = station if not station.is_reference else None
-
-        return context
+def _editable_station(pk):
+    station = get_object_or_404(Station, pk=pk)
+    # Preserve the original station-variable page's non-reference-station scope.
+    if station.is_reference:
+        raise Http404('Reference stations are configured on the reference-station page.')
+    return station
 
 
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class StationVariableCreateView(LoginRequiredMixin, SuccessMessageMixin, CreateView):
-    model = StationVariable
+def _as_utc_iso(value):
+    if value is None:
+        return None
+    if dj_timezone.is_naive(value):
+        value = dj_timezone.make_aware(value, dj_timezone.get_default_timezone())
+    return value.astimezone(datetime.timezone.utc).isoformat()
 
-    fields = ('variable',)
-    success_message = "%(variable)s was created successfully"
-    layout = Layout(
-        Fieldset('Add variable to station',
-                 Row('variable')
-                 )
+
+def _has_measurement_metadata(item):
+    return (
+        item.last_data_datetime is not None or
+        item.first_measurement is not None or
+        item.last_measurement is not None or
+        item.last_value is not None or
+        item.last_data_value is not None or
+        bool(item.last_data_code)
     )
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        station = Station.objects.get(pk=self.kwargs.get(
-            'pk'))  # the self.kwargs is different from **kwargs, and gives access to the named url parameters
-        # context['station'] = station
 
-        context['station'] = station if not station.is_reference else None
-
-        return context
-
-    def form_valid(self, form):
-        f = form.save(commit=False)
-        station = Station.objects.get(pk=self.kwargs.get('pk'))
-        f.station = station
-        f.save()
-        return super(StationVariableCreateView, self).form_valid(form)
-
-    def get_success_url(self):
-        return reverse('stationvariable-list', kwargs={'pk': self.kwargs.get('pk')})
+def _serialize_association(item):
+    return {
+        'id': item.pk,
+        'variable_id': item.variable_id,
+        'name': item.variable.name,
+        'symbol': item.variable.symbol,
+        'height': item.height,
+        'last_data_datetime': _as_utc_iso(item.last_data_datetime),
+        # Frontend hint only. The DELETE endpoint also checks raw_data.
+        'can_unassign': not _has_measurement_metadata(item),
+    }
 
 
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class StationVariableDeleteView(LoginRequiredMixin, DeleteView):
+def _serialize_station_associations(station):
+    return [
+        _serialize_association(item)
+        for item in StationVariable.objects.filter(station=station)
+        .select_related('variable').order_by('variable__name')
+    ]
+
+
+def _read_json_object(request):
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        raise ValueError('Invalid JSON body.')
+    if not isinstance(data, dict):
+        raise ValueError('Expected a JSON object.')
+    return data
+
+
+def _parse_optional_height(value):
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool):
+        raise ValueError('Height must be a non-negative number of metres.')
+    try:
+        height = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError('Height must be a non-negative number of metres.')
+    if not math.isfinite(height) or height < 0:
+        raise ValueError('Height must be a non-negative number of metres.')
+    return height
+
+
+@method_decorator(wx_mapped_permission_required, name='dispatch')
+class StationVariableListView(LoginRequiredMixin, ListView):
     model = StationVariable
+    template_name = 'wx/stations/stationvariable_list.html'  # match your template directory
+    context_object_name = 'object_list'
 
-    success_message = "%(action)s was deleted successfully"
+    def _station(self):
+        if not hasattr(self, '_current_station'):
+            self._current_station = _editable_station(self.kwargs['pk'])
+        return self._current_station
+
+    def get_queryset(self):
+        return StationVariable.objects.filter(
+            station=self._station()
+        ).select_related('variable').order_by('variable__name')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        station = Station.objects.get(pk=self.kwargs.get(
-            'pk_station'))  # the self.kwargs is different from **kwargs, and gives access to the named url parameters
-        # context['station'] = station
-
-        context['station'] = station if not station.is_reference else None
-
+        station = self._station()
+        context['station'] = station
+        context['is_station_var_page'] = True
+        context['station_variable_page_data'] = {
+            'station': {'id': station.pk, 'name': station.name, 'code': station.code},
+            'variables': [
+                {
+                    'id': item.pk,
+                    'name': item.name,
+                    'symbol': item.symbol,
+                    'display_name': f'{item.name} ({item.symbol})' if item.symbol else item.name,
+                }
+                for item in Variable.objects.all().order_by('name')
+            ],
+            'assigned': [
+                _serialize_association(item) for item in context['object_list']
+            ],
+        }
         return context
 
-    def get_success_url(self):
-        return reverse('stationvariable-list', kwargs={'pk': self.kwargs.get('pk_station')})
+
+@method_decorator(wx_mapped_permission_required, name='dispatch')
+class StationVariableCreateView(LoginRequiredMixin, View):
+    """Reuse the old /create/ URL for bulk assignment from the new dialog."""
+
+    def get(self, request, pk):
+        _editable_station(pk)
+        return redirect('stationvariable-list', pk=pk)
+
+    def post(self, request, pk):
+        station = _editable_station(pk)
+        try:
+            data = _read_json_object(request)
+            variable_ids = data.get('variable_ids')
+            if (
+                not isinstance(variable_ids, list) or not variable_ids or
+                any(
+                    not isinstance(item, int) or isinstance(item, bool) or item < 0
+                    for item in variable_ids
+                )
+            ):
+                raise ValueError('Select one or more valid variable IDs.')
+            variable_ids = list(dict.fromkeys(variable_ids))
+            height = _parse_optional_height(data.get('height'))
+        except ValueError as exc:
+            return JsonResponse({'detail': str(exc)}, status=400)
+
+        existing_variable_ids = set(
+            Variable.objects.filter(pk__in=variable_ids).values_list('pk', flat=True)
+        )
+        if existing_variable_ids != set(variable_ids):
+            return JsonResponse({'detail': 'One or more selected variables do not exist.'}, status=400)
+
+        added = 0
+        skipped = 0
+        with transaction.atomic():
+            for variable_id in variable_ids:
+                # Database uniqueness on (station, variable) also protects
+                # against concurrent/repeated submissions.
+                _, created = StationVariable.objects.get_or_create(
+                    station=station,
+                    variable_id=variable_id,
+                    defaults={'height': height},
+                )
+                if created:
+                    added += 1
+                else:
+                    skipped += 1
+
+        return JsonResponse({
+            'added_count': added,
+            'skipped_count': skipped,
+            'assigned': _serialize_station_associations(station),
+        })
+
+
+@method_decorator(wx_mapped_permission_required, name='dispatch')
+class StationVariableHeightUpdateView(LoginRequiredMixin, View):
+    """Edit only the optional sensor height; ingestion metadata is read-only."""
+
+    def post(self, request, pk_station, pk):
+        station = _editable_station(pk_station)
+        item = get_object_or_404(
+            StationVariable.objects.select_related('variable'),
+            pk=pk,
+            station=station,
+        )
+        try:
+            data = _read_json_object(request)
+            if 'height' not in data:
+                raise ValueError('The height field is required (use null to clear it).')
+            item.height = _parse_optional_height(data['height'])
+        except ValueError as exc:
+            return JsonResponse({'detail': str(exc)}, status=400)
+
+        item.save(update_fields=['height'])
+
+        return JsonResponse({'updated': _serialize_association(item)})
+
+
+@method_decorator(wx_mapped_permission_required, name='dispatch')
+class StationVariableDeleteView(LoginRequiredMixin, View):
+    """Reuse the original delete URL as a guarded POST-only unassignment API."""
+
+    def get(self, request, pk_station, pk):
+        _editable_station(pk_station)
+        return redirect('stationvariable-list', pk=pk_station)
+
+    def post(self, request, pk_station, pk):
+        station = _editable_station(pk_station)
+        with transaction.atomic():
+            item = get_object_or_404(
+                StationVariable.objects.select_for_update(),
+                pk=pk,
+                station=station,
+            )
+            if _has_measurement_metadata(item):
+                return JsonResponse({
+                    'detail': 'This variable has measurement metadata and cannot be unassigned.'
+                }, status=409)
+
+            # An empty last_data_datetime is not proof that no observations
+            # exist. Check the actual raw_data table before removing the link.
+            # If the query is unavailable or fails, reject unassignment.
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        '''SELECT EXISTS (
+                            SELECT 1 FROM raw_data
+                            WHERE station_id = %s AND variable_id = %s
+                        )''',
+                        [station.pk, item.variable_id],
+                    )
+                    has_observations = bool(cursor.fetchone()[0])
+            except DatabaseError:
+                logger.exception('Could not verify raw-data history for association %s', item.pk)
+                return JsonResponse({
+                    'detail': 'Historical observations could not be verified. Unassignment was blocked.'
+                }, status=503)
+
+            if has_observations:
+                return JsonResponse({
+                    'detail': 'Historical observations exist. This variable cannot be unassigned.'
+                }, status=409)
+
+            item.delete()
+        return JsonResponse({'detail': 'Station-variable association removed.'})
 
 
 def station_report_data(request):
@@ -4581,7 +4758,6 @@ def load_reference_stations(request):
             'name': station.name,
             'latitude': station.latitude,
             'longitude': station.longitude,
-            'is_active': station.is_active,
             'variable_ids': station_variables_map.get(station.id, []),
         })
 
@@ -4607,7 +4783,7 @@ def create_reference_station(request):
     - is_active
     - variable_ids
 
-    The backend always sets:
+    We set:
     - is_reference=True
     - utc_offset_minutes=settings.TIMEZONE_OFFSET
     """
@@ -5340,6 +5516,163 @@ def save_reference_station_thresholds(request, id):
         'message': 'Reference station thresholds saved successfully.'
     }, status=200)
 
+
+class customThresholdView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
+    template_name = 'wx/quality_control/custom_threshold.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
+        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
+        context['station_profile_list'] = StationProfile.objects.all()
+        context['station_watershed_list'] = Watershed.objects.all()
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()  
+
+        return context
+
+
+@require_http_methods(["POST"])
+@wx_mapped_permission_required
+def copy_custom_thresholds(request):
+    try:
+        data = json.loads(request.body)
+
+        source_id = int(data["source_station_id"])
+        target_id = int(data["target_station_id"])
+        overwrite = data.get("overwrite", False)
+
+        if source_id <= 0 or target_id <= 0:
+            raise ValueError("Invalid station ID.")
+
+        if not isinstance(overwrite, bool):
+            raise ValueError("overwrite must be a boolean.")
+
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return JsonResponse(
+            {"detail": "Invalid request parameters."},
+            status=400
+        )
+
+    if source_id == target_id:
+        return JsonResponse(
+            {"detail": "Source and destination must differ."},
+            status=400
+        )
+
+    # Verify both stations exist.
+    try:
+        source = Station.objects.get(pk=source_id)
+        target = Station.objects.get(pk=target_id)
+    except Station.DoesNotExist:
+        return JsonResponse(
+            {"detail": "Station not found."},
+            status=404
+        )
+
+    # Keep automatic and manual configurations separate.
+    if source.is_automatic != target.is_automatic:
+        return JsonResponse(
+            {"detail": "Stations must be of the same type."},
+            status=400
+        )
+
+    # Only copy variables configured at BOTH stations.
+    source_variables = set(
+        StationVariable.objects.filter(
+            station_id=source_id
+        ).values_list("variable_id", flat=True)
+    )
+
+    target_variables = set(
+        StationVariable.objects.filter(
+            station_id=target_id
+        ).values_list("variable_id", flat=True)
+    )
+
+    shared_variables = source_variables & target_variables
+
+    results = {
+        "range": {"created": 0, "updated": 0, "skipped": 0},
+        "step": {"created": 0, "updated": 0, "skipped": 0},
+        "persist": {"created": 0, "updated": 0, "skipped": 0},
+    }
+
+    def copy_records(model, method, lookup_fields, value_fields):
+        records = model.objects.filter(
+            station_id=source_id,
+            variable_id__in=shared_variables
+        )
+
+        for record in records.iterator():
+            lookup = {
+                "station_id": target_id,
+            }
+
+            for field in lookup_fields:
+                lookup[field] = getattr(record, field)
+
+            values = {
+                field: getattr(record, field)
+                for field in value_fields
+            }
+
+            if overwrite:
+                _, created = model.objects.update_or_create(
+                    **lookup,
+                    defaults=values
+                )
+            else:
+                _, created = model.objects.get_or_create(
+                    **lookup,
+                    defaults=values
+                )
+
+            if created:
+                results[method]["created"] += 1
+            elif overwrite:
+                results[method]["updated"] += 1
+            else:
+                results[method]["skipped"] += 1
+
+    # All three operations succeed together or roll back together.
+    with transaction.atomic():
+
+        # Range: separate record for each month.
+        copy_records(
+            QcRangeThreshold,
+            "range",
+            lookup_fields=["variable_id", "month"],
+            value_fields=["range_min", "range_max"]
+        )
+
+        # Step: one record per station and variable.
+        copy_records(
+            QcStepThreshold,
+            "step",
+            lookup_fields=["variable_id"],
+            value_fields=["step_min", "step_max"]
+        )
+
+        # Persist: one record per station and variable.
+        copy_records(
+            QcPersistThreshold,
+            "persist",
+            lookup_fields=["variable_id"],
+            value_fields=["minimum_variance", "window"]
+        )
+
+    return JsonResponse({
+        "detail": "Custom thresholds copied successfully.",
+        "source_station_id": source_id,
+        "target_station_id": target_id,
+        "shared_variables": len(shared_variables),
+        "results": results,
+    })
+
+
+class globalThresholdView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
+    template_name = 'wx/quality_control/global_threshold.html'
 
 
 class QualityControlView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
@@ -8747,6 +9080,7 @@ def update_reference_station(request):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
+
 @require_http_methods(["POST"])
 @wx_mapped_permission_required
 def update_global_threshold(request):
@@ -8793,6 +9127,43 @@ def update_global_threshold(request):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
+@require_http_methods(["GET"])
+@wx_mapped_permission_required
+def get_global_thresholds(request):
+    """List the range, step, and persist values for every variable/mode."""
+    fields = (
+        "id", "name",
+        "range_min", "range_max", "step", "persistence", "persistence_window",
+        "range_min_hourly", "range_max_hourly", "step_hourly",
+        "persistence_hourly", "persistence_window_hourly",
+    )
+    variables = Variable.objects.order_by("name").values(*fields)
+
+    return JsonResponse({
+        "variables": [
+            {
+                "id": variable["id"],
+                "name": variable["name"],
+                "manual": {
+                    "range_min": variable["range_min"],
+                    "range_max": variable["range_max"],
+                    "step": variable["step"],
+                    "minimum_variance": variable["persistence"],
+                    "window": variable["persistence_window"],
+                },
+                "automatic": {
+                    "range_min": variable["range_min_hourly"],
+                    "range_max": variable["range_max_hourly"],
+                    "step": variable["step_hourly"],
+                    "minimum_variance": variable["persistence_hourly"],
+                    "window": variable["persistence_window_hourly"],
+                },
+            }
+            for variable in variables
+        ]
+    })
+
+
 
 @api_view(['GET'])
 def range_threshold_view(request): # Get global ranges for synop and daily data captures
@@ -8819,20 +9190,6 @@ def range_threshold_view(request): # Get global ranges for synop and daily data 
 
     return Response(result, status=status.HTTP_200_OK)
 
-
-class get_range_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/quality_control/range_threshold.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        context['station_admin_region_list'] = AdministrativeRegion.objects.all()  
-
-        return context
 
 
 def get_range_threshold_list(station_id, variable_id, is_reference=False):
@@ -9031,22 +9388,6 @@ def delete_range_threshold(request):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
-
-class get_step_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/quality_control/step_threshold.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        ontext['station_admin_region_list'] = AdministrativeRegion.objects.all()  
-
-        return context
-
-
 def get_step_threshold_entry(station_id, variable_id, is_reference=False):
     try:
         threshold = QcStepThreshold.objects.get(station_id=station_id, variable_id=variable_id)
@@ -9199,22 +9540,6 @@ def delete_step_threshold(request):
 
     response = {}
     return JsonResponse(response, status=status.HTTP_200_OK)
-
-
-
-class get_persist_threshold_form(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/quality_control/persist_threshold.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        context['station_admin_region_list'] = AdministrativeRegion.objects.all() 
-
-        return context
 
 
 def get_persist_threshold_entry(station_id, variable_id, is_reference=False):

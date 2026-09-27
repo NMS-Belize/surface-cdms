@@ -63,12 +63,6 @@ class StationTypeAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-@admin.register(models.StationVariable)
-class StationVariableAdmin(admin.ModelAdmin):
-    search_fields = ('station__name', 'variable__name',)
-    list_display = ("station", "variable", "height", "first_measurement", "last_measurement", "last_value",)
-
-
 @admin.register(models.Unit)
 class UnitAdmin(admin.ModelAdmin):
     list_display = ("name", "symbol",)
@@ -227,24 +221,6 @@ class NoaaDcpsStationAdmin(admin.ModelAdmin):
 class FlashAdmin(admin.ModelAdmin):
     list_display = ("datetime", "latitude", "longitude", "type", "peak_current", "ic_height", "num_sensors",)
     search_fields = ("type",)
-
-@admin.register(models.QcRangeThreshold)
-class QcRangeThresholdAdmin(ExportMixin, admin.ModelAdmin):
-    list_display = ("station", "variable", "month", "range_min", "range_max",)
-    search_fields = ("station__name",)
-
-
-@admin.register(models.QcStepThreshold)
-class QcStepThresholdAdmin(ExportMixin, admin.ModelAdmin):
-    list_display = ("station", "variable", "step_min", "step_max",)
-    search_fields = ("station__name",)
-
-
-@admin.register(models.QcPersistThreshold)
-class QcPersistThresholdAdmin(ExportMixin, admin.ModelAdmin):
-    list_display = ("station", "variable", "window", "minimum_variance",)
-    search_fields = ("station__name",)
-    
 
 @admin.register(models.FTPServer)
 class FTPServerAdmin(admin.ModelAdmin):

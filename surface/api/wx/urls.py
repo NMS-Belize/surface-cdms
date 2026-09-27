@@ -58,6 +58,12 @@ urlpatterns = [
     path('api/', include(router.urls)),
     # ----------- #
     # Django views (template-rendered pages for human users)
+
+
+    # Placeholder pages
+    path('under-maintenance', views.UnderMaintenanceView.as_view(), name='under-maintenance'),
+    path('coming-soon', views.ComingSoonView.as_view(), name='coming-soon'),
+    path('not-auth', views.NotAuthView.as_view(), name='not-auth'),
     
 
     # Station Map Pages (default page)
@@ -82,12 +88,6 @@ urlpatterns = [
     path("wx/settings/organization-logo/update/", views.UploadOrDeleteOrganizationLogoView.as_view(),name="upload_or_delete_organization_logo",),
     path("wx/settings/organization-logo/download/<str:key>/", views.DownloadOrganizationLogoView.as_view(), name="download_organization_logo",),
     path('wx/settings/synop-order/update/', views.SaveSynopOrderView.as_view(), name='save_synop_order'),
-    
-
-    # Placeholder pages
-    path('under-maintenance', views.UnderMaintenanceView.as_view(), name='under-maintenance'),
-    path('coming-soon', views.ComingSoonView.as_view(), name='coming-soon'),
-    path('not-auth', views.NotAuthView.as_view(), name='not-auth'),
 
 
     # Stations Page
@@ -103,6 +103,7 @@ urlpatterns = [
     path('wx/stations/<int:pk>/variables/', views.StationVariableListView.as_view(), name='stationvariable-list'),
     path('wx/stations/<int:pk>/variables/create/', views.StationVariableCreateView.as_view(), name='stationvariable-create'),
     path('wx/stations/<int:pk_station>/variables/<int:pk>/delete/', views.StationVariableDeleteView.as_view(), name='stationvariable-delete'),
+    path('wx/stations/<int:pk_station>/variables/<int:pk>/height/', views.StationVariableHeightUpdateView.as_view(), name='stationvariable-height-update'),
     
 
     # Oscar Export Page
@@ -201,6 +202,21 @@ urlpatterns = [
     path("api/config_wis_station/<int:pk>/", views.configWis2StationUpdateView.as_view(), name='config-wis-stations'),
 
 
+    # Data Validation Page
+    path('wx/quality_control/validation/', views.QualityControlView.as_view(), name='quality-control'),
+    path('api/quality_control/', views.qc_list, name='get-update-quality-control'),
+    path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
+    path('api/quality_control/bulksave/', views.qc_validate_bulk, name='bulk-update-quality-control'),
+    
+    path('wx/quality_control/update_reference_station/', views.update_reference_station, name='update-threshold-reference-station'), # this is used for Range, Step & Persist Threshold   
+
+
+    # Global Threshold
+    path('wx/quality_control/global_threshold/', views.globalThresholdView.as_view(), name='global-threshold'),
+    path('wx/quality_control/global_threshold/update/', views.update_global_threshold, name='update-global-threshold'),
+    path("wx/quality_control/global_threshold/get/", views.get_global_thresholds, name="get-global-thresholds"),
+
+
     # Reference Station Page
     path('wx/quality_control/reference_station/', views.ReferenceStationView.as_view(), name='reference-station'),
     path('wx/quality_control/reference_station/load/',views.load_reference_stations,name='load-reference-stations'), # Load reference stations
@@ -212,35 +228,21 @@ urlpatterns = [
     path('wx/quality_control/reference_station/<int:id>/thresholds/save/', views.save_reference_station_thresholds, name='save-reference-station-thresholds'),
 
 
-
-    # Data Validation Page
-    path('wx/quality_control/validation/', views.QualityControlView.as_view(), name='quality-control'),
-    path('api/quality_control/', views.qc_list, name='get-update-quality-control'),
-    path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
-    path('api/quality_control/bulksave/', views.qc_validate_bulk, name='bulk-update-quality-control'),
+    # Custom Threshold
+    path('wx/quality_control/custom_threshold/', views.customThresholdView.as_view(), name='custom-threshold'),
+    path('wx/quality_control/custom_threshold/copy/', views.copy_custom_thresholds, name='copy-custom-threshold'),
     
-    path('wx/quality_control/update_reference_station/', views.update_reference_station, name='update-threshold-reference-station'), # this is used for Range, Step & Persist Threshold   
-    path('wx/quality_control/global_threshold/update/', views.update_global_threshold, name='update-global-threshold'), # this is used for Range, Step & Persist Threshold  
+    path('wx/quality_control/range_threshold/get/', views.get_range_threshold, name='range-threshold-get'), # Range Threshold
+    path('wx/quality_control/range_threshold/update/', views.update_range_threshold, name='range-threshold-update'), # Range Threshold
+    path('wx/quality_control/range_threshold/delete/', views.delete_range_threshold, name='range-threshold-delete'), # Range Threshold
 
+    path('wx/quality_control/step_threshold/get/', views.get_step_threshold, name='step-threshold-get'), # Step Threshold
+    path('wx/quality_control/step_threshold/update/', views.update_step_threshold, name='step-threshold-update'), # Step Threshold
+    path('wx/quality_control/step_threshold/delete/', views.delete_step_threshold, name='step-threshold-delete'), # Step Threshold
 
-    # Range Threshold Page
-    path('wx/quality_control/range_threshold/', views.get_range_threshold_form.as_view(), name='range-threshold'),
-    path('wx/quality_control/range_threshold/get/', views.get_range_threshold, name='range-threshold-get'),
-    path('wx/quality_control/range_threshold/update/', views.update_range_threshold, name='range-threshold-update'),    
-    path('wx/quality_control/range_threshold/delete/', views.delete_range_threshold, name='range-threshold-delete'),
-
-    # Step Threshold Page
-    path('wx/quality_control/step_threshold/', views.get_step_threshold_form.as_view(), name='step-threshold'),
-    path('wx/quality_control/step_threshold/get/', views.get_step_threshold, name='step-threshold-get'),
-    path('wx/quality_control/step_threshold/update/', views.update_step_threshold, name='step-threshold-update'),
-    path('wx/quality_control/step_threshold/delete/', views.delete_step_threshold, name='step-threshold-delete'),
-
-
-    # Persist Threshold Page
-    path('wx/quality_control/persist_threshold/', views.get_persist_threshold_form.as_view(), name='persist-threshold'),
-    path('wx/quality_control/persist_threshold/get/', views.get_persist_threshold, name='persist-threshold-get'),
-    path('wx/quality_control/persist_threshold/update/', views.update_persist_threshold, name='persist-threshold-update'),
-    path('wx/quality_control/persist_threshold/delete/', views.delete_persist_threshold, name='persist-threshold-delete'),
+    path('wx/quality_control/persist_threshold/get/', views.get_persist_threshold, name='persist-threshold-get'), # Persist Threshold
+    path('wx/quality_control/persist_threshold/update/', views.update_persist_threshold, name='persist-threshold-update'), # Persist Threshold
+    path('wx/quality_control/persist_threshold/delete/', views.delete_persist_threshold, name='persist-threshold-delete'), # Persist Threshold
 
 
     # Station Report Page

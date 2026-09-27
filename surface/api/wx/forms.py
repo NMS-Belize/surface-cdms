@@ -47,7 +47,7 @@ class StationForm(forms.ModelForm):
             # 'is_automatic' : 'Conventional or Automatic',
             'network' : 'Network (Local)',
             'profile' : 'Type of Station (Local Profile)',
-            'region' : 'Local Administrative Region',
+            'region' : 'Administrative Region',
             'wmo_station_plataform' : 'Station/Platform model (WMO)',
             'data_type': 'Data Communication Method',
             'observer' : 'Local Observer Name',
