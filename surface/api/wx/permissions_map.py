@@ -264,6 +264,7 @@ ENDPOINT_PARENT_PAGE = {
     "stationvariable-list": ("stations-list", "read"),
     "stationvariable-create": ("stations-list", "write"),
     "stationvariable-delete": ("stations-list", "delete"),
+    "stationvariable-height-update": ("stations-list", "write"),
 
 
     # -------------------------------------------------------------------------

@@ -54,6 +54,8 @@
       {% endif %}
     
       {% if not is_update %}
+      {% if not is_station_var_page %}
+      {% if not is_station_files_page %}
         <div class="metadata-dropdown-container">
           <div class="metadata-dropdown" id="metadata-dropdown">
               <div class="metadata-dropdown-selected" id="metadata-selected-item">
@@ -72,6 +74,8 @@
               </div>            
           </div>
         </div>
+      {% endif %}
+      {% endif %}
       {% endif %}
     
     </div>

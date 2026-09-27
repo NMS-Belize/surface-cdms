@@ -103,6 +103,7 @@ urlpatterns = [
     path('wx/stations/<int:pk>/variables/', views.StationVariableListView.as_view(), name='stationvariable-list'),
     path('wx/stations/<int:pk>/variables/create/', views.StationVariableCreateView.as_view(), name='stationvariable-create'),
     path('wx/stations/<int:pk_station>/variables/<int:pk>/delete/', views.StationVariableDeleteView.as_view(), name='stationvariable-delete'),
+    path('wx/stations/<int:pk_station>/variables/<int:pk>/height/', views.StationVariableHeightUpdateView.as_view(), name='stationvariable-height-update'),
     
 
     # Oscar Export Page

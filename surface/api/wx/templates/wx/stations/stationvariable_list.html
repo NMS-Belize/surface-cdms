@@ -1,67 +1,563 @@
-{% extends "wx/station_base.html" %} {% block station_content %}
+{% extends "wx/station_base.html" %} 
+{% block station_content %} 
+{% load material_form %}
+{% load wx_filters %}
 
-<div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-  <span class="srf-display-1 text-uppercase">Variables</span>
-  <div class="srf-flex">
-    {% if not station.is_automatic %}
-      <a href="{% url 'stationvariable-create' station.id %}">
-        <button class="btn-outline-default btn-small" type="button">
-          Add variable item
-        </button>
-      </a>
-    {% endif %}
-  </div>
-</div>
+{{ station_variable_page_data|json_script:"station-variable-page-data" }}
+<form id="station-variable-csrf" style="display:none">{% csrf_token %}</form>
 
-<div class="srf-layout flex-column srf-padding" style="width: 100%">
-  <div class="srf-layout flex-row" style="width: 100%">
-    <table id="id_station_list" style="width: 100%">
-      <thead>
-        <tr>
-          <th>Variable</th>
-          {% if not station.is_automatic %}
-              <th>Actions</th>
-          {% endif %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for object in object_list %}
-        <tr>
-          <td>{{ object.variable }}</td>
-          {% if not station.is_automatic %}
-              <td class="justify-center layout">
-                <a href="{% url 'stationvariable-delete' station.id object.id %}">
-                  <button
-                    id="id_delete_station"
-                    class="mdl-button mdl-js-button mdl-button--icon"
+<div id="station-variable-app" v-cloak>
+  <v-app class="station-variables-app">
+    <div class="d-flex flex-wrap align-center justify-space-between mb-4" style="gap: 12px">
+      <div>
+        <p class="grey--text text--darken-1 mb-0">
+          Manage the variables associated with <span style="font-weight: bold;">{{ station.name }}</span>.
+        </p>
+      </div>
+
+      {% if request|has_any_feature_permission:"stations-list:write" %}
+      <v-btn color="primary" :disabled="!availableVariables.length" @click="openAssignDialog">
+        <v-icon left>mdi-plus</v-icon>
+        Assign Variables
+      </v-btn>
+      {% endif %}
+    </div>
+
+    <v-alert type="info" text class="mb-4">
+      Variables with recorded observations cannot be unassigned. Sensor height is optional
+      and is measured in metres.
+    </v-alert>
+
+    <v-card flat outlined class="station-variables-card">
+      <v-card-title class="d-flex flex-wrap align-center justify-space-between" style="gap: 12px">
+        <div>
+          <div class="subtitle-1 font-weight-bold">Assigned Variables</div>
+          <div class="caption grey--text">[[ assigned.length ]] assigned to this station</div>
+        </div>
+        <v-text-field
+          v-model="search"
+          label="Search assigned variables"
+          prepend-inner-icon="mdi-magnify"
+          dense outlined clearable hide-details
+          class="assigned-variable-search caption"
+        ></v-text-field>
+      </v-card-title>
+
+      <v-data-table
+        :headers="headers"
+        :items="displayedAssignments"
+        item-key="id"
+        :items-per-page="15"
+        :footer-props="{ 'items-per-page-options': [15, 30, 50] }"
+        class="station-variables-table elevation-0"
+        no-data-text="No assigned variables match your search."
+      >
+        <template v-slot:item.symbol="{ item }">
+          <span class="font-weight-medium">[[ item.symbol || '—' ]]</span>
+        </template>
+
+        <template v-slot:item.name="{ item }">
+          <span class="font-weight-medium">[[ item.name ]]</span>
+        </template>
+
+        <template v-slot:item.height="{ item }">
+          [[ item.height == null ? '—' : item.height + ' m' ]]
+        </template>
+
+        <template v-slot:item.last_data_datetime="{ item }">
+          <span v-if="item.last_data_datetime">[[ formatLastData(item.last_data_datetime) ]]</span>
+          <v-chip v-else-if="item.can_unassign" small outlined>No data timestamp</v-chip>
+          <v-chip v-else small outlined color="warning">Timestamp unavailable</v-chip>
+        </template>
+
+        <template v-slot:item.actions="{ item }">
+          <div class="station-variable-actions">
+            {% if request|has_any_feature_permission:"stations-list:write" %}
+            <v-btn small outlined color="primary" @click="openHeightDialog(item)">
+              <v-icon left small>mdi-pencil</v-icon>Edit Height
+            </v-btn>
+            {% endif %}
+
+            {% if request|has_any_feature_permission:"stations-list:delete" %}
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on }">
+                <span v-on="on" class="d-inline-block">
+                  <v-btn
+                    small outlined color="error"
+                    :disabled="!item.can_unassign"
+                    @click="openUnassignDialog(item)"
                   >
-                    <i class="material-icons custon-icon-16 icon-danger">delete</i>
-                  </button>
-                  <div class="mdl-tooltip" data-mdl-for="id_delete_station">
-                    Delete station
-                  </div>
-                </a>
-              </td>
-          {% endif %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+                    <v-icon left small>mdi-link-off</v-icon>Unassign
+                  </v-btn>
+                </span>
+              </template>
+              <span>
+                [[ item.can_unassign
+                  ? 'Request unassignment; the server will check for historical observations first.'
+                  : 'This variable has received data or has measurement metadata and cannot be unassigned.' ]]
+              </span>
+            </v-tooltip>
+            {% endif %}
+          </div>
+        </template>
 
-{% endblock %} {% block localjavascript %}
+        <template v-slot:no-data>
+          <div class="py-8 text-center grey--text">
+            [[ assigned.length ? 'No variables match your search.' : 'This station has no assigned variables yet.' ]]
+          </div>
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <!-- Bulk assignment: existing associations are deliberately excluded. -->
+    {% if request|has_any_feature_permission:"stations-list:write" %}
+    <v-dialog v-model="assignDialog" max-width="680px" :persistent="assigning">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <div>
+            <div class="station-dialog-title">Assign Variables</div>
+
+            <v-btn
+              x-small
+              color="purple"
+              outlined
+            >
+              [[ station.name ]]
+            </v-btn>
+          </div>
+          <v-spacer></v-spacer>
+          <v-btn icon aria-label="Close dialog" :disabled="assigning" @click="closeAssignDialog">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider></v-divider>
+
+        <v-card-text class="pt-5 pb-0">
+          <v-alert v-if="assignError" type="error" text dense>[[ assignError ]]</v-alert>
+
+          <v-alert type="info" text dense class="mb-4">
+            Only variables that have not yet been assigned to this station appear below.
+            If you cannot find a variable, check the Assigned Variables table.
+          </v-alert>
+
+          <div class="d-flex align-center justify-space-between mb-2">
+            <span class="font-weight-medium">Available variables</span>
+            <v-checkbox
+              :input-value="allAvailableSelected"
+              :disabled="!availableVariables.length || assigning"
+              @change="toggleSelectAllAvailable"
+              label="Select all" hide-details class="mt-0 pt-0"
+            ></v-checkbox>
+          </div>
+
+          <v-autocomplete
+            v-model="selectedVariableIds"
+            :items="availableVariables"
+            item-text="display_name"
+            item-value="id"
+            dense
+            label="Search and select variables"
+            placeholder="Type a variable name or code"
+            multiple chips small-chips deletable-chips
+            outlined clearable hide-selected autocomplete="off"
+            :disabled="assigning" :search-input.sync="assignmentSearch"
+            class="scrollable-autocomplete"
+            :no-data-text="availableVariables.length
+              ? 'No matching unassigned variables. It may already be assigned.'
+              : 'All available variables have already been assigned.'"
+          ></v-autocomplete>
+          <div class="caption grey--text mt-n3 mb-4">
+            [[ selectedVariableIds.length ]] selected for bulk assignment
+          </div>
+
+          <v-divider class="mb-4"></v-divider>
+          <div class="font-weight-medium mb-3">Optional configuration</div>
+          <v-text-field
+            v-model="assignHeight"
+            label="Sensor height (metres)"
+            placeholder="e.g. 2"
+            type="number" min="0" step="any"
+            outlined dense clearable
+            :disabled="assigning"
+            :error-messages="assignHeightError ? [assignHeightError] : []"
+            hint="If entered, this height is applied to every newly assigned variable. It can be edited individually later."
+            persistent-hint
+          ></v-text-field>
+        </v-card-text>
+
+        <v-card-actions class="px-5 pb-4 pt-3">
+          <v-spacer></v-spacer>
+          <v-btn color="error" :disabled="assigning" @click="closeAssignDialog">Cancel</v-btn>
+          <v-btn
+            color="primary" :loading="assigning"
+            :disabled="!selectedVariableIds.length || !!assignHeightError || assigning"
+            @click="assignVariables"
+          >
+            Assign [[ selectedVariableIds.length ]] Variable[[ selectedVariableIds.length === 1 ? '' : 's' ]]
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Optional height adjustment on an existing association. -->
+    <v-dialog v-model="heightDialog" max-width="490px" :persistent="savingHeight">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <div>
+            <div class="station-dialog-title">Edit Sensor Height</div>
+
+            <v-btn
+              x-small
+              color="purple"
+              outlined
+            >
+              [[ editingVariable ? editingVariable.name : '' ]]
+            </v-btn>
+          </div>
+          <v-spacer></v-spacer>
+          <v-btn icon aria-label="Close dialog" :disabled="savingHeight" @click="heightDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider></v-divider>
+        <v-card-text class="pt-5">
+          <v-alert v-if="heightError" type="error" text dense>[[ heightError ]]</v-alert>
+          <v-text-field
+            v-model="editHeight"
+            label="Sensor height (metres)"
+            type="number" min="0" step="any"
+            outlined dense clearable
+            :error-messages="editHeightError ? [editHeightError] : []"
+            hint="Optional. Leave blank if unknown or not applicable."
+            persistent-hint
+          ></v-text-field>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn color="error" :disabled="savingHeight" @click="heightDialog = false">Cancel</v-btn>
+          <v-btn color="primary" :disabled="!!editHeightError || savingHeight"
+                 :loading="savingHeight" @click="saveHeight">Save Height</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    {% endif %}
+
+    {% if request|has_any_feature_permission:"stations-list:delete" %}
+    <!-- Confirmation is only offered for associations without known observations. -->
+    <v-dialog v-model="unassignDialog" max-width="500px" :persistent="unassigning">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <div>
+            <div class="station-dialog-title">Unassign Variable</div>
+
+            <v-btn
+              x-small
+              color="purple"
+              outlined
+            >
+              [[ station.name ]]
+            </v-btn>
+          </div>
+          <v-spacer></v-spacer>
+          <v-btn icon aria-label="Close dialog" :disabled="unassigning" @click="unassignDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider></v-divider>
+        <v-card-text class="pt-5">
+          <v-alert v-if="unassignError" type="error" text dense>[[ unassignError ]]</v-alert>
+          <p v-if="unassignTarget">
+            Unassign <strong>[[ unassignTarget.name ]]</strong> from this station?
+          </p>
+          <v-alert type="warning" text dense>
+            This removes the station-variable association, not the variable itself.
+            The server will reject this action if any historical observations exist.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn color="info" :disabled="unassigning" @click="unassignDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="unassigning" @click="unassignVariable">Unassign</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    {% endif %}
+
+    <v-snackbar v-model="snackbar" :color="snackbarColor" timeout="4500">
+      [[ snackbarText ]]
+      <template v-slot:action="{ attrs }">
+        <v-btn text v-bind="attrs" @click="snackbar = false">Close</v-btn>
+      </template>
+    </v-snackbar>
+  </v-app>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
 <script>
-  $(document).ready(function () {
-    $("#id_station_list").DataTable({
-      scrollX: true,
-      columnDefs: [
-        {
-          targets: [0],
-          className: "mdl-data-table__cell--non-numeric",
+  new Vue({
+    el: '#station-variable-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data() {
+      const pageData = JSON.parse(
+        document.getElementById('station-variable-page-data').textContent
+      );
+      return {
+        station: pageData.station,
+        allVariables: pageData.variables,
+        assigned: pageData.assigned,
+        search: '',
+        urls: {
+          create: "{% url 'stationvariable-create' station.pk %}",
+          base: "{% url 'stationvariable-list' station.pk %}",
         },
-      ],
-    });
+        headers: [
+          { text: 'Code', value: 'symbol', align: 'center' },
+          { text: 'Variable', value: 'name' },
+          { text: 'Height (m)', value: 'height', align: 'center' },
+          { text: 'Last Data Received (UTC)', value: 'last_data_datetime', align: 'center' },
+          { text: 'Actions', value: 'actions', align: 'center', sortable: false },
+        ],
+        assignDialog: false,
+        assigning: false,
+        assignError: '',
+        selectedVariableIds: [],
+        assignmentSearch: '',
+        assignHeight: '',
+        heightDialog: false,
+        savingHeight: false,
+        heightError: '',
+        editingVariable: null,
+        editHeight: '',
+        unassignDialog: false,
+        unassigning: false,
+        unassignError: '',
+        unassignTarget: null,
+        snackbar: false,
+        snackbarText: '',
+        snackbarColor: 'success',
+      };
+    },
+    computed: {
+      displayedAssignments() {
+        const q = (this.search || '').trim().toLowerCase();
+        return q
+          ? this.assigned.filter(row =>
+              `${row.name} ${row.symbol || ''}`.toLowerCase().includes(q)
+            )
+          : this.assigned;
+      },
+      availableVariables() {
+        const assignedIds = new Set(this.assigned.map(item => item.variable_id));
+        return this.allVariables.filter(item => !assignedIds.has(item.id));
+      },
+      allAvailableSelected() {
+        return this.availableVariables.length > 0 &&
+          this.selectedVariableIds.length === this.availableVariables.length;
+      },
+      assignHeightError() {
+        return this.validateHeight(this.assignHeight);
+      },
+      editHeightError() {
+        return this.validateHeight(this.editHeight);
+      },
+    },
+    methods: {
+      validateHeight(value) {
+        if (value === null || value === undefined || String(value).trim() === '') {
+          return '';
+        }
+        const number = Number(value);
+        return Number.isFinite(number) && number >= 0
+          ? ''
+          : 'Height must be a non-negative number of metres.';
+      },
+      formatLastData(value) {
+        if (!value) return '—';
+        const dt = new Date(value);
+        if (Number.isNaN(dt.getTime())) return 'Invalid timestamp';
+        return new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'UTC', year: 'numeric', month: 'short', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hour12: false,
+        }).format(dt) + ' UTC';
+      },
+      notify(text, color = 'success') {
+        this.snackbarText = text;
+        this.snackbarColor = color;
+        this.snackbar = true;
+      },
+      csrfToken() {
+        const field = document.querySelector(
+          '#station-variable-csrf input[name="csrfmiddlewaretoken"]'
+        );
+        return field ? field.value : '';
+      },
+      async postJson(url, payload) {
+        const response = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': this.csrfToken(),
+          },
+          body: JSON.stringify(payload),
+        });
+        const contentType = response.headers.get('content-type') || '';
+        const body = contentType.includes('application/json')
+          ? await response.json()
+          : { detail: 'The server returned an unexpected response.' };
+        if (!response.ok) throw new Error(body.detail || 'Request failed.');
+        return body;
+      },
+      openAssignDialog() {
+        this.selectedVariableIds = [];
+        this.assignmentSearch = '';
+        this.assignHeight = '';
+        this.assignError = '';
+        this.assignDialog = true;
+      },
+      closeAssignDialog() {
+        if (this.assigning) return;
+        this.assignDialog = false;
+        this.assignError = '';
+      },
+      toggleSelectAllAvailable(checked) {
+        this.selectedVariableIds = checked
+          ? this.availableVariables.map(item => item.id)
+          : [];
+      },
+      async assignVariables() {
+        if (this.assigning || !this.selectedVariableIds.length || this.assignHeightError) return;
+        this.assigning = true;
+        this.assignError = '';
+        try {
+          const result = await this.postJson(this.urls.create, {
+            variable_ids: this.selectedVariableIds,
+            height: this.assignHeight === '' || this.assignHeight === null
+              ? null : Number(this.assignHeight),
+          });
+          this.assigned = result.assigned;
+          this.assignDialog = false;
+          this.notify(
+            `${result.added_count} variable(s) assigned` +
+            (result.skipped_count ? `; ${result.skipped_count} already assigned.` : '.')
+          );
+        } catch (error) {
+          this.assignError = error.message;
+        } finally {
+          this.assigning = false;
+        }
+      },
+      openHeightDialog(item) {
+        this.editingVariable = item;
+        this.editHeight = item.height === null ? '' : String(item.height);
+        this.heightError = '';
+        this.heightDialog = true;
+      },
+      async saveHeight() {
+        if (!this.editingVariable || this.savingHeight || this.editHeightError) return;
+        this.savingHeight = true;
+        this.heightError = '';
+        try {
+          const data = await this.postJson(
+            `${this.urls.base}${this.editingVariable.id}/height/`,
+            { height: this.editHeight === '' || this.editHeight === null
+                ? null : Number(this.editHeight) }
+          );
+          this.assigned = this.assigned.map(item =>
+            item.id === data.updated.id ? data.updated : item
+          );
+          this.heightDialog = false;
+          this.notify('Sensor height updated.');
+        } catch (error) {
+          this.heightError = error.message;
+        } finally {
+          this.savingHeight = false;
+        }
+      },
+      openUnassignDialog(item) {
+        if (!item.can_unassign) return;
+        this.unassignTarget = item;
+        this.unassignError = '';
+        this.unassignDialog = true;
+      },
+      async unassignVariable() {
+        if (!this.unassignTarget || this.unassigning) return;
+        this.unassigning = true;
+        this.unassignError = '';
+        try {
+          const id = this.unassignTarget.id;
+          await this.postJson(`${this.urls.base}${id}/delete/`, {});
+          this.assigned = this.assigned.filter(item => item.id !== id);
+          this.unassignDialog = false;
+          this.unassignTarget = null;
+          this.notify('Unused station-variable association removed.');
+        } catch (error) {
+          this.unassignError = error.message;
+        } finally {
+          this.unassigning = false;
+        }
+      },
+    },
   });
 </script>
+
+<style>
+  /* Let Vuetify calculate the height of the outlined field */
+  .scrollable-autocomplete .v-input__slot {
+      max-height: none !important;
+  }
+
+  /* Keep scrolling entirely below the floating label */
+  .scrollable-autocomplete .v-select__selections {
+      max-height: 150px;
+      min-height: 32px !important;
+
+      overflow-y: auto;
+      overflow-x: hidden;
+
+      /* Space outside the scrollable area */
+      margin-top: 8px;
+      margin-bottom: 4px;
+
+      /* Remove Vuetify's internal vertical padding */
+      padding: 0 4px 0 0 !important;
+
+      align-content: flex-start;
+      align-self: flex-start;
+  }
+
+  #station-variable-app[v-cloak] { display: none; }
+  .station-variables-app { background: transparent !important; min-height: 0 !important; }
+  .station-variables-card { border-color: #e0e3e8 !important; }
+  .assigned-variable-search { max-width: 365px; flex: 1 1 250px; }
+  .station-variables-table { border-top: 1px solid rgba(0, 0, 0, 0.12); }
+  .station-variables-table .v-data-table__wrapper { overflow-x: auto; }
+  .station-variables-table table { min-width: 790px; border-collapse: collapse; }
+  .station-variables-table th, .station-variables-table td {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 12px 10px !important;
+    font-size: 14px !important;
+  }
+  .station-variables-table thead th {
+    background: #f4f6f9;
+    font-weight: 700 !important;
+    color: #252525 !important;
+    height: 44px;
+    white-space: nowrap;
+  }
+  .station-variables-table tbody tr:hover { background: #f9fafb !important; }
+  .station-variable-actions {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    justify-content: center; align-items: center;
+  }
+  .station-variable-actions .v-btn { margin: 0 !important; }
+  .station-dialog-title { font-weight: 600; font-size: 19px; }
+  .station-dialog-subtitle { margin-top: 3px; color: #737373; font-size: 13px; }
+  @media (max-width: 600px) {
+    .assigned-variable-search { max-width: none; }
+    .station-variable-actions { min-width: 175px; }
+  }
+</style>
 {% endblock %}
