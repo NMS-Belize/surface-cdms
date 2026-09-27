@@ -1,88 +1,409 @@
-{% extends "base.html" %} {% block content %} {% load wx_filters %}
+{% extends "base.html" %}
+{% load wx_filters tz %}
+
+{% block content %}
 <div class="srf-container">
-  <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-    <span class="srf-display-1 text-uppercase">Station list</span>
+  <div id="station-list-app" v-cloak>
+    <v-app class="station-list-app">
 
-    <!-- only show the station create button if the user has Create station permissions -->
-    {% if request|has_any_feature_permission:"stations-list:write" %}
-    <div class="srf-flex">
-      <a href="{% url 'station-create' %}">
-        <button class="btn-outline-default btn-small" type="button">
-          Add station
-        </button>
-      </a>
-    </div>
-    {% endif %}
+      <!-- Page heading: no action buttons competing with the title. -->
+      <div class="station-page-header mb-4">
+        <h1 class="srf-display-1 text-uppercase mb-1">Station List</h1>
+        <p class="grey--text text--darken-1 mb-0">
+          Browse station metadata and manage assigned station variables.
+        </p>
+      </div>
 
-  </div>
-  <div class="srf-layout flex-row" style="width:100%;">
-    <table id="id_station_list" class="mdl-data-table" style="width:100%">
-      <thead>
-        <tr>
-          <th>Code</th>
-          <th>Name</th>
-          <th>Alias name</th>
-          <th>Profile</th>
-          <th>Status</th>
-          <th>Type</th>
-          <th>Watershed</th>
-          <th>Administrative Region</th>
-          <th>UTC Offset (min)</th>
-          <th>Longitude</th>
-          <th>Latitude</th>
-          <th>Elevation</th>
-          <th>Comm. type</th>
-          <th>Last update (UTC)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for station in object_list %}
-        <tr>
-          <td>{{ station.code }}</td>
-          <td>
-            <a href="{{ station.get_absolute_url }}">{{ station.name }}</a>
-          </td>
-          <td>{{ station.alias_name }}</td>
-          <td>{{ station.profile }}</td>
-          <td>{{ station.is_active }}</td>
-          <td>{{ station.is_automatic }}</td>
-          <td>{{ station.watershed }}</td>
-          <td>{{ station.region }}</td>
-          <td>{{ station.utc_offset_minutes }}</td>
-          <td>{{ station.longitude }}</td>
-          <td>{{ station.latitude }}</td>
-          <td>{{ station.elevation }}</td>
-          <td>{{ station.communication_type }}</td>
-          <td>{{ station.updated_at }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+      <!-- Compact, left-aligned counts rather than three full-width cards. -->
+      <div class="station-summary mb-5" aria-label="Station counts">
+        <div class="station-summary-item">
+          <span class="station-summary-label">Total Stations</span>
+          <strong class="station-summary-value">[[ stations.length ]]</strong>
+        </div>
+        <div class="station-summary-item">
+          <span class="station-summary-label">Active</span>
+          <strong class="station-summary-value success--text">[[ activeStationCount ]]</strong>
+        </div>
+        <div class="station-summary-item">
+          <span class="station-summary-label">Inactive</span>
+          <strong class="station-summary-value grey--text text--darken-2">[[ inactiveStationCount ]]</strong>
+        </div>
+      </div>
+
+      <!-- Search and filters sit OUTSIDE the table card. -->
+      <div class="station-search-section mb-5">
+        <v-row align="center" class="station-filter-row">
+          <v-col cols="12" md="5" lg="5" style="margin-left: 0px !important; padding-left: 0px !important;">
+            <v-text-field
+              v-model="stationSearch"
+              label="Search stations"
+              placeholder="Code, name, region, profile..."
+              prepend-inner-icon="mdi-magnify"
+              outlined
+              dense
+              clearable
+              hide-details
+              autocomplete="off"
+            ></v-text-field>
+          </v-col>
+
+          <v-col cols="12" sm="5" md="3" lg="3">
+            <v-select
+              v-model="statusFilter"
+              :items="statusOptions"
+              label="Status"
+              outlined
+              dense
+              hide-details
+            ></v-select>
+          </v-col>
+
+          <v-col cols="12" sm="5" md="3" lg="3">
+            <v-select
+              v-model="typeFilter"
+              :items="typeOptions"
+              label="Station Type"
+              outlined
+              dense
+              hide-details
+            ></v-select>
+          </v-col>
+
+          <v-col cols="12" sm="2" md="1" lg="1" class="station-clear-col">
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  outlined
+                  block
+                  color="primary"
+                  :disabled="!hasActiveFilters"
+                  v-bind="attrs"
+                  v-on="on"
+                  @click="clearFilters"
+                  aria-label="Clear filters"
+                >
+                  <v-icon>mdi-filter-remove-outline</v-icon>
+                </v-btn>
+              </template>
+              <span>Clear filters</span>
+            </v-tooltip>
+          </v-col>
+        </v-row>
+      </div>
+
+      <!-- Table title and create action: directly ABOVE the station table. -->
+      <div class="station-table-toolbar mb-3">
+        <div>
+          <h2 class="subtitle-1 font-weight-bold mb-0">All Stations</h2>
+          <span class="caption grey--text">
+            [[ filteredStations.length ]] of [[ stations.length ]] stations
+          </span>
+
+          <div class="station-table-hint">
+            <v-icon small class="mr-1" color="grey">mdi-information-outline</v-icon>
+            Scroll horizontally for additional station metadata.
+          </div>
+        </div>
+
+        {% if request|has_any_feature_permission:"stations-list:write" %}
+        <v-btn color="primary" href="{% url 'station-create' %}">
+          <v-icon left>mdi-plus</v-icon>
+          Add Station
+        </v-btn>
+        {% endif %}
+      </div>
+
+      <!-- Auto-height table: short result sets no longer produce empty space. -->
+      <v-card outlined class="station-table-card">
+
+        <v-data-table
+          :headers="stationHeaders"
+          :items="filteredStations"
+          item-key="id"
+          sort-by="name"
+          :items-per-page="25"
+          :footer-props="{ 'items-per-page-options': [10, 25, 50, 100] }"
+          :mobile-breakpoint="0"
+          no-data-text="No stations match your search or filters."
+          class="station-list-table elevation-0"
+        >
+          <template v-slot:item.code="{ item }">
+            <span class="station-code">[[ item.code || '—' ]]</span>
+          </template>
+
+          <template v-slot:item.name="{ item }">
+            <a :href="item.detailUrl" class="station-name-link">
+              [[ item.name ]]
+              <v-icon x-small color="primary">mdi-chevron-right</v-icon>
+            </a>
+          </template>
+
+          <template v-slot:item.status="{ item }">
+            <v-chip small label :color="item.isActive ? 'green lighten-5' : 'grey lighten-3'">
+              <v-icon x-small left :color="item.isActive ? 'green darken-2' : 'grey darken-1'">
+                [[ item.isActive ? 'mdi-check-circle' : 'mdi-pause-circle-outline' ]]
+              </v-icon>
+              <span :class="item.isActive ? 'green--text text--darken-3' : 'grey--text text--darken-2'">
+                [[ item.isActive ? 'Active' : 'Inactive' ]]
+              </span>
+            </v-chip>
+          </template>
+
+          <template v-slot:item.type="{ item }">
+            <v-chip small label :color="item.isAutomatic ? 'blue lighten-5' : 'deep-purple lighten-5'">
+              <span :class="item.isAutomatic ? 'blue--text text--darken-3' : 'deep-purple--text text--darken-3'">
+                [[ item.isAutomatic ? 'Automatic' : 'Manual' ]]
+              </span>
+            </v-chip>
+          </template>
+
+          <template v-slot:item.actions="{ item }">
+            {% if request|has_any_feature_permission:"stations-list:read" %}
+            <v-btn small outlined color="primary" :href="item.variablesUrl">
+              <v-icon small left>mdi-tune-variant</v-icon>
+              Variables
+            </v-btn>
+            {% else %}
+            <span class="grey--text">—</span>
+            {% endif %}
+          </template>
+
+          <template v-slot:item.aliasName="{ item }">[[ item.aliasName || '—' ]]</template>
+          <template v-slot:item.profile="{ item }">[[ item.profile || '—' ]]</template>
+          <template v-slot:item.watershed="{ item }">[[ item.watershed || '—' ]]</template>
+          <template v-slot:item.region="{ item }">[[ item.region || '—' ]]</template>
+          <template v-slot:item.utcOffset="{ item }">[[ item.utcOffset || '—' ]]</template>
+          <template v-slot:item.longitude="{ item }">[[ item.longitude || '—' ]]</template>
+          <template v-slot:item.latitude="{ item }">[[ item.latitude || '—' ]]</template>
+          <template v-slot:item.elevation="{ item }">[[ item.elevation || '—' ]]</template>
+          <template v-slot:item.communicationType="{ item }">[[ item.communicationType || '—' ]]</template>
+          <template v-slot:item.updatedAtTimestamp="{ item }">
+            [[ item.updatedAtText || '—' ]]
+          </template>
+
+          <template v-slot:no-data>
+            <div class="py-8 text-center grey--text">
+              <v-icon color="grey lighten-1" class="mb-2">mdi-database-search-outline</v-icon>
+              <div>[[ stations.length ? 'No stations match your search or filters.' : 'No stations available.' ]]</div>
+              <v-btn
+                v-if="stations.length && hasActiveFilters"
+                text
+                small
+                color="primary"
+                class="mt-2"
+                @click="clearFilters"
+              >Clear filters</v-btn>
+            </div>
+          </template>
+        </v-data-table>
+      </v-card>
+    </v-app>
   </div>
 </div>
+{% endblock %}
 
-<style>
-  table.dataTable thead .sorting, 
-  table.dataTable thead .sorting_asc, 
-  table.dataTable thead .sorting_desc {
-    background : none;
-  }
-</style>
-
-<!-- </div> -->
-{% endblock %} {% block localjavascript %}
+{% block localjavascript %}
 <script>
-  
-  $(document).ready(function() {
-    $('#id_station_list').DataTable({
-      scrollX: true,
-      columnDefs: [
-        {
-          targets: [0, 1, 2],
-          className: 'mdl-data-table__cell--non-numeric'
-        }
-      ]
-    });
+  new Vue({
+    el: '#station-list-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+
+    data() {
+      return {
+        stationSearch: '',
+        statusFilter: 'all',
+        typeFilter: 'all',
+        statusOptions: [
+          { text: 'All statuses', value: 'all' },
+          { text: 'Active', value: 'active' },
+          { text: 'Inactive', value: 'inactive' },
+        ],
+        typeOptions: [
+          { text: 'All station types', value: 'all' },
+          { text: 'Automatic', value: 'automatic' },
+          { text: 'Manual', value: 'manual' },
+        ],
+
+        // Server-rendered Django queryset; no additional API or view changes.
+        stations: [
+          {% for station in object_list %}
+          {
+            id: {{ station.id }},
+            code: '{{ station.code|default_if_none:""|escapejs }}',
+            name: '{{ station.name|default_if_none:""|escapejs }}',
+            aliasName: '{{ station.alias_name|default_if_none:""|escapejs }}',
+            profile: '{{ station.profile|default_if_none:""|escapejs }}',
+            isActive: {% if station.is_active %}true{% else %}false{% endif %},
+            isAutomatic: {% if station.is_automatic %}true{% else %}false{% endif %},
+            status: '{% if station.is_active %}Active{% else %}Inactive{% endif %}',
+            type: '{% if station.is_automatic %}Automatic{% else %}Manual{% endif %}',
+            watershed: '{{ station.watershed|default_if_none:""|escapejs }}',
+            region: '{{ station.region|default_if_none:""|escapejs }}',
+            utcOffset: '{{ station.utc_offset_minutes|default_if_none:""|escapejs }}',
+            longitude: '{{ station.longitude|default_if_none:""|escapejs }}',
+            latitude: '{{ station.latitude|default_if_none:""|escapejs }}',
+            elevation: '{{ station.elevation|default_if_none:""|escapejs }}',
+            communicationType: '{{ station.communication_type|default_if_none:""|escapejs }}',
+            {% timezone "UTC" %}
+            updatedAtText: '{{ station.updated_at|date:"d M Y, H:i"|default_if_none:""|escapejs }}',
+            updatedAtTimestamp: Number('{{ station.updated_at|date:"U"|default:"0" }}'),
+            {% endtimezone %}
+            detailUrl: '{{ station.get_absolute_url|escapejs }}',
+            variablesUrl: '{% url "stationvariable-list" station.id %}',
+          }{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ],
+
+        stationHeaders: [
+          { text: 'Code', value: 'code', width: '115px' },
+          { text: 'Name', value: 'name', width: '230px' },
+          { text: 'Status', value: 'status', width: '110px' },
+          { text: 'Type', value: 'type', width: '115px' },
+          { text: 'Actions', value: 'actions', width: '125px', sortable: false },
+          { text: 'Alias Name', value: 'aliasName', width: '175px' },
+          { text: 'Profile', value: 'profile', width: '135px' },
+          { text: 'Watershed', value: 'watershed', width: '140px' },
+          { text: 'Administrative Region', value: 'region', width: '190px' },
+          { text: 'UTC Offset (min)', value: 'utcOffset', width: '145px' },
+          { text: 'Longitude', value: 'longitude', width: '120px' },
+          { text: 'Latitude', value: 'latitude', width: '120px' },
+          { text: 'Elevation', value: 'elevation', width: '115px' },
+          { text: 'Comm. Type', value: 'communicationType', width: '145px' },
+          { text: 'Last Update (UTC)', value: 'updatedAtTimestamp', width: '190px' },
+        ],
+      };
+    },
+
+    computed: {
+      activeStationCount() {
+        return this.stations.filter(station => station.isActive).length;
+      },
+
+      inactiveStationCount() {
+        return this.stations.length - this.activeStationCount;
+      },
+
+      hasActiveFilters() {
+        return Boolean((this.stationSearch || '').trim()) ||
+          this.statusFilter !== 'all' || this.typeFilter !== 'all';
+      },
+
+      filteredStations() {
+        const query = (this.stationSearch || '').trim().toLowerCase();
+
+        return this.stations.filter(station => {
+          if (this.statusFilter === 'active' && !station.isActive) return false;
+          if (this.statusFilter === 'inactive' && station.isActive) return false;
+          if (this.typeFilter === 'automatic' && !station.isAutomatic) return false;
+          if (this.typeFilter === 'manual' && station.isAutomatic) return false;
+          if (!query) return true;
+
+          const searchable = [
+            station.code, station.name, station.aliasName,
+            station.profile, station.watershed, station.region,
+            station.communicationType, station.utcOffset,
+            station.longitude, station.latitude, station.elevation,
+          ];
+          return searchable.some(value =>
+            String(value == null ? '' : value).toLowerCase().includes(query)
+          );
+        });
+      },
+    },
+
+    methods: {
+      clearFilters() {
+        this.stationSearch = '';
+        this.statusFilter = 'all';
+        this.typeFilter = 'all';
+      },
+    },
   });
 </script>
+
+<style>
+  [v-cloak] { display: none; }
+  .station-list-app { background: transparent !important; }
+  .station-page-header { display: block; }
+
+  /* Summary is deliberately small and left-aligned, not full-width cards. */
+  .station-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 10px;
+    width: fit-content;
+    max-width: 100%;
+  }
+  .station-summary-item {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid #e0e5eb;
+    border-radius: 6px;
+    background: #fff;
+  }
+  .station-summary-label { font-size: 12px; color: #6b7280; white-space: nowrap; }
+  .station-summary-value { font-size: 19px; line-height: 1.15; color: #263238; }
+
+  /* Filters have their own space above the table instead of a card header. */
+  .station-search-section { max-width: 1120px; }
+  .station-filter-row { margin-top: -6px; margin-bottom: -6px; }
+  .station-filter-row .col { padding-top: 6px; padding-bottom: 6px; }
+  .station-clear-col .v-btn { min-width: 44px; height: 40px; }
+
+  .station-table-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .station-table-card { border-color: #e0e5eb !important; border-radius: 7px !important; overflow: hidden; }
+  .station-table-hint { color: #6b7280; font-size: 12px; }
+  .station-list-table .v-data-table__wrapper { overflow-x: auto !important; }
+  .station-list-table table { min-width: 1980px; border-collapse: collapse; }
+  .station-list-table thead th {
+    background: #f4f6f9 !important;
+    color: #374151 !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+    border-right: 1px solid #e5e7eb;
+    border-bottom: 1px solid #dce2e9 !important;
+  }
+  .station-list-table tbody td {
+    font-size: 13px !important;
+    white-space: nowrap;
+    border-bottom: 1px solid #e8edf3 !important;
+    border-right: 1px solid #f1f3f5;
+  }
+  .station-list-table tbody tr:hover { background: #f8fbff !important; }
+  .station-code { font-weight: 700; color: #4b5563; }
+  .station-name-link { color: #1976d2 !important; text-decoration: none !important; font-weight: 600; display: inline-flex; align-items: center; }
+  .station-name-link:hover { text-decoration: underline !important; }
+  .station-list-table .v-chip { font-weight: 600; }
+  @media (max-width: 959px) {
+    .station-table-toolbar .v-btn { width: 100%; }
+    .station-clear-col .v-btn { width: 100%; }
+  }
+  .station-list-page {
+      margin-top: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 28px;
+  }
+
+  .station-page-header {
+      display: block;
+      margin-top: 0 !important;
+      padding-top: 0 !important;
+  }
+
+  .station-page-header h1 {
+      margin-top: 0 !important;
+  }
+</style>
 {% endblock %}

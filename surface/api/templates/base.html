@@ -1046,15 +1046,15 @@
               {% endif %}
 
               {% if request|has_any_feature_permission:"global-threshold:read" %}
-                <a id="global-threshold" href="{% url 'coming-soon' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Global Threshold<i class="material-icons secondary-content">public</i></a>
+                <a id="global-threshold" href="{% url 'global-threshold' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Global Threshold<i class="material-icons secondary-content">public</i></a>
               {% endif %}
 
               {% if request|has_any_feature_permission:"reference-station:read" %}
-                <a id="reference-station" href="{% url 'coming-soon' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Reference Threshold<i class="material-icons secondary-content">scatter_plot</i></a>
+                <a id="reference-station" href="{% url 'reference-station' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Reference Threshold<i class="material-icons secondary-content">scatter_plot</i></a>
               {% endif %}
 
               {% if request|has_any_feature_permission:"custom-threshold:read" %}
-                <a id="custom-threshold" href="{% url 'coming-soon' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Custom Threshold<i class="material-icons secondary-content">tune</i></a>
+                <a id="custom-threshold" href="{% url 'custom-threshold' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Custom Threshold<i class="material-icons secondary-content">tune</i></a>
               {% endif %}
 
               <!-- pill border at the bottom of the dropdown -->
