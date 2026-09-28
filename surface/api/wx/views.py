@@ -5279,37 +5279,12 @@ def save_reference_station_thresholds(request, id):
     """
     Save Range, Step, and Persist thresholds for a reference station.
 
-    Expected JSON body:
+    All threshold values are required when creating or updating a record.
 
-    {
-        "range": [
-            {
-                "variable_id": 1,
-                "month": 1,
-                "range_min": 10,
-                "range_max": 35
-            }
-        ],
-        "step": [
-            {
-                "variable_id": 1,
-                "step_min": -5,
-                "step_max": 5
-            }
-        ],
-        "persist": [
-            {
-                "variable_id": 1,
-                "minimum_variance": 0.1,
-                "window": 6
-            }
-        ]
-    }
+    If both values for a threshold are blank, the existing record is deleted.
+    If only one value is blank, a validation error is returned.
 
-    Empty Range and Step values delete the existing threshold row.
-    Empty Persist values delete the existing threshold row.
-    If only one Persist value is provided, an error is returned because
-    QcPersistThreshold requires both minimum_variance and window.
+    All submitted thresholds are validated before database changes begin.
     """
 
     station = get_object_or_404(
@@ -5320,10 +5295,14 @@ def save_reference_station_thresholds(request, id):
 
     try:
         data = json.loads(request.body.decode('utf-8'))
-
-    except json.JSONDecodeError:
+    except (UnicodeDecodeError, json.JSONDecodeError):
         return JsonResponse({
             'message': 'Invalid JSON body.'
+        }, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({
+            'message': 'The JSON body must be an object.'
         }, status=400)
 
     range_rows = data.get('range', [])
@@ -5348,169 +5327,295 @@ def save_reference_station_thresholds(request, id):
     allowed_variable_ids = set(
         StationVariable.objects.filter(
             station=station
-        ).values_list(
-            'variable_id',
-            flat=True
-        )
+        ).values_list('variable_id', flat=True)
     )
 
-    months = get_months()
-    valid_month_ids = set(months.keys())
+    valid_month_ids = set(get_months().keys())
 
-    # Save Range thresholds.
+    validated_range = []
+    validated_step = []
+    validated_persist = []
+
+    # ---------------------------------
+    # Validate Range thresholds
+    # ---------------------------------
     for row in range_rows:
-        variable_id = row.get('variable_id')
-        month_id = row.get('month')
+        if not isinstance(row, dict):
+            return JsonResponse({
+                'message': 'Invalid Range threshold record.'
+            }, status=400)
 
         try:
-            variable_id = int(variable_id)
-            month_id = int(month_id)
-
+            variable_id = int(row.get('variable_id'))
+            month_id = int(row.get('month'))
         except (TypeError, ValueError):
             return JsonResponse({
-                'message': 'Invalid range threshold variable or month.'
+                'message': 'Invalid Range threshold variable or month.'
             }, status=400)
 
         if variable_id not in allowed_variable_ids:
             return JsonResponse({
-                'message': 'One or more selected variables are not associated with this reference station.'
+                'message': (
+                    'One or more selected variables are not associated '
+                    'with this reference station.'
+                )
             }, status=400)
 
         if month_id not in valid_month_ids:
             return JsonResponse({
-                'message': 'Invalid month selected for range threshold.'
+                'message': 'Invalid month selected for Range threshold.'
             }, status=400)
 
         try:
             range_min = parse_optional_float(row.get('range_min'))
             range_max = parse_optional_float(row.get('range_max'))
-
-        except ValueError:
+        except (TypeError, ValueError):
             return JsonResponse({
                 'message': 'Range threshold values must be valid numbers.'
             }, status=400)
 
-        # If both are blank, delete the row if it exists.
+        # Both blank means delete the existing threshold.
         if range_min is None and range_max is None:
-            QcRangeThreshold.objects.filter(
-                station=station,
-                variable_id=variable_id,
-                month=month_id
-            ).delete()
-
+            validated_range.append({
+                'variable_id': variable_id,
+                'month': month_id,
+                'delete': True,
+            })
             continue
 
-        threshold, created = QcRangeThreshold.objects.get_or_create(
-            station=station,
-            variable_id=variable_id,
-            month=month_id
-        )
+        # Both fields are required when saving.
+        if range_min is None or range_max is None:
+            return JsonResponse({
+                'message': (
+                    f'Variable {variable_id}, month {month_id}: '
+                    'Both Range minimum and maximum are required.'
+                )
+            }, status=400)
 
-        threshold.range_min = range_min
-        threshold.range_max = range_max
-        threshold.save()
+        if not math.isfinite(range_min) or not math.isfinite(range_max):
+            return JsonResponse({
+                'message': 'Range thresholds must be finite numbers.'
+            }, status=400)
 
-    # Save Step thresholds.
+        if range_min > range_max:
+            return JsonResponse({
+                'message': (
+                    f'Variable {variable_id}, month {month_id}: '
+                    'Range minimum cannot exceed maximum.'
+                )
+            }, status=400)
+
+        validated_range.append({
+            'variable_id': variable_id,
+            'month': month_id,
+            'range_min': range_min,
+            'range_max': range_max,
+            'delete': False,
+        })
+
+    # ---------------------------------
+    # Validate Step thresholds
+    # ---------------------------------
     for row in step_rows:
-        variable_id = row.get('variable_id')
+        if not isinstance(row, dict):
+            return JsonResponse({
+                'message': 'Invalid Step threshold record.'
+            }, status=400)
 
         try:
-            variable_id = int(variable_id)
-
+            variable_id = int(row.get('variable_id'))
         except (TypeError, ValueError):
             return JsonResponse({
-                'message': 'Invalid step threshold variable.'
+                'message': 'Invalid Step threshold variable.'
             }, status=400)
 
         if variable_id not in allowed_variable_ids:
             return JsonResponse({
-                'message': 'One or more selected variables are not associated with this reference station.'
+                'message': (
+                    'One or more selected variables are not associated '
+                    'with this reference station.'
+                )
             }, status=400)
 
         try:
             step_min = parse_optional_float(row.get('step_min'))
             step_max = parse_optional_float(row.get('step_max'))
-
-        except ValueError:
+        except (TypeError, ValueError):
             return JsonResponse({
                 'message': 'Step threshold values must be valid numbers.'
             }, status=400)
 
-        # If both are blank, delete the row if it exists.
+        # Both blank means delete the existing threshold.
         if step_min is None and step_max is None:
-            QcStepThreshold.objects.filter(
-                station=station,
-                variable_id=variable_id
-            ).delete()
-
+            validated_step.append({
+                'variable_id': variable_id,
+                'delete': True,
+            })
             continue
 
-        threshold, created = QcStepThreshold.objects.get_or_create(
-            station=station,
-            variable_id=variable_id
-        )
+        if step_min is None or step_max is None:
+            return JsonResponse({
+                'message': (
+                    f'Variable {variable_id}: '
+                    'Both Step minimum and maximum are required.'
+                )
+            }, status=400)
 
-        threshold.step_min = step_min
-        threshold.step_max = step_max
-        threshold.save()
+        if not math.isfinite(step_min) or not math.isfinite(step_max):
+            return JsonResponse({
+                'message': 'Step thresholds must be finite numbers.'
+            }, status=400)
 
-    # Save Persist thresholds.
+        if step_min > step_max:
+            return JsonResponse({
+                'message': (
+                    f'Variable {variable_id}: '
+                    'Step minimum cannot exceed maximum.'
+                )
+            }, status=400)
+
+        validated_step.append({
+            'variable_id': variable_id,
+            'step_min': step_min,
+            'step_max': step_max,
+            'delete': False,
+        })
+
+    # ---------------------------------
+    # Validate Persist thresholds
+    # ---------------------------------
     for row in persist_rows:
-        variable_id = row.get('variable_id')
+        if not isinstance(row, dict):
+            return JsonResponse({
+                'message': 'Invalid Persist threshold record.'
+            }, status=400)
 
         try:
-            variable_id = int(variable_id)
-
+            variable_id = int(row.get('variable_id'))
         except (TypeError, ValueError):
             return JsonResponse({
-                'message': 'Invalid persist threshold variable.'
+                'message': 'Invalid Persist threshold variable.'
             }, status=400)
 
         if variable_id not in allowed_variable_ids:
             return JsonResponse({
-                'message': 'One or more selected variables are not associated with this reference station.'
+                'message': (
+                    'One or more selected variables are not associated '
+                    'with this reference station.'
+                )
             }, status=400)
 
         try:
             minimum_variance = parse_optional_float(
                 row.get('minimum_variance')
             )
-            window = parse_optional_int(
-                row.get('window')
-            )
-
-        except ValueError:
+            window = parse_optional_int(row.get('window'))
+        except (TypeError, ValueError):
             return JsonResponse({
                 'message': 'Persist threshold values must be valid numbers.'
             }, status=400)
 
-        # If both are blank, delete the row if it exists.
+        # Both blank means delete the existing threshold.
         if minimum_variance is None and window is None:
-            QcPersistThreshold.objects.filter(
-                station=station,
-                variable_id=variable_id
-            ).delete()
-
+            validated_persist.append({
+                'variable_id': variable_id,
+                'delete': True,
+            })
             continue
 
-        # Persist requires both values because the model fields are required.
         if minimum_variance is None or window is None:
             return JsonResponse({
-                'message': 'Persist threshold requires both minimum variance and window.'
+                'message': (
+                    f'Variable {variable_id}: Persist requires both '
+                    'minimum variance and window.'
+                )
             }, status=400)
 
-        threshold, created = QcPersistThreshold.objects.get_or_create(
-            station=station,
-            variable_id=variable_id,
-            defaults={
-                'minimum_variance': minimum_variance,
-                'window': window,
-            }
-        )
+        if not math.isfinite(minimum_variance) or minimum_variance < 0:
+            return JsonResponse({
+                'message': (
+                    f'Variable {variable_id}: Minimum variance '
+                    'must be a finite, non-negative number.'
+                )
+            }, status=400)
 
-        threshold.minimum_variance = minimum_variance
-        threshold.window = window
-        threshold.save()
+        if window <= 0:
+            return JsonResponse({
+                'message': (
+                    f'Variable {variable_id}: Persist window '
+                    'must be a positive integer.'
+                )
+            }, status=400)
+
+        validated_persist.append({
+            'variable_id': variable_id,
+            'minimum_variance': minimum_variance,
+            'window': window,
+            'delete': False,
+        })
+
+    # ---------------------------------
+    # Save all validated thresholds
+    # ---------------------------------
+    with transaction.atomic():
+
+        # Range
+        for row in validated_range:
+            lookup = {
+                'station': station,
+                'variable_id': row['variable_id'],
+                'month': row['month'],
+            }
+
+            if row['delete']:
+                QcRangeThreshold.objects.filter(**lookup).delete()
+                continue
+
+            QcRangeThreshold.objects.update_or_create(
+                **lookup,
+                defaults={
+                    'range_min': row['range_min'],
+                    'range_max': row['range_max'],
+                }
+            )
+
+        # Step
+        for row in validated_step:
+            lookup = {
+                'station': station,
+                'variable_id': row['variable_id'],
+            }
+
+            if row['delete']:
+                QcStepThreshold.objects.filter(**lookup).delete()
+                continue
+
+            QcStepThreshold.objects.update_or_create(
+                **lookup,
+                defaults={
+                    'step_min': row['step_min'],
+                    'step_max': row['step_max'],
+                }
+            )
+
+        # Persist
+        for row in validated_persist:
+            lookup = {
+                'station': station,
+                'variable_id': row['variable_id'],
+            }
+
+            if row['delete']:
+                QcPersistThreshold.objects.filter(**lookup).delete()
+                continue
+
+            QcPersistThreshold.objects.update_or_create(
+                **lookup,
+                defaults={
+                    'minimum_variance': row['minimum_variance'],
+                    'window': row['window'],
+                }
+            )
 
     return JsonResponse({
         'message': 'Reference station thresholds saved successfully.'
