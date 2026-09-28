@@ -14,22 +14,6 @@
         </p>
       </div>
 
-      <!-- Compact, left-aligned counts rather than three full-width cards. -->
-      <div class="station-summary mb-5" aria-label="Station counts">
-        <div class="station-summary-item">
-          <span class="station-summary-label">Total Stations</span>
-          <strong class="station-summary-value">[[ stations.length ]]</strong>
-        </div>
-        <div class="station-summary-item">
-          <span class="station-summary-label">Active</span>
-          <strong class="station-summary-value success--text">[[ activeStationCount ]]</strong>
-        </div>
-        <div class="station-summary-item">
-          <span class="station-summary-label">Inactive</span>
-          <strong class="station-summary-value grey--text text--darken-2">[[ inactiveStationCount ]]</strong>
-        </div>
-      </div>
-
       <!-- Search and filters sit OUTSIDE the table card. -->
       <div class="station-search-section mb-5">
         <v-row align="center" class="station-filter-row">
@@ -139,28 +123,21 @@
           </template>
 
           <template v-slot:item.status="{ item }">
-            <v-chip small label :color="item.isActive ? 'green lighten-5' : 'grey lighten-3'">
-              <v-icon x-small left :color="item.isActive ? 'green darken-2' : 'grey darken-1'">
-                [[ item.isActive ? 'mdi-check-circle' : 'mdi-pause-circle-outline' ]]
-              </v-icon>
-              <span :class="item.isActive ? 'green--text text--darken-3' : 'grey--text text--darken-2'">
-                [[ item.isActive ? 'Active' : 'Inactive' ]]
-              </span>
-            </v-chip>
+            <v-btn small outlined :color="item.isActive ? 'success' : 'grey'">
+              [[ item.isActive ? 'Active' : 'Inactive' ]]
+            </v-btn>
           </template>
 
           <template v-slot:item.type="{ item }">
-            <v-chip small label :color="item.isAutomatic ? 'blue lighten-5' : 'deep-purple lighten-5'">
-              <span :class="item.isAutomatic ? 'blue--text text--darken-3' : 'deep-purple--text text--darken-3'">
-                [[ item.isAutomatic ? 'Automatic' : 'Manual' ]]
-              </span>
-            </v-chip>
+            <v-btn small outlined :color="item.isAutomatic ? 'primary' : 'purple'">
+              [[ item.isAutomatic ? 'Automatic' : 'Manual' ]]
+            </v-btn>
           </template>
 
           <template v-slot:item.actions="{ item }">
             {% if request|has_any_feature_permission:"stations-list:read" %}
             <v-btn small outlined color="primary" :href="item.variablesUrl">
-              <v-icon small left>mdi-tune-variant</v-icon>
+              <v-icon small left>mdi-tune</v-icon>
               Variables
             </v-btn>
             {% else %}
@@ -177,9 +154,6 @@
           <template v-slot:item.latitude="{ item }">[[ item.latitude || '—' ]]</template>
           <template v-slot:item.elevation="{ item }">[[ item.elevation || '—' ]]</template>
           <template v-slot:item.communicationType="{ item }">[[ item.communicationType || '—' ]]</template>
-          <template v-slot:item.updatedAtTimestamp="{ item }">
-            [[ item.updatedAtText || '—' ]]
-          </template>
 
           <template v-slot:no-data>
             <div class="py-8 text-center grey--text">
@@ -246,8 +220,7 @@
             elevation: '{{ station.elevation|default_if_none:""|escapejs }}',
             communicationType: '{{ station.communication_type|default_if_none:""|escapejs }}',
             {% timezone "UTC" %}
-            updatedAtText: '{{ station.updated_at|date:"d M Y, H:i"|default_if_none:""|escapejs }}',
-            updatedAtTimestamp: Number('{{ station.updated_at|date:"U"|default:"0" }}'),
+            updated_at: '{{ station.updated_at|date:"Y-m-d H:i:s"|default:"—"|escapejs }}',
             {% endtimezone %}
             detailUrl: '{{ station.get_absolute_url|escapejs }}',
             variablesUrl: '{% url "stationvariable-list" station.id %}',
@@ -270,7 +243,7 @@
           { text: 'Latitude', value: 'latitude', width: '120px' },
           { text: 'Elevation', value: 'elevation', width: '115px' },
           { text: 'Comm. Type', value: 'communicationType', width: '145px' },
-          { text: 'Last Update (UTC)', value: 'updatedAtTimestamp', width: '190px' },
+          { text: 'Last Update (UTC)', value: 'updated_at', width: '190px' },
         ],
       };
     },
@@ -326,28 +299,6 @@
   [v-cloak] { display: none; }
   .station-list-app { background: transparent !important; }
   .station-page-header { display: block; }
-
-  /* Summary is deliberately small and left-aligned, not full-width cards. */
-  .station-summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 10px;
-    width: fit-content;
-    max-width: 100%;
-  }
-  .station-summary-item {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    padding: 10px 14px;
-    border: 1px solid #e0e5eb;
-    border-radius: 6px;
-    background: #fff;
-  }
-  .station-summary-label { font-size: 12px; color: #6b7280; white-space: nowrap; }
-  .station-summary-value { font-size: 19px; line-height: 1.15; color: #263238; }
 
   /* Filters have their own space above the table instead of a card header. */
   .station-search-section { max-width: 1120px; }
