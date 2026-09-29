@@ -38,7 +38,7 @@ urlpatterns = [
     path('api/station_profiles/', views.StationProfileViewSet.as_view({'get': 'list'})),
     path('api/stations_variables/', views.StationVariableViewSet.as_view({'get': 'list'})),
     path('api/stations_variables/stations/', views.StationVariableStationViewSet.as_view({'get': 'list'})),
-    path('api/range_threshold/', views.range_threshold_view), # For synop and daily data capture
+    path('api/range_threshold/', views.range_threshold_view), # For synop and daily data capture ONLY RETURNS THE RANGE FOR MANUAL STATIONS
     path('api/available_data/', views.AvailableDataView.as_view()),
     path('api/user_info/', views.UserInfo.as_view()),
     path('api/data_export/', views.AppDataExportView.as_view()),

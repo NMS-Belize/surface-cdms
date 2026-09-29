@@ -2804,7 +2804,9 @@ class StationDetailView(LoginRequiredMixin, DetailView):
                 ),
         Fieldset('Instrumentation and Maintenance'),
         Fieldset('Observing Practices'),
-        Fieldset('Data Processing'),
+        Fieldset('Data Processing',
+                 Row('reference_station'),
+                ),
         Fieldset('Historical Events'),
         Fieldset('Other Metadata',
                  Row('hydrology_station_type', 'ground_water_province'),
@@ -3014,7 +3016,7 @@ class StationUpdate(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
                 #  Row(''),
                 ),
         Fieldset('Data Processing',
-                #  Row(''),
+                 Row('reference_station'),
                 ),
         Fieldset('Historical Events',
                 #  Row(''),
@@ -3035,39 +3037,6 @@ class StationUpdate(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
                  Row('casing_type', 'datum'),
                  Row('zone')
                  )
-    #     Fieldset('Editing station',
-    #              Row('latitude', 'longitude'),
-    #              Row('name', 'is_active'),
-    #              Row('alias_name', 'is_automatic'),
-    #              Row('code', 'profile'),
-    #              Row('wmo', 'organization'),
-    #              Row('wigos', 'observer'),
-    #              Row('begin_date', 'data_source'),
-    #              Row('end_date', 'communication_type')
-    #              ),
-    #     Fieldset('Other information',
-    #              Row('elevation', 'watershed'),
-    #              Row('country', 'region'),
-    #              Row('utc_offset_minutes', 'local_land_use'),
-    #              Row('soil_type', 'station_details'),
-    #              Row('site_description', 'alternative_names')
-    #              ),
-    #     Fieldset('Hydrology information',
-    #              Row('hydrology_station_type', 'ground_water_province'),
-    #              Row('existing_gauges', 'flow_direction_at_station'),
-    #              Row('flow_direction_above_station', 'flow_direction_below_station'),
-    #              Row('bank_full_stage', 'bridge_level'),
-    #              Row('temporary_benchmark', 'mean_sea_level'),
-    #              Row('river_code', 'river_course'),
-    #              Row('catchment_area_station', 'river_origin'),
-    #              Row('easting', 'northing'),
-    #              Row('river_outlet', 'river_length'),
-    #              Row('z', 'land_surface_elevation'),
-    #              Row('top_casing_land_surface', 'casing_diameter'),
-    #              Row('screen_length', 'depth_midpoint'),
-    #              Row('casing_type', 'datum'),
-    #              Row('zone')
-    #              )
         )
 
        
@@ -11988,7 +11957,7 @@ class SynopCaptureView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateVi
         context = super().get_context_data(**kwargs)
 
         # get synop station information
-        context['station_list'] = Station.objects.filter(is_synoptic=True, is_reference=False).values('id', 'name', 'code')
+        context['station_list'] = Station.objects.filter(is_active=True, is_synoptic=True, is_automatic=False, is_reference=False).values('id', 'name', 'code')
         # retrieves the ag_grid_config, the id's of columns which should be numbers and a dict of col id's mapped to wmocodevalues
         context['ag_grid_config'], context['num_validate_ids'], context['variable_ids'] = get_synop_capture_config()
 

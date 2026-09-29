@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta
 from math import isnan
 
-from django.conf import settings
-
 from wx.enums import QualityFlagEnum
 
 
-from wx.quality_control.helpers import get_min_max_measured, get_prev_measured
+from wx.quality_control.helpers import get_min_max_measured, get_prev_measured, is_missing
 
 # ---------------------------------------------------------------------
 # Quality Flag Shortcuts
@@ -16,6 +14,7 @@ GOOD = QualityFlagEnum.GOOD.id
 NOT_CHECKED = QualityFlagEnum.NOT_CHECKED.id
 BAD = QualityFlagEnum.BAD.id
 SUSPICIOUS = QualityFlagEnum.SUSPICIOUS.id
+MISSING = QualityFlagEnum.MISSING.id
 
 
 # ---------------------------------------------------------------------
@@ -47,10 +46,10 @@ def evaluate_step_qc(
 
     descriptions = [thresholds.get("step_description", "Unknown threshold")]
 
-    if value == settings.MISSING_VALUE:
-        descriptions.append(f"Missing Value, step check failed!")
+    if is_missing(value):
+        descriptions.append(f"\n\nMissing Value, step check failed!")
 
-        return BAD, " || ".join(descriptions)
+        return MISSING, " || ".join(descriptions)
     
     # getting the diff value
     prev_measured = None
@@ -60,7 +59,7 @@ def evaluate_step_qc(
         if data_row['datetime'] == row_datetime_utc:
             break
 
-        if data_row['measured'] != settings.MISSING_VALUE:
+        if not is_missing(data_row['measured']):
             prev_measured = data_row['measured']
 
     # confirm that there is a valid previous number
@@ -79,7 +78,7 @@ def evaluate_step_qc(
                 variable_id,
             )
 
-        if prev_measured == settings.MISSING_VALUE:
+        if is_missing(prev_measured):
             diff_value = None
         elif prev_measured is not None:
             diff_value = round(float(value) - float(prev_measured), 3)
@@ -96,6 +95,11 @@ def evaluate_step_qc(
     ref_step  = get_step("ref")
     cus_step  = get_step("cus")
 
+    descriptions.append(
+        f"\n\nCurrent Measured: {value}. Prev Measured: {prev_measured}. "
+        f"Difference: {round(diff_value, 3) if diff_value is not None else 'None'}\n\n"
+    )
+
     # ------------------------------------------------------------
     # No thresholds at all
     # ------------------------------------------------------------
@@ -103,8 +107,6 @@ def evaluate_step_qc(
         descriptions.append("No Thresholds To Check!")
 
         return NOT_CHECKED, " || ".join(descriptions)
-
-    descriptions.append(f"This is the diff_value: {diff_value}. This is the current measured: {value}. This is the prev measured: {prev_measured}")
 
     # ------------------------------------------------------------
     # No Step difference retrieved
@@ -122,7 +124,7 @@ def evaluate_step_qc(
     
     g_min, g_max = glob_step
     if not (g_min <= diff_value <= g_max):
-        descriptions.append(f"Failed Global Threshold (Step Diff: {diff_value}), skipping custom & reference checks!")
+        descriptions.append(f"Failed Global Threshold, skipping custom & reference checks!")
 
         return BAD, " || ".join(descriptions)
 
@@ -137,7 +139,7 @@ def evaluate_step_qc(
 
     r_min, r_max = ref_step
     if not (r_min <= diff_value <= r_max):
-        descriptions.append(f"Failed Reference Threshold (Step Diff: {diff_value}), skipping custom checks!")
+        descriptions.append(f"Failed Reference Threshold, skipping custom checks!")
 
         return SUSPICIOUS, " || ".join(descriptions)
 
@@ -152,7 +154,7 @@ def evaluate_step_qc(
 
     c_min, c_max = cus_step
     if not (c_min <= diff_value <= c_max):
-        descriptions.append(f"Failed Custom Threshold! (Step Diff: {diff_value})")
+        descriptions.append(f"Failed Custom Threshold!")
 
         return SUSPICIOUS, " || ".join(descriptions)
 
@@ -161,7 +163,7 @@ def evaluate_step_qc(
     # ------------------------------------------------------------
     # Passed everything
     # ------------------------------------------------------------
-    descriptions.append("All Threshold Checks Passed!")
+    descriptions.append("\n\nAll Threshold Checks Passed!")
     return GOOD, " || ".join(descriptions)
 
 
@@ -186,10 +188,10 @@ def evaluate_range_qc(value: float, thresholds: dict):
 
     descriptions = [thresholds.get("range_description", "Unknown threshold")]
 
-    if value == settings.MISSING_VALUE:
-        descriptions.append(f"Missing Value, range check failed!")
+    if is_missing(value):
+        descriptions.append(f"\n\nMissing Value, range check failed!")
 
-        return BAD, " || ".join(descriptions)
+        return MISSING, " || ".join(descriptions)
 
     # Get the threshold rande
     def get_range(prefix):
@@ -207,7 +209,7 @@ def evaluate_range_qc(value: float, thresholds: dict):
     # No thresholds at all
     # ------------------------------------------------------------
     if not any([glob_range, ref_range, cus_range]):
-        descriptions.append("No Thresholds To Check!")
+        descriptions.append("\n\nNo Thresholds To Check!")
 
         return NOT_CHECKED, " || ".join(descriptions)
 
@@ -215,12 +217,12 @@ def evaluate_range_qc(value: float, thresholds: dict):
     # Global is mandatory
     # ------------------------------------------------------------
     if not glob_range:
-        descriptions.append("Global Threshold not found, therefore unable to proceed!")
+        descriptions.append("\n\nGlobal Threshold not found, therefore unable to proceed!")
         return NOT_CHECKED, " || ".join(descriptions)
 
     g_min, g_max = glob_range
     if not (g_min <= value <= g_max):
-        descriptions.append("Failed Global Threshold, skipping custom & reference checks!")
+        descriptions.append("\n\nFailed Global Threshold, skipping custom & reference checks!")
 
         return BAD, " || ".join(descriptions)
 
@@ -230,12 +232,12 @@ def evaluate_range_qc(value: float, thresholds: dict):
     # Reference check
     # ------------------------------------------------------------
     if not ref_range:
-        descriptions.append("Reference Threshold not found, skipping remaining checks!")
+        descriptions.append("\n\nReference Threshold not found, skipping remaining checks!")
         return SUSPICIOUS, " || ".join(descriptions)
 
     r_min, r_max = ref_range
     if not (r_min <= value <= r_max):
-        descriptions.append("Failed Reference Threshold, skipping custom checks!")
+        descriptions.append("\n\nFailed Reference Threshold, skipping custom checks!")
 
         return SUSPICIOUS, " || ".join(descriptions)
 
@@ -245,12 +247,12 @@ def evaluate_range_qc(value: float, thresholds: dict):
     # Custom check
     # ------------------------------------------------------------
     if not cus_range:
-        descriptions.append("Custom Threshold not found!")
+        descriptions.append("\n\nCustom Threshold not found!")
         return SUSPICIOUS, " || ".join(descriptions)
 
     c_min, c_max = cus_range
     if not (c_min <= value <= c_max):
-        descriptions.append("Failed Custom Threshold!")
+        descriptions.append("\n\nFailed Custom Threshold!")
 
         return SUSPICIOUS, " || ".join(descriptions)
     
@@ -259,7 +261,7 @@ def evaluate_range_qc(value: float, thresholds: dict):
     # ------------------------------------------------------------
     # Passed everything
     # ------------------------------------------------------------
-    descriptions.append("All Threshold Checks Passed!")
+    descriptions.append("\n\nAll Threshold Checks Passed!")
     return GOOD, " || ".join(descriptions)
 
 
@@ -331,10 +333,10 @@ def evaluate_persist_qc(
 
     descriptions = [thresholds.get("persist_description", "Unknown threshold")]
 
-    if value == settings.MISSING_VALUE:
-        descriptions.append(f"Missing Value, persist check failed!")
+    if is_missing(value):
+        descriptions.append(f"\n\nMissing Value, persist check failed!")
 
-        return BAD, " || ".join(descriptions)
+        return MISSING, " || ".join(descriptions)
 
     def get_persist_cfg(prefix):
         wnd_key = f"{prefix}_persist_wnd"
@@ -360,7 +362,7 @@ def evaluate_persist_qc(
     # ------------------------------------------------------------
     # If all teirs are none then return NOT_CHECKED
     if all(v is None for v in tiers.values()):
-        descriptions.append("No Thresholds To Check!")
+        descriptions.append("\n\nNo Thresholds To Check!")
         
         return NOT_CHECKED, " || ".join(descriptions)
 
@@ -418,7 +420,7 @@ def evaluate_persist_qc(
             if row_dt < window_start:
                 continue
 
-            if row_data["measured"] == settings.MISSING_VALUE:
+            if is_missing(row_data["measured"]):
                 continue
 
             val = row_data["measured"]
@@ -437,7 +439,7 @@ def evaluate_persist_qc(
             values.extend([batch_wnd_min, batch_wnd_max])
 
         if not values:
-            descriptions.append(f"Persist Not Checked. Could not find a valid max and/or min within the persistence window.")
+            descriptions.append(f"\n\nPersist Not Checked. Could not find a valid max and/or min within the persistence window.")
 
             return NOT_CHECKED, " || ".join(descriptions)
 
@@ -448,8 +450,8 @@ def evaluate_persist_qc(
         calc_variance = round(max(values) - min(values), 3)
 
         if calc_variance <= p_min_var:
-            descriptions.append(f"Failed {prefix} Threshold, persist check failed!")
-            # descriptions.append(f"Failed {prefix} Threshold, persist check failed! calc var: {calc_variance} || max: {max(values)} || min: {min(values)}")
+            # descriptions.append(f"\n\nFailed {prefix} Threshold, persist check failed!")
+            descriptions.append(f"\n\nFailed {prefix} Threshold, persist check failed!\n\nCalculated Variance: {round(calc_variance, 3)} || max: {max(values)} || min: {min(values)}")
 
             return BAD, " || ".join(descriptions)
         
@@ -459,7 +461,7 @@ def evaluate_persist_qc(
     # ------------------------------------------------------------
     # All configured tiers passed
     # ------------------------------------------------------------
-    descriptions.append(f"All Threshold Checks Passed!")
+    descriptions.append(f"\n\nAll Threshold Checks Passed!")
     return GOOD, " || ".join(descriptions)
 
 
@@ -496,10 +498,14 @@ def determine_final_qc(step_flag: int, range_flag: int, persist_flag: int) -> in
     # Case 3: There is a NOT CHECKED flag in list
     if NOT_CHECKED in [range_flag, persist_flag, step_flag]:
         return SUSPICIOUS
+
+    # Case 4: There is a NOT CHECKED flag in list
+    if MISSING in [range_flag, persist_flag, step_flag]:
+        return MISSING
     
-    # Case 4: There is a GOOD flag in list
+    # Case 5: There is a GOOD flag in list
     if GOOD in [range_flag, persist_flag, step_flag]:
         return GOOD
 
-    # Case 5: Everything else
+    # Case 6: Everything else
     return NOT_CHECKED

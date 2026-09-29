@@ -20,6 +20,12 @@ class StationForm(forms.ModelForm):
         queryset=UTCOffsetMinutes.objects.all(),
         to_field_name="minutes",  # Store minutes in the database
     )
+    
+    reference_station = forms.ModelChoiceField(
+        queryset=Station.objects.filter(is_reference=True),
+        required=False,
+        empty_label="Select a reference station",
+    )
 
     # configured dropdown for watershed option
     watershed = forms.ChoiceField(required=False)

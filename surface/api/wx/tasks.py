@@ -90,6 +90,7 @@ NOT_CHECKED = QualityFlagEnum.NOT_CHECKED.id
 SUSPICIOUS = QualityFlagEnum.SUSPICIOUS.id
 BAD = QualityFlagEnum.BAD.id
 GOOD = QualityFlagEnum.GOOD.id
+MISSING = QualityFlagEnum.MISSING.id
 
 logger = get_task_logger(__name__)
 db_logger = get_task_logger('db')

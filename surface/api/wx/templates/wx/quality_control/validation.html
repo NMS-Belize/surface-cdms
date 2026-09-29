@@ -138,7 +138,7 @@
                   item-text="variable_name"
                   item-value="variable"
                   v-model="currentSelection.variableId"
-                  label="Select variable"
+                  label="Select Station Variable"
                   required
                   hint="*Required"
                   persistent-hint
@@ -416,6 +416,11 @@
                       >
                         [[ qualityFlagsDict[item.quality_flag]?.name ]]
                       </v-chip>
+                    </template>
+
+                    <!-- description -->
+                    <template v-slot:item.description="{ item }">
+                      <span style="white-space: pre-line;">[[ item.description ]]</span>
                     </template>
                   </v-data-table>
 

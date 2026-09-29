@@ -21,28 +21,10 @@ class AdministrativeRegionTypeAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-@admin.register(models.Country)
-class CountryAdmin(admin.ModelAdmin):
-    list_display = ("name", "notation", "description",)
-    search_fields = ("name",)
-
-
 @admin.register(models.DataSource)
 class DataSourceAdmin(admin.ModelAdmin):
     list_display = ("name", "base_url",)
     search_fields = ("name",)
-
-
-@admin.register(models.QualityFlag)
-class QualityFlagAdmin(admin.ModelAdmin):
-    list_display = ("name", "id",)
-    search_fields = ("name",)
-
-
-@admin.register(models.Station)
-class StationAdmin(ExportMixin, admin.ModelAdmin):
-    search_fields = ('name',)
-    list_display = ("name", "country", "data_source", "code", "longitude", "latitude", "elevation", "alternative_names",)
 
 
 @admin.register(models.StationCommunication)
@@ -73,11 +55,6 @@ class UnitAdmin(admin.ModelAdmin):
 class VariableAdmin(ExportMixin, admin.ModelAdmin):
     search_fields = ('name',)
     list_display = ("id", "name", "symbol", "measurement_variable", "unit", "sampling_operation", "variable_type", "code_table", "range_min", "range_max",)
-
-
-# @admin.register(models.VariableType)
-# class VariableTypeAdmin(admin.ModelAdmin):
-#     list_display = ("type",)
 
 
 @admin.register(models.PhysicalQuantity)
