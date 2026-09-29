@@ -9443,30 +9443,79 @@ def get_range_threshold(request):
 
 @require_http_methods(["POST"])
 @wx_mapped_permission_required
+
 def update_range_threshold(request):
     months = get_months()
     months_ids = {v: k for k, v in months.items()}
 
-    new_min = request.GET.get('new_min', None)    
-    new_max = request.GET.get('new_max', None)
-    station_id = request.GET.get('station_id', None)    
-    variable_name = request.GET.get('variable_name', None)    
-    month_name = request.GET.get('month_name', None)
+    new_min = request.GET.get('new_min')
+    new_max = request.GET.get('new_max')
+    station_id = request.GET.get('station_id')
+    variable_name = request.GET.get('variable_name')
+    month_name = request.GET.get('month_name')
 
+    # Validate station and month.
+    try:
+        station_id = int(station_id)
+    except (TypeError, ValueError):
+        return JsonResponse({
+            'message': 'Invalid station ID.'
+        }, status=400)
 
-    station = Station.objects.get(id=station_id)
-    variable = Variable.objects.get(name=variable_name)
-    month_id = months_ids[month_name]
+    month_id = months_ids.get(month_name)
 
-    qcrangethreshold, created = QcRangeThreshold.objects.get_or_create(station_id=station.id, variable_id=variable.id, month=month_id)
+    if month_id is None:
+        return JsonResponse({
+            'message': 'Invalid month selected.'
+        }, status=400)
 
-    qcrangethreshold.range_min = new_min
-    qcrangethreshold.range_max = new_max
+    if not variable_name:
+        return JsonResponse({
+            'message': 'Variable name is required.'
+        }, status=400)
 
-    qcrangethreshold.save()
+    # Validate Range values.
+    try:
+        range_min = parse_optional_float(new_min)
+        range_max = parse_optional_float(new_max)
+    except (TypeError, ValueError):
+        return JsonResponse({
+            'message': 'Range threshold values must be valid numbers.'
+        }, status=400)
 
-    response = {}
-    return JsonResponse(response, status=status.HTTP_200_OK)
+    if range_min is None or range_max is None:
+        return JsonResponse({
+            'message': 'Both Range minimum and maximum are required.'
+        }, status=400)
+
+    if not math.isfinite(range_min) or not math.isfinite(range_max):
+        return JsonResponse({
+            'message': 'Range thresholds must be finite numbers.'
+        }, status=400)
+
+    if range_min > range_max:
+        return JsonResponse({
+            'message': 'Range minimum cannot exceed maximum.'
+        }, status=400)
+
+    # Retrieve the station and variable.
+    station = get_object_or_404(Station, pk=station_id)
+    variable = get_object_or_404(Variable, name=variable_name)
+
+    # Create or update with both required fields populated.
+    QcRangeThreshold.objects.update_or_create(
+        station=station,
+        variable=variable,
+        month=month_id,
+        defaults={
+            'range_min': range_min,
+            'range_max': range_max,
+        }
+    )
+
+    return JsonResponse({
+        'message': 'Range threshold updated successfully.'
+    }, status=200)
 
 
 @require_http_methods(["POST"])
@@ -9609,23 +9658,65 @@ def get_step_threshold(request):
 @require_http_methods(["POST"])
 @wx_mapped_permission_required
 def update_step_threshold(request):
-    new_min = request.GET.get('new_min', None)    
-    new_max = request.GET.get('new_max', None)
-    station_id = request.GET.get('station_id', None)    
-    variable_name = request.GET.get('variable_name', None)    
+    new_min = request.GET.get('new_min')
+    new_max = request.GET.get('new_max')
+    station_id = request.GET.get('station_id')
+    variable_name = request.GET.get('variable_name')
 
-    station = Station.objects.get(id=station_id)
-    variable = Variable.objects.get(name=variable_name)
+    # Validate station ID.
+    try:
+        station_id = int(station_id)
+    except (TypeError, ValueError):
+        return JsonResponse({
+            'message': 'Invalid station ID.'
+        }, status=400)
 
-    qcstepthreshold, created = QcStepThreshold.objects.get_or_create(station_id=station.id, variable_id=variable.id)
+    if not variable_name:
+        return JsonResponse({
+            'message': 'Variable name is required.'
+        }, status=400)
 
-    qcstepthreshold.step_min = new_min
-    qcstepthreshold.step_max = new_max
+    # Validate Step values.
+    try:
+        step_min = parse_optional_float(new_min)
+        step_max = parse_optional_float(new_max)
+    except (TypeError, ValueError):
+        return JsonResponse({
+            'message': 'Step threshold values must be valid numbers.'
+        }, status=400)
 
-    qcstepthreshold.save()
+    if step_min is None or step_max is None:
+        return JsonResponse({
+            'message': 'Both Step minimum and maximum are required.'
+        }, status=400)
 
-    response = {}
-    return JsonResponse(response, status=status.HTTP_200_OK)
+    if not math.isfinite(step_min) or not math.isfinite(step_max):
+        return JsonResponse({
+            'message': 'Step thresholds must be finite numbers.'
+        }, status=400)
+
+    if step_min > step_max:
+        return JsonResponse({
+            'message': 'Step minimum cannot exceed maximum.'
+        }, status=400)
+
+    # Retrieve the station and variable.
+    station = get_object_or_404(Station, pk=station_id)
+    variable = get_object_or_404(Variable, name=variable_name)
+
+    # Create or update with both required fields populated.
+    QcStepThreshold.objects.update_or_create(
+        station=station,
+        variable=variable,
+        defaults={
+            'step_min': step_min,
+            'step_max': step_max,
+        }
+    )
+
+    return JsonResponse({
+        'message': 'Step threshold updated successfully.'
+    }, status=200)
 
 
 @require_http_methods(["POST"])
