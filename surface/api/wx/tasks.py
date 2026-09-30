@@ -16,6 +16,7 @@ import csv
 import tempfile
 import urllib3
 from minio import Minio
+from itertools import islice
 
 import math, cmath
 from matplotlib.transforms import Bbox
@@ -48,7 +49,7 @@ from django.utils.timezone import now
 from django.db.models import Count, Q
 from django.db import transaction
 from django_celery_beat.models import PeriodicTask
-
+from wx.utils import generate_expected_times
 
 from tempestas_api import settings
 from wx.decoders.flash import read_data as read_data_flash
@@ -66,6 +67,7 @@ from wx.decoders.weatherlink_json import read_file as read_file_weatherlink_json
 from wx.decoders.f2000 import read_file as read_file_f2000
 from wx.decoders.davis import read_file as read_file_davis
 from wx.decoders.R_format import read_file as read_file_R_format
+from wx.decoders.insert_missing_raw_data import insert_missing
 from wx.models import DataFile, CombineDataFile
 from wx.models import Document
 from wx.models import NoaaDcp
@@ -7381,3 +7383,101 @@ def get_station_offset_min(station_id):
     station = Station.objects.get(id=int(station_id))
     
     return station.utc_offset_minutes
+
+
+# qc_validate_fill_missing helper fxn
+@shared_task(bind=True)
+def fill_missing_data(
+    self,
+    station_id,
+    variable_id,
+    start_date,
+    end_date,
+    interval,
+    utc_offset_minutes,
+):
+    MAX_EXPECTED_RECORDS = 10000
+
+    # Re-create the naive station-local datetimes passed by the view.
+    start = datetime.fromisoformat(start_date)
+    end = datetime.fromisoformat(end_date)
+
+    # Generate at most one more timestamp than allowed so a very
+    # large request cannot build an unlimited list in memory.
+    expected_local = list(
+        islice(
+            generate_expected_times(start, end, interval),
+            MAX_EXPECTED_RECORDS + 1,
+        )
+    )
+
+    if len(expected_local) > MAX_EXPECTED_RECORDS:
+        raise ValueError(
+            "Selected range contains too many records."
+        )
+
+    # The generated timestamps represent the station's local clock.
+    # Attach the station's fixed offset, then convert to UTC for DB work.
+    station_tz = timezone(timedelta(minutes=utc_offset_minutes))
+
+    expected_utc = [
+        local_dt.replace(tzinfo=station_tz).astimezone(
+            timezone.utc
+        )
+        for local_dt in expected_local
+    ]
+
+    expected_count = len(expected_utc)
+
+    if not expected_utc:
+        return {
+            "expected_count": 0,
+            "missing_count": 0,
+            "inserted_count": 0,
+        }
+
+    # Retrieve only records that match timestamps we expect to exist.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT datetime
+            FROM raw_data
+            WHERE station_id = %s
+              AND variable_id = %s
+              AND datetime >= %s
+              AND datetime <= %s
+              AND datetime = ANY(%s::timestamptz[])
+            """,
+            [
+                station_id,
+                variable_id,
+                expected_utc[0],
+                expected_utc[-1],
+                expected_utc,
+            ],
+        )
+
+        existing = {
+            row[0].astimezone(timezone.utc)
+            for row in cursor.fetchall()
+        }
+
+    # Anything not already present becomes a missing observation.
+    missing = [
+        utc_dt
+        for utc_dt in expected_utc
+        if utc_dt not in existing
+    ]
+
+    inserted_count = insert_missing(
+        station_id=station_id,
+        variable_id=variable_id,
+        interval_seconds=interval,
+        missing_datetimes=missing,
+    )
+
+    return {
+        "expected_count": expected_count,
+        "missing_count": len(missing),
+        "inserted_count": inserted_count,
+    }

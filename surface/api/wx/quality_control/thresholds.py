@@ -159,7 +159,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
         variable_id : int
             Primary key of the variable.
         month : int
-            Month of observation (1–12). Reserved for future seasonal logic.
+            Month of observation (1–12).
 
         Returns
         -------
@@ -182,7 +182,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
     # There should only every be one return or less objs return. However using .filter & .first just to be safe
     range_obj = (
         QcRangeThreshold.objects
-        .filter(station_id=station_id, variable_id=variable_id)
+        .filter(station_id=station_id, variable_id=variable_id, month=month)
         .first()
     )
 
@@ -201,7 +201,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
         range_obj = (
             QcRangeThreshold.objects
-            .filter(station_id=station.reference_station_id, variable_id=variable_id)
+            .filter(station_id=station.reference_station_id, variable_id=variable_id, month=month)
             .first()
         )
 

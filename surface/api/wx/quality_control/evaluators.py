@@ -47,7 +47,7 @@ def evaluate_step_qc(
     descriptions = [thresholds.get("step_description", "Unknown threshold")]
 
     if is_missing(value):
-        descriptions.append(f"\n\nMissing Value, step check failed!")
+        descriptions.append(f"\n\nMissing Value, step check skipped!")
 
         return MISSING, " || ".join(descriptions)
     
@@ -189,7 +189,7 @@ def evaluate_range_qc(value: float, thresholds: dict):
     descriptions = [thresholds.get("range_description", "Unknown threshold")]
 
     if is_missing(value):
-        descriptions.append(f"\n\nMissing Value, range check failed!")
+        descriptions.append(f"\n\nMissing Value, range check skipped!")
 
         return MISSING, " || ".join(descriptions)
 
@@ -334,7 +334,7 @@ def evaluate_persist_qc(
     descriptions = [thresholds.get("persist_description", "Unknown threshold")]
 
     if is_missing(value):
-        descriptions.append(f"\n\nMissing Value, persist check failed!")
+        descriptions.append(f"\n\nMissing Value, persist check skipped!")
 
         return MISSING, " || ".join(descriptions)
 

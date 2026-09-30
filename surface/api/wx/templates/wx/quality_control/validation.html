@@ -181,6 +181,7 @@
                 </v-menu>
 
                 <v-menu
+                  ref="menu"
                   :close-on-content-click="false"
                   v-model="menu3"
                   :nudge-right="40"
@@ -235,6 +236,7 @@
                 </v-menu>
 
                 <v-menu
+                  ref="menu"
                   :close-on-content-click="false"
                   v-model="menu4"
                   :nudge-right="40"
@@ -274,17 +276,22 @@
               </v-flex>
             </v-layout>
 
-
-            <!-- Error messages section -->
+            <!-- alerts -->
             <v-layout column fluid mt-5>
+              <!-- Error messages alert -->
               <v-alert v-model="request_error" dismissible type="error">
                 [[ request_error_message ]]
               </v-alert>
             </v-layout>
 
-            <!-- bluk save btn -->
+            <!-- Snackbar Component -->
+            <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="2000">
+              [[ snackbar.text ]]
+            </v-snackbar>
+
             <v-layout>
               <v-flex>
+                <!-- bluk save btn -->
                 <v-btn
                   :disabled="selectedRows.length <= 1"
                   class="mt-5"
@@ -295,6 +302,19 @@
                 >
                   Bulk Update
                   <v-icon right dark>mdi-square-edit-outline</v-icon>
+                </v-btn>
+
+                <!-- Insert Missing btn -->
+                <v-btn
+                  :disabled="rawDataList.length < 1"
+                  class="mt-5 ml-3"
+                  outlined
+                  raised
+                  color="purple"
+                  @click="insertMissingDialog = true"
+                >
+                  Insert Missing
+                  <v-icon right dark>mdi-table-plus</v-icon>
                 </v-btn>
               </v-flex>
             </v-layout>
@@ -364,6 +384,62 @@
                 </v-card-text>
 
               </v-card>
+            </v-dialog>
+
+            <!-- Dialog for inserting missing data -->
+            <v-dialog v-model="insertMissingDialog" max-width="500px">
+                <v-card>
+                    <v-card-title>
+                        Insert Missing Data
+
+                        <v-spacer></v-spacer>
+
+                        <v-btn icon @click="insertMissingDialog = false">
+                            <v-icon>mdi-close</v-icon>
+                        </v-btn>
+                    </v-card-title>
+
+                    <v-divider></v-divider>
+
+                    <v-card-text class="pt-5">
+                        <p>
+                            Select an interval to identify and insert missing records. 
+                            <br/>
+                            Note: The current Time range will be be the one for set for the current search query.
+                        </p>
+
+                        <v-select
+                            v-model="selectedInterval"
+                            :items="intervalOptions"
+                            item-text="text"
+                            item-value="value"
+                            label="Interval"
+                            outlined
+                            dense
+                        ></v-select>
+                    </v-card-text>
+
+                    <v-card-actions>
+                        <v-spacer></v-spacer>
+
+                        <v-btn
+                            color="error"
+                            @click="insertMissingDialog = false"
+                        >
+                            Cancel
+                        </v-btn>
+
+                        <v-btn
+                            color="purple"
+                            dark
+                            :loading="fillMissingLoading"
+                            :disabled="selectedInterval === null || fillMissingLoading"
+                            @click="fillMissing"
+                        >
+                            Fill Missing
+                        </v-btn>
+                    </v-card-actions>
+                </v-card>
             </v-dialog>
 
             <!-- Dialog for AQC details -->
@@ -571,6 +647,13 @@
           remarks: "",
         },
 
+        // snackbar control
+        snackbar: {
+          show: false,
+          text: '',
+          color: 'success'
+        },
+
         // Individual AQC details information
         // item qc headers for the table
         aqcDetailsHeaders: [
@@ -593,6 +676,19 @@
             value: "description",
           }
         ],
+
+        // insert missing vars
+        insertMissingDialog: false,
+        selectedInterval: null,
+        intervalOptions: [
+            { text: '1 min',   value: 60 },
+            { text: '5 min',   value: 300 },
+            { text: '10 min',  value: 600 },
+            { text: '15 min',  value: 900 },
+            { text: '30 min',  value: 1800 },
+            { text: '1 hour',  value: 3600 },
+        ],
+        fillMissingLoading: false,
 
         // item qc details for the table
         aqcDetailsItems: [],
@@ -626,6 +722,7 @@
         rowsPerPage: 10,
         loading: false,
         rawDataList: [],
+        
         headers: [
           {
             text: "Date/Hour",
@@ -670,10 +767,12 @@
             value: "action",
           },
         ],
+        
         filter: {
           isActive: true,
           // isAutomatic: true
         },
+        
         stations: [
           {% for station in station_list %}
           { id: {{ station.id }},
@@ -738,6 +837,51 @@
       },
 
       methods: {
+        fillMissing() {
+          if (this.selectedInterval === null) {
+            return;
+          }
+
+          this.fillMissingLoading = true;
+
+          const payload = {
+            station_id: Number(this.currentSelection.stationId),
+            variable_id: Number(this.currentSelection.variableId),
+            interval_seconds: this.selectedInterval,
+
+            // These remain station-local naive datetimes.
+            start_date: this.formatDatetimeForRequest(
+              `${this.currentSelection.startDate} ${this.currentSelection.startTime}`
+            ),
+
+            end_date: this.formatDatetimeForRequest(
+              `${this.currentSelection.endDate} ${this.currentSelection.endTime}`
+            ),
+          };
+
+          axios.post(
+            "/api/quality_control/fill_missing/",
+            payload
+          )
+            .then(res => {
+              this.taskId = res.data.task_id;
+
+              // Close the dialog once the task has successfully started.
+              this.insertMissingDialog = false;
+
+              this.startPolling();
+            })
+            .catch(err => {
+              this.fillMissingLoading = false;
+              this.loading = false;
+
+              this.request_error = true;
+              this.request_error_message =
+                err?.response?.data?.message || "Failed to fill missing data.";
+            });
+        },
+
+
         getQualityFlags() {
           this.getAll(`api/quality_flags`).then((data) => {
             this.qualityFlags = data;
@@ -917,7 +1061,7 @@
             final_flag: item.automatic_flag,
             description: `
                           The Overall AQC Quality Flag follows a worst-case priority: Bad overrides Suspicious, 
-                          which overrides Good. Data is only flagged as 'Good' if all threshold 
+                          which overrides Missing, which overrides Good. Data is only flagged as 'Good' if all threshold 
                           checks pass.
                           `,
           }
@@ -978,6 +1122,8 @@
           this.pollingInterval = setInterval(() => {
             this.pollingStatus();
           }, this.pollingDelay);
+
+          this.loading = true; // start loader
         },
 
 
@@ -995,74 +1141,107 @@
               const status = res.data.status;
 
               var itemCount = 0;
-              
+
               if (status === "completed") {
                 this.stopPolling();
 
-                // if polling was for a search action
+                // Polling was for a search action.
                 if (this.searchAction) {
                   this.rawDataList = res.data.data.results.map((record) => {
-                    // Store the original editable values so we can detect later changes.
+                    // Store original editable values so later changes can be detected.
                     record["old"] = {
                       consisted: record.consisted,
                       manual_flag: record.manual_flag,
                       remarks: record.remarks,
                     };
 
-                    record["formated_datetime"] = this.formatDatetimeForDataTable(record.datetime, res.data.data.station_utc_offset);
+                    record["formated_datetime"] = this.formatDatetimeForDataTable(
+                      record.datetime,
+                      res.data.data.station_utc_offset
+                    );
 
                     return record;
                   });
 
                   itemCount = this.rawDataList.length;
-                }
-                else if (this.savingBulk) {
-                  this.savingBulk = false; // reset bulk save
-                  this.doSearch(); // reload search
 
-                  return
+                  if (itemCount == 0) {
+                    this.request_error = true;
+                    this.request_error_message = "No data available!";
+                  }
+
+                  this.searchAction = false;
                 }
-                // for regular single update operations
-                else if(this.updatingItem) {
+
+                // Polling for bulk saving.
+                else if (this.savingBulk) {
+                  this.savingBulk = false;
+
+                  // Reload the table after saving.
+                  this.doSearch();
+
+                  return;
+                }
+
+                // Polling for filling missing observations.
+                else if (this.fillMissingLoading) {
+                  this.fillMissingLoading = false;
+
+                  console.log(`Inserted ${res.data.data['inserted_count']} record(s).`);
+
+                  // Set text and open the snackbar
+                  this.snackbar.text = `Successfully inserted ${res.data.data['inserted_count']} record(s).`;
+                  this.snackbar.color = 'success';
+                  this.snackbar.show = true;
+
+                  // Reload the table so the newly inserted missing rows appear.
+                  this.doSearch();
+
+                  return;
+                }
+
+                // Polling for single observation save.
+                else if (this.updatingItem) {
                   this.updatingItem["old"] = {
                     consisted: this.updatingItem.consisted,
                     manual_flag: this.updatingItem.manual_flag,
                     remarks: this.updatingItem.remarks,
                   };
                 }
-
                 this.request_error = false;
                 this.updatingItem = null;
-                this.selectedRows = []; // reset selected rows
+                this.selectedRows = [];
                 this.loading = false;
-
-                // if item count is 0 let the user know no rowws were retrieved and we are searching
-                if(itemCount == 0 && this.searchAction) {
-                  this.request_error = true;
-                  this.request_error_message = "No data available!";
-                };
               }
 
               if (status === "failed") {
                 this.stopPolling();
                 this.loading = false;
+
+                // Reset all polling actions.
                 this.searchAction = false;
-                this.request_error = true;
-                this.request_error_message = res.data.message || "An error Occured, please see logs.";
                 this.updatingItem = null;
                 this.savingBulk = false;
+                this.fillMissingLoading = false;
+
+                this.request_error = true;
+                this.request_error_message = res.data.message || "An error occurred, please see logs.";
               }
             })
             .catch(err => {
               this.stopPolling();
               this.loading = false;
+
+              // Reset all polling actions.
               this.searchAction = false;
-              this.request_error = true;
-              this.request_error_message = "An error occurred while checking task status.";
               this.updatingItem = null;
               this.savingBulk = false;
+              this.fillMissingLoading = false;
 
-              console.warn("This is the error!");
+              this.request_error = true;
+              this.request_error_message =
+                "An error occurred while checking task status.";
+
               console.error(err);
             });
         },

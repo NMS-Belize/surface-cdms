@@ -6,6 +6,7 @@ import shutil
 
 from builtins import IndexError
 
+import math
 import matplotlib as mpl
 import numpy as np
 import rasterio
@@ -26,6 +27,27 @@ from metpy.interpolate import interpolate_to_grid, remove_nan_observations, remo
 from io import BytesIO
 
 from psycopg2 import sql
+
+
+
+def generate_expected_times(start, end, interval_seconds):
+    midnight = start.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    elapsed = (start - midnight).total_seconds()
+
+    # Round up to the next clock-aligned interval.
+    first = midnight + datetime.timedelta(
+        seconds=math.ceil(elapsed / interval_seconds)
+        * interval_seconds
+    )
+
+    current = first
+
+    while current <= end:
+        yield current
+        current += datetime.timedelta(seconds=interval_seconds)
 
 
 def get_altitude(lon, lat):

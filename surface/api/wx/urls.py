@@ -207,8 +207,7 @@ urlpatterns = [
     path('api/quality_control/', views.qc_list, name='get-update-quality-control'),
     path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
     path('api/quality_control/bulksave/', views.qc_validate_bulk, name='bulk-update-quality-control'),
-    
-    path('wx/quality_control/update_reference_station/', views.update_reference_station, name='update-threshold-reference-station'), # this is used for Range, Step & Persist Threshold   
+    path('api/quality_control/fill_missing/', views.qc_validate_fill_missing, name='fill-missing-quality-control'),
 
 
     # Global Threshold
@@ -231,6 +230,8 @@ urlpatterns = [
     # Custom Threshold
     path('wx/quality_control/custom_threshold/', views.customThresholdView.as_view(), name='custom-threshold'),
     path('wx/quality_control/custom_threshold/copy/', views.copy_custom_thresholds, name='copy-custom-threshold'),
+
+    path('wx/quality_control/update_reference_station/', views.update_reference_station, name='update-threshold-reference-station'), # this is used for Range, Step & Persist Threshold
     
     path('wx/quality_control/range_threshold/get/', views.get_range_threshold, name='range-threshold-get'), # Range Threshold
     path('wx/quality_control/range_threshold/update/', views.update_range_threshold, name='range-threshold-update'), # Range Threshold

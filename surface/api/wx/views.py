@@ -14,6 +14,8 @@ from datetime import datetime as datetime_constructor
 from datetime import timezone, timedelta, date
 from dateutil.relativedelta import relativedelta
 from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
+from itertools import islice
 
 import matplotlib
 
@@ -79,7 +81,7 @@ from wx.models import AdministrativeRegion, StationFile, Decoder, QualityFlag, D
 from wx.models import Country, Unit, Station, Variable, DataSource, StationVariable, StationDataFileStatus,\
     StationProfile, Document, Watershed, Interval, CountryISOCode, Wis2BoxPublish, Wis2PublishOffset, LocalWisCredentials, RegionalWisCredentials,  Wis2BoxPublishLogs, Crop, Soil
 from wx.utils import get_altitude, get_watershed, get_interpolation_image, parse_float_value, \
-    parse_int_value
+    parse_int_value, generate_expected_times
 from .utils import get_raw_data, get_station_raw_data
 from wx.models import MaintenanceReport, VisitType, Technician
 from django.views.decorators.http import require_http_methods
@@ -2565,6 +2567,85 @@ def get_qc_description(request):
             "qc_persist_description": row[2],
         },
         status=status.HTTP_200_OK
+    )
+
+
+@require_POST
+@wx_mapped_permission_required
+def qc_validate_fill_missing(request):
+    ALLOWED_INTERVALS = {60, 300, 600, 900, 1800, 3600}
+    
+    try:
+        data = json.loads(request.body)
+
+        station_id = data["station_id"]
+        variable_id = data["variable_id"]
+        interval = data["interval_seconds"]
+
+        # These are station-local naive datetimes.
+        start = datetime.datetime.strptime(
+            data["start_date"], "%Y-%m-%dT%H:%M:%S"
+        )
+        end = datetime.datetime.strptime(
+            data["end_date"], "%Y-%m-%dT%H:%M:%S"
+        )
+
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return JsonResponse(
+            {"message": "Invalid or missing request parameters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if (
+        type(station_id) is not int
+        or type(variable_id) is not int
+        or station_id <= 0
+        or variable_id <= 0
+        or type(interval) is not int
+        or interval not in ALLOWED_INTERVALS
+    ):
+        return JsonResponse(
+            {"message": "Invalid station, variable or interval."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if start >= end:
+        return JsonResponse(
+            {"message": "End date must be after start date."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    station = Station.objects.filter(pk=station_id).first()
+
+    if station is None:
+        return JsonResponse(
+            {"message": "Station not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not StationVariable.objects.filter(
+        station_id=station_id,
+        variable_id=variable_id,
+    ).exists():
+        return JsonResponse(
+            {"message": "Variable is not assigned to this station."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Pass strings to Celery rather than relying on datetime serialization.
+    # The station offset is also passed so the task does not need another DB lookup.
+    task = tasks.fill_missing_data.delay(
+        station_id,
+        variable_id,
+        start.isoformat(),
+        end.isoformat(),
+        interval,
+        station.utc_offset_minutes,
+    )
+
+    return JsonResponse(
+        {"task_id": task.id},
+        status=status.HTTP_200_OK,
     )
 
 
