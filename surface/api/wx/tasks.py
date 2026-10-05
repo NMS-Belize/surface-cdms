@@ -514,8 +514,10 @@ def backup_postgres():
 @shared_task
 def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_list=None):
     """
-        IMPORTANT: Hourly summaries are ran on SUSPICIOUS, GOOD and NOT CHECKED
-        
+        Completed validation: include validated Good (4), using consisted
+        when present and measured otherwise. Unvalidated observations: include
+        only AQC Not checked (1) or Good (4), using measured only.
+        Null and configured missing values are excluded.
         Hourly SUMMARIES include the top of the next hour and exclude the top of the current hour
         eg: (1300,1400]
 
@@ -544,7 +546,6 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
     if start_datetime > end_datetime:
         print('Error - start date is more recent than end date.')
         return
-    
     # ✅ Normalize to the hour bucket
     hour_start = start_datetime.replace(minute=0, second=0, microsecond=0)
     hour_end = hour_start + timedelta(hours=1)
@@ -601,10 +602,24 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
                 count(calc.value) AS num_records
             FROM 
                 raw_data rd
-                ,LATERAL (SELECT CASE WHEN rd.consisted IS NOT NULL THEN rd.consisted ELSE rd.measured END as value) AS calc
+                ,LATERAL (
+                    SELECT CASE
+                        -- A correction contributes only after validation.
+                        WHEN rd.is_validated
+                            THEN COALESCE(rd.consisted, rd.measured)
+                        ELSE rd.measured
+                    END AS value
+                ) AS calc
             WHERE rd.datetime > %(hour_start)s
               AND rd.datetime <=  %(hour_end)s
-              AND (rd.manual_flag in (1,4) OR (rd.manual_flag IS NULL AND rd.quality_flag in (1,2,4)))
+              AND (
+                  -- Completed validation takes precedence over AQC.
+                  (rd.is_validated AND rd.validated_flag = 4)
+                  OR (
+                      NOT rd.is_validated
+                      AND rd.quality_flag IN (1, 4)
+                  )
+              )
               AND NOT rd.is_daily
               AND calc.value != %(MISSING_VALUE)s
               AND station_id = ANY(%(station_ids)s) 
@@ -635,6 +650,11 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
 def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None):
     """
     Calculate (or recalculate) DAILY summaries.
+
+    Completed validation: include validated Good (4), using consisted when
+    present and measured otherwise. Unvalidated observations: include only
+    AQC Not checked (1) or Good (4), using measured only.
+    Null and configured missing values are excluded.
 
     IMPORTANT DESIGN RULES
     ----------------------
@@ -815,8 +835,9 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                                 rd.variable_id,
 
                                 CASE
-                                    WHEN rd.consisted IS NOT NULL
-                                        THEN rd.consisted
+                                    -- A correction contributes only after validation.
+                                    WHEN rd.is_validated
+                                        THEN COALESCE(rd.consisted, rd.measured)
                                     ELSE rd.measured
                                 END AS value
 
@@ -839,10 +860,11 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                               )
 
                               AND (
-                                  rd.manual_flag IN (1, 4)
+                                  -- Completed validation takes precedence over AQC.
+                                  (rd.is_validated AND rd.validated_flag = 4)
                                   OR (
-                                      rd.manual_flag IS NULL
-                                      AND rd.quality_flag IN (1, 2, 4)
+                                      NOT rd.is_validated
+                                      AND rd.quality_flag IN (1, 4)
                                   )
                               )
                         ),
@@ -1145,7 +1167,6 @@ def calculate_station_minimum_interval(start_date=None, end_date=None, station_i
         f'Calculate minimum interval finished at {datetime.now(pytz.UTC)}. '
         f'Took {time() - start_at} seconds.'
     )
-
 
 
 # retrieved data inventory (Individual MONTH VIEW)
@@ -6800,17 +6821,18 @@ def interpolation_img_cleanup():
 
 
 
-ALLOWED_UPDATE_FIELDS = {"manual_flag", "consisted", "remarks"}
+ALLOWED_UPDATE_FIELDS = {"manual_flag", "proposed_value", "remarks", "validated_flag", "consisted", "validated_remarks", "is_validated"}
 
 def _build_set_clause(updates: dict):
     """
     Returns (set_clause_sql, set_params)
-    Example: ("manual_flag=%s, remarks=%s", [4, "note"])
+    Example: ("manual_flag=%s, remarks=%s,", [4, "note"])
     """
+
     parts = []
     params = []
 
-    for key in ("manual_flag", "consisted", "remarks"):
+    for key in ("manual_flag", "proposed_value", "remarks", "validated_flag", "consisted", "validated_remarks", "is_validated"):
         if key not in updates:
             continue
         if key not in ALLOWED_UPDATE_FIELDS:
@@ -6825,20 +6847,101 @@ def _build_set_clause(updates: dict):
     return sql.SQL(", ").join(parts), params
 
 
+QC_MANUAL_FIELDS = {"manual_flag", "proposed_value", "remarks"}
+QC_VALIDATION_FIELDS = {
+    "validated_flag", "consisted", "validated_remarks", "is_validated"
+}
+QC_VALIDATED_FLAG_IDS = {1, 4, 5}  # Same IDs as validatedQualityFlags in the page. (Good, Missing, Not Checked)
+
+
+def _qc_same_number(left, right):
+    # proposed_value may be stored as text but arrive as a parsed number.
+    left = None if left is None or left == "" else left
+    right = None if right is None or right == "" else right
+
+    if left is None or right is None:
+        return left is right
+    try:
+        return Decimal(str(left)) == Decimal(str(right))
+    except InvalidOperation:
+        return left == right
+
+
+def _prepare_qc_update(updates, current, can_validate):
+    updates = dict(updates)
+    unknown = set(updates) - ALLOWED_UPDATE_FIELDS
+    if unknown:
+        raise ValueError("Unsupported QC update fields.")
+
+    validation_requested = bool(QC_VALIDATION_FIELDS.intersection(updates))
+    if validation_requested and can_validate is not True:
+        raise PermissionError("You do not have permission to update validation fields.")
+
+    if "is_validated" in updates and type(updates["is_validated"]) is not bool:
+        raise ValueError("is_validated must be a boolean.")
+
+    if "validated_flag" in updates:
+        flag = updates["validated_flag"]
+        if flag is not None and (type(flag) is not int or flag not in QC_VALIDATED_FLAG_IDS):
+            raise ValueError("Validated Flag must be Not Checked, Good, or Missing.")
+        if flag is None or flag == 1:
+            if updates.get("is_validated") is True:
+                raise ValueError("A Not Checked or unset observation cannot be validated.")
+            # Mirror onFlagChange(); legacy null flags also mean unchecked.
+            updates["is_validated"] = False
+
+    final_flag = updates.get("validated_flag", current["validated_flag"])
+    if validation_requested:
+        if final_flag == 5:
+            updates["consisted"] = float(settings.MISSING_VALUE)
+        elif current["validated_flag"] == 5 and "validated_flag" in updates:
+            if "consisted" not in updates:
+                updates["consisted"] = None
+
+        final_value = updates.get("consisted", current["consisted"])
+        if final_flag != 5 and final_value is not None:
+            if _qc_same_number(final_value, settings.MISSING_VALUE):
+                raise ValueError("The missing value requires the Missing validated flag.")
+
+    final_validated = updates.get("is_validated", current["is_validated"])
+    if final_validated and final_flag not in {4, 5}:
+        raise ValueError("Choose Good or Missing before validating this observation.")
+
+    if current["is_validated"]:
+        # Full-row requests include unchanged manual values. Allow those,
+        # but protect actual manual changes until an authorized unvalidation.
+        manual_changes = set()
+        for field in QC_MANUAL_FIELDS.intersection(updates):
+            same = (
+                _qc_same_number(updates[field], current[field])
+                if field in {"manual_flag", "proposed_value"}
+                else updates[field] == current[field]
+            )
+            if same:
+                del updates[field]
+            else:
+                manual_changes.add(field)
+
+        unvalidating = can_validate is True and updates.get("is_validated") is False
+        if manual_changes and not unvalidating:
+            raise ValueError("Unvalidate this observation before changing manual review fields.")
+
+    return updates
+
+
 # Update the QC manual checks
 @shared_task(bind=True)
-def qc_manual_checks(self, station_id: int, variable_id: int, req_datetime: str, updates: dict):
+def qc_validation_save(self, station_id: int, variable_id: int, req_datetime: str, updates: dict, can_validate: bool = False):
     """
     req_datetime: ISO string like '2026-02-05T12:00:00Z'
-    updates: {"manual_flag": 4, "consisted": 1.23, "remarks": "ok"}
+    updates: {"manual_flag": 4, "proposed_value": 1.23, "remarks": "ok", "validated_flag": 1, "consisted": 23, "validated_remarks": "ok", "is_validated": True}
     """
+
     # Parse datetime (UTC)
     dt = datetime.strptime(req_datetime, "%Y-%m-%dT%H:%M:%SZ").replace(
         tzinfo=timezone.utc
     )
     now_time = datetime.now(timezone.utc)
-
-    set_sql, set_params = _build_set_clause(updates)
 
     with transaction.atomic():
         with connection.cursor() as cursor:
@@ -6863,6 +6966,32 @@ def qc_manual_checks(self, station_id: int, variable_id: int, req_datetime: str,
                 # Guardrail for the future: compressed chunks are not safe to update directly
                 raise ValueError("Target chunk is compressed; cannot apply manual QC update.")
 
+            # Lock and read the stored state, rather than trusting the page's state.
+            cursor.execute(
+                sql.SQL("""
+                    SELECT is_validated, validated_flag, consisted,
+                           manual_flag, proposed_value, remarks
+                    FROM {chunk}
+                    WHERE station_id = %s
+                      AND variable_id = %s
+                      AND datetime = %s::timestamptz
+                    FOR UPDATE
+                """).format(chunk=sql.Identifier(chunk_schema, chunk_name)),
+                (station_id, variable_id, dt),
+            )
+            stored = cursor.fetchone()
+            if stored is None:
+                raise ValueError("No matching record found to update.")
+
+            current = dict(zip(
+                ("is_validated", "validated_flag", "consisted",
+                 "manual_flag", "proposed_value", "remarks"),
+                stored,
+            ))
+            updates = _prepare_qc_update(updates, current, can_validate)
+            set_sql, set_params = _build_set_clause(updates)
+            final_validated = updates.get("is_validated", current["is_validated"])
+
             # 2) Update chunk directly
             update_stmt = sql.SQL("""
                 UPDATE {chunk}
@@ -6881,23 +7010,24 @@ def qc_manual_checks(self, station_id: int, variable_id: int, req_datetime: str,
             if cursor.rowcount == 0:
                 raise ValueError("No matching record found to update.")
 
-            # 3) Schedule summaries
-            cursor.execute("""
-                INSERT INTO wx_hourlysummarytask (station_id, datetime, updated_at, created_at)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-            """, (station_id, dt, now_time, now_time))
+            # Refresh summaries after changes to validated data or unvalidation.
+            if current["is_validated"] or final_validated:
+                cursor.execute("""
+                    INSERT INTO wx_hourlysummarytask (station_id, datetime, updated_at, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (station_id, dt, now_time, now_time))
 
-            cursor.execute("""
-                INSERT INTO wx_dailysummarytask (station_id, date, updated_at, created_at)
-                SELECT
-                    %s,
-                    ( (%s AT TIME ZONE 'UTC') + make_interval(mins => COALESCE(s.utc_offset_minutes, 0)) )::date,
-                    %s, %s
-                FROM wx_station s
-                WHERE s.id = %s
-                ON CONFLICT DO NOTHING
-            """, (station_id, dt, now_time, now_time, station_id))
+                cursor.execute("""
+                    INSERT INTO wx_dailysummarytask (station_id, date, updated_at, created_at)
+                    SELECT
+                        %s,
+                        ( (%s AT TIME ZONE 'UTC') + make_interval(mins => COALESCE(s.utc_offset_minutes, 0)) )::date,
+                        %s, %s
+                    FROM wx_station s
+                    WHERE s.id = %s
+                    ON CONFLICT DO NOTHING
+                """, (station_id, dt, now_time, now_time, station_id))
 
     return {"updated": True}
 
@@ -6916,7 +7046,7 @@ def qc_manual_checks_bulk(
     - Updates raw_data rows for a station+variable at many datetimes
     - Uses Timescale chunk lookup to update chunk tables directly (fast)
     - Groups datetimes by chunk to reduce chunk lookups and UPDATE statements
-    - Dedupe hourly/daily summary task inserts (insert once per unique hour/day)
+    - Reject validated rows; all requested rows must be updated or none are saved
 
     Inputs:
       datetime_list: list of ISO-Z strings like '2026-02-05T12:00:00Z'
@@ -7006,6 +7136,7 @@ def qc_manual_checks_bulk(
                     "name": r[1],
                     "start": r[2],
                     "end": r[3],
+                    "compressed": r[4],
                 }
                 for r in chunk_rows
             ]
@@ -7016,6 +7147,8 @@ def qc_manual_checks_bulk(
                 matched = False
                 for ch in chunks:
                     if ch["start"] <= dt < ch["end"]:
+                        if ch["compressed"]:
+                            raise ValueError("A target chunk is compressed; cannot apply bulk update.")
                         key = (ch["schema"], ch["name"])
                         chunk_map.setdefault(key, []).append(dt)
                         matched = True
@@ -7036,10 +7169,11 @@ def qc_manual_checks_bulk(
                     UPDATE {chunk}
                     SET manual_flag = %s,
                         remarks = %s,
-                        consisted = NULL
+                        proposed_value = NULL
                     WHERE station_id = %s
                       AND variable_id = %s
                       AND datetime = ANY(%s::timestamptz[])
+                      AND is_validated = FALSE
                 """).format(
                     chunk=sql.Identifier(chunk_schema, chunk_name)
                 )
@@ -7052,61 +7186,22 @@ def qc_manual_checks_bulk(
                     (manual_flag, remarks, station_id, variable_id, chunk_dts),
                 )
 
-                # rowcount is how many rows were updated in this statement
+                # A mismatch means a requested row is missing or validated.
+                # Raising inside atomic() rolls back updates in every chunk.
+                if cursor.rowcount != len(chunk_dts):
+                    raise ValueError(
+                        "Some selected observations are missing or validated. "
+                        "No bulk changes were saved; reload and check your selection."
+                    )
                 total_updated += cursor.rowcount
 
             if total_updated == 0:
                 # Nothing matched. Could be wrong station/variable, or datetimes not present.
                 raise ValueError("No matching records found to update in bulk.")
 
-            # ------------------------------------------------------------
-            # 2e) Dedupe hourly + daily summary task scheduling
-            # ------------------------------------------------------------
-            # Hourly: dedupe by hour bucket (UTC hour)
-            # Daily: dedupe by station-local date (offset minutes)
-            hourly_set = set()
-            daily_set = set()
-
-            for dt in dts:
-                # Convert UTC dt -> station-local datetime
-                local_dt = dt + timedelta(minutes=utc_offset_minutes)
-
-                # DAILY bucket: if dt is exactly at 00:00:00, treat it as belonging to the previous day
-                # (matches daily summary logic that effectively assigns midnight boundary values to the prior day)
-                if (local_dt.hour == 0 and local_dt.minute == 0 and local_dt.second == 0 and local_dt.microsecond == 0):
-                    local_dt = local_dt - timedelta(seconds=1)
-
-                daily_set.add(local_dt.date())
-
-                # Hour bucket stays UTC (unchanged)
-                hour_dt = dt.replace(minute=0, second=0, microsecond=0)
-                hourly_set.add(hour_dt)
-
-            # Insert hourly summary tasks once per unique hour
-            cursor.executemany(
-                """
-                INSERT INTO wx_hourlysummarytask (station_id, datetime, updated_at, created_at)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-                """,
-                [(station_id, hour_dt, now_time, now_time) for hour_dt in sorted(hourly_set)],
-            )
-
-            # Insert daily summary tasks once per unique day
-            cursor.executemany(
-                """
-                INSERT INTO wx_dailysummarytask (station_id, date, updated_at, created_at)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-                """,
-                [(station_id, day, now_time, now_time) for day in sorted(daily_set)],
-            )
-
     # Return useful info for debugging/polling responses
     return {
         "updated_rows": total_updated,
-        "unique_hours": len(hourly_set),
-        "unique_days": len(daily_set),
         "chunks_touched": len(chunk_map),
     }
 
@@ -7131,7 +7226,11 @@ def get_qc_data(sql_string, where_parameters, response, station_id):
                 'remarks': row[7],
                 'qc_range_quality_flag': row[8],
                 'qc_step_quality_flag': row[9],
-                'qc_persist_quality_flag': row[10]
+                'qc_persist_quality_flag': row[10],
+                'proposed_value': row[11],
+                'validated_flag': row[12],
+                'validated_remarks': row[13],
+                'is_validated': row[14]
             }
 
             response['results'].append(obj)
@@ -7385,6 +7484,8 @@ def get_station_offset_min(station_id):
     return station.utc_offset_minutes
 
 
+MAX_EXPECTED_QC_INSERT_MISSING_RECORDS = 1000
+
 # qc_validate_fill_missing helper fxn
 @shared_task(bind=True)
 def fill_missing_data(
@@ -7396,7 +7497,6 @@ def fill_missing_data(
     interval,
     utc_offset_minutes,
 ):
-    MAX_EXPECTED_RECORDS = 10000
 
     # Re-create the naive station-local datetimes passed by the view.
     start = datetime.fromisoformat(start_date)
@@ -7407,14 +7507,18 @@ def fill_missing_data(
     expected_local = list(
         islice(
             generate_expected_times(start, end, interval),
-            MAX_EXPECTED_RECORDS + 1,
+            MAX_EXPECTED_QC_INSERT_MISSING_RECORDS + 1,
         )
     )
 
-    if len(expected_local) > MAX_EXPECTED_RECORDS:
-        raise ValueError(
-            "Selected range contains too many records."
-        )
+    if len(expected_local) > MAX_EXPECTED_QC_INSERT_MISSING_RECORDS:
+        # raise ValueError(
+        #     "Selected range contains too many records to insert (limit 1000)."
+        # )
+
+        return {
+            "limit_violation": f"Selected range contains too many records ({len(expected_local)}) to insert (limit 1000).",
+        }
 
     # The generated timestamps represent the station's local clock.
     # Attach the station's fixed offset, then convert to UTC for DB work.

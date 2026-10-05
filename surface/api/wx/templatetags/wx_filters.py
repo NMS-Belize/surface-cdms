@@ -34,3 +34,35 @@ def has_any_feature_permission(request, features: str) -> bool:
 
     feature_list = [f.strip() for f in features.split(",") if f.strip()]
     return any(f in perms for f in feature_list)
+
+
+@register.filter
+def has_any_group_access(request, groups_id: str) -> bool:
+    """
+    Check whether the current user belongs to any supplied Django groups.
+
+    Example:
+        groups_id = "1,2,5"
+
+    Behavior:
+    - Anonymous -> False
+    - Superuser -> True
+    - Otherwise -> True if user belongs to any supplied group
+    """
+
+    if not hasattr(request, "user") or not request.user.is_authenticated:
+        return False
+
+    if request.user.is_superuser:
+        return True
+
+    try:  
+        group_ids = [
+            int(group_id.strip())
+            for group_id in groups_id.split(",")
+            if group_id.strip()
+        ]
+    except (ValueError, AttributeError):
+        return False
+
+    return request.user.groups.filter(id__in=group_ids).exists()

@@ -1,4 +1,4 @@
-{% extends "base.html" %} {% block content %}
+{% extends "base.html" %} {% block content %} {% load wx_filters %}
 <div class="srf-container">
   <div id="app" v-cloak>
     <v-app>
@@ -15,587 +15,866 @@
               srf-padding
             "
           >
-            <span class="srf-display-1 text-uppercase">Data Validation</span
-            ><br /><br />
-          </div>
+            <span class="srf-display-1 text-uppercase">Data Validation</span>
+            <br/><br/>
+            <p class="grey--text text--darken-1">
+              Review automatic quality control results and validate station observations.
+            </p>
 
-          <!-- Notifying user that the time values entered must be in THE STATIONS LOCAL TIME -->
-          <div style="width: 50%;">
-              <v-alert
-                  type="info"
-                  dense
-                  outlined
-                  text
-                  color="purple"
-              >
-                Note: All dates and times entered must be in the selected <b>station's local time.</b>
-              </v-alert>
-          </div>
+            <!-- Notifying user that the time values entered must be in THE STATIONS LOCAL TIME -->
+            <!-- <div style="width: 50%;">
+                <v-alert
+                    type="info"
+                    dense
+                    outlined
+                    text
+                    color="purple"
+                >
+                  Note: All dates and times entered must be in the selected <b>station's local time.</b>
+                </v-alert>
+            </div> -->
 
-          <!-- main body -->
-          <v-layout column fluid>
-
+            <!-- main body -->
             <v-layout column fluid>
 
-              <h6>Station Filters</h6>
+              <v-layout column fluid>
 
-              <!-- Station filters -->
-              <v-layout dense justify="start" class="mb-3">
-                <!-- Admin Region -->
-                <v-flex lg3 class="text-center">
-                  <v-autocomplete
-                    item-text="name"
-                    item-value="name"
-                    v-model="filter.stationAdminRegion"
-                    :items="stationAdminRegionList"
-                    label="Administrative Region"
-                    autocomplete="off"
-                    clearable
-                  ></v-autocomplete>
-                </v-flex>
+                <h3 class="subtitle-1 font-weight-bold mb-2">Station Filters</h3>
 
-                <!-- watershed -->
-                <v-flex lg3 ml-3>
-                  <v-autocomplete
-                    item-text="name"
-                    item-value="name"
-                    v-model="filter.stationWatershed"
-                    :items="stationWatershedList"
-                    label="Watershed"
-                    autocomplete="off"
-                    clearable
-                  ></v-autocomplete>
-                </v-flex>
+                <!-- Station filters -->
+                <v-layout dense justify="start" class="mb-3">
+                  <!-- Admin Region -->
+                  <v-flex lg3 class="text-center">
+                    <v-autocomplete
+                      item-text="name"
+                      item-value="name"
+                      v-model="filter.stationAdminRegion"
+                      :items="stationAdminRegionList"
+                      label="Administrative Region"
+                      autocomplete="off"
+                      clearable
+                    ></v-autocomplete>
+                  </v-flex>
 
-                <!-- profile -->
-                <v-flex lg3 ml-3 mr-5>
-                  <v-autocomplete
-                    item-text="name"
-                    item-value="id"
-                    v-model="filter.stationProfile"
-                    :items="stationProfileList"
-                    label="Profile"
-                    autocomplete="off"
-                    clearable
-                  ></v-autocomplete>
-                </v-flex>
+                  <!-- watershed -->
+                  <v-flex lg3 ml-3>
+                    <v-autocomplete
+                      item-text="name"
+                      item-value="name"
+                      v-model="filter.stationWatershed"
+                      :items="stationWatershedList"
+                      label="Watershed"
+                      autocomplete="off"
+                      clearable
+                    ></v-autocomplete>
+                  </v-flex>
 
-                <!-- active toggle -->
-                <v-flex lg1 ml-5>
-                  <v-switch
-                    v-model="filter.isActive"
-                    inset
-                    @change="invertValue(filter.isActive)"
-                    label="Active"
-                  ></v-switch>
-                </v-flex>
+                  <!-- profile -->
+                  <v-flex lg3 ml-3 mr-5>
+                    <v-autocomplete
+                      item-text="name"
+                      item-value="id"
+                      v-model="filter.stationProfile"
+                      :items="stationProfileList"
+                      label="Profile"
+                      autocomplete="off"
+                      clearable
+                    ></v-autocomplete>
+                  </v-flex>
 
-                <!-- automatic toggle -->
-                <!-- <v-flex lg1 ml-5>
-                  <v-switch
-                    v-model="filter.isAutomatic"
-                    inset
-                    @change="invertValue(filter.isAutomatic)"
-                    label="Automatic"
-                  ></v-switch>
-                </v-flex> -->
+                  <!-- active toggle -->
+                  <v-flex lg1 ml-5>
+                    <v-switch
+                      v-model="filter.isActive"
+                      inset
+                      @change="invertValue(filter.isActive)"
+                      label="Active"
+                    ></v-switch>
+                  </v-flex>
+
+                  <!-- automatic toggle -->
+                  <!-- <v-flex lg1 ml-5>
+                    <v-switch
+                      v-model="filter.isAutomatic"
+                      inset
+                      @change="invertValue(filter.isAutomatic)"
+                      label="Automatic"
+                    ></v-switch>
+                  </v-flex> -->
+
+                </v-layout>
+
+                <!-- Loading overlay -->
+                <v-overlay :value="loading">
+                  <v-progress-circular
+                    indeterminate
+                    size="64"
+                  ></v-progress-circular>
+                </v-overlay>
 
               </v-layout>
 
-              <!-- Loading overlay -->
-              <v-overlay :value="loading">
-                <v-progress-circular
-                  indeterminate
-                  size="64"
-                ></v-progress-circular>
-              </v-overlay>
-
-            </v-layout>
-
-            <!-- Main filters -->
-            <v-layout mt-3>
-              <!-- station select -->
-              <v-flex lg5>
-                <v-autocomplete
-                  :items="stationList"
-                  item-text="label"
-                  item-value="id"
-                  v-model="currentSelection.stationId"
-                  label="Station"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  @change="getStationVariables(currentSelection.stationId); clear_output_table();"
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-
-              <!-- variable select-->
-              <v-flex pl-5 lg5>
-                <v-autocomplete
-                  :items="variables"
-                  item-text="variable_name"
-                  item-value="variable"
-                  v-model="currentSelection.variableId"
-                  label="Select Station Variable"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :disabled="!currentSelection.stationId"
-                  @change="clear_output_table();"
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-            </v-layout>
-
-            <v-layout mt-3>
-              <!-- start date -->
-              <v-flex lg5 class="d-flex justify-between">
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="menu1"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="currentSelection.startDate"
-                      label="Start date"
-                      prepend-icon="event"
-                      v-on="on"
-                      required
-                      hint="*Required"
-                      persistent-hint
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    name="startDate"
-                    v-model="currentSelection.startDate"
-                    @input="menu1 = false"
-                  ></v-date-picker>
-                </v-menu>
-
-                <v-menu
-                  ref="menu"
-                  :close-on-content-click="false"
-                  v-model="menu3"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="currentSelection.startTime"
-                      label="Start time"
-                      prepend-icon="access_time"
-                      v-on="on"
-                    ></v-text-field>
-                  </template>
-                  <v-time-picker
-                    v-if="menu3"
-                    v-model="currentSelection.startTime"
-                    class="max-50"
-                    @click:minute="$refs.menu.save(currentSelection.startTime)"
-                  ></v-time-picker>
-                </v-menu>
-              </v-flex>
-
-              <!-- end date -->
-              <v-flex pl-5 lg5 class="d-flex justify-between">
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="menu2"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="currentSelection.endDate"
-                      label="End date"
-                      prepend-icon="event"
-                      v-on="on"
-                      required
-                      hint="*Required"
-                      persistent-hint
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    name="endDate"
-                    v-model="currentSelection.endDate"
-                    @input="menu2 = false"
-                  ></v-date-picker>
-                </v-menu>
-
-                <v-menu
-                  ref="menu"
-                  :close-on-content-click="false"
-                  v-model="menu4"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="currentSelection.endTime"
-                      label="End time"
-                      prepend-icon="access_time"
-                      v-on="on"
-                    ></v-text-field>
-                  </template>
-                  <v-time-picker
-                    v-if="menu4"
-                    v-model="currentSelection.endTime"
-                    class="max-50"
-                    @click:minute="$refs.menu.save(currentSelection.endTime)"
-                  ></v-time-picker>
-                </v-menu>
-              </v-flex>
-
-              <!-- search button -->
-              <v-flex pl-5 mt-5 lg2 class="d-flex justify-between">
-                <v-btn
-                  outlined
-                  justify-end
-                  color="primary"
-                  @click="doSearch"
-                  :disabled="$v.currentSelection.$invalid"
-                  >
-                    SEARCH
-                  </v-btn
-                >
-              </v-flex>
-            </v-layout>
-
-            <!-- alerts -->
-            <v-layout column fluid mt-5>
-              <!-- Error messages alert -->
-              <v-alert v-model="request_error" dismissible type="error">
-                [[ request_error_message ]]
-              </v-alert>
-            </v-layout>
-
-            <!-- Snackbar Component -->
-            <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="2000">
-              [[ snackbar.text ]]
-            </v-snackbar>
-
-            <v-layout>
-              <v-flex>
-                <!-- bluk save btn -->
-                <v-btn
-                  :disabled="selectedRows.length <= 1"
-                  class="mt-5"
-                  outlined
-                  raised
-                  color="success"
-                  @click="openBulkSave"
-                >
-                  Bulk Update
-                  <v-icon right dark>mdi-square-edit-outline</v-icon>
-                </v-btn>
-
-                <!-- Insert Missing btn -->
-                <v-btn
-                  :disabled="rawDataList.length < 1"
-                  class="mt-5 ml-3"
-                  outlined
-                  raised
-                  color="purple"
-                  @click="insertMissingDialog = true"
-                >
-                  Insert Missing
-                  <v-icon right dark>mdi-table-plus</v-icon>
-                </v-btn>
-              </v-flex>
-            </v-layout>
-
-            <!-- Dialog for bulk save -->
-            <v-dialog v-model="bulkDialog" max-width="520" persistent>
-              <v-card class="rounded-lg">
-
-                <v-card-title class="headline">
-                  Bulk Update Selected Rows
-                </v-card-title>
-
-                <v-card-text class="px-6 py-5">
-                  <v-alert
-                    v-if="selectedRows.length === 0"
-                    type="warning"
-                    dense
-                    text
-                    class="mb-4"
-                  >
-                    Select at least one row to enable bulk update.
-                  </v-alert>
-
-                  <v-select
-                    v-model="bulkForm.manual_flag"
-                    :items="qualityFlags"
-                    item-text="name"
+              <!-- Main filters -->
+              <v-layout mt-3>
+                <!-- station select -->
+                <v-flex lg5>
+                  <v-autocomplete
+                    :items="stationList"
+                    item-text="label"
                     item-value="id"
-                    label="Manual flag"
+                    v-model="currentSelection.stationId"
+                    label="Station"
+                    required
+                    hint="*Required"
+                    persistent-hint
+                    @change="getStationVariables(currentSelection.stationId); clear_output_table();"
+                    :rules="simpleTextFieldsRules"
+                    autocomplete="off"
+                  ></v-autocomplete>
+                </v-flex>
+
+                <!-- variable select-->
+                <v-flex pl-5 lg5>
+                  <v-autocomplete
+                    :items="variables"
+                    item-text="variable_name"
+                    item-value="variable"
+                    v-model="currentSelection.variableId"
+                    label="Select Station Variable"
+                    required
+                    hint="*Required"
+                    persistent-hint
+                    :disabled="!currentSelection.stationId"
+                    @change="clear_output_table();"
+                    :rules="simpleTextFieldsRules"
+                    autocomplete="off"
+                  ></v-autocomplete>
+                </v-flex>
+              </v-layout>
+
+              <!-- station timezone info tool tip -->
+              <p class="caption purple--text mt-7 mb-0">
+                Dates and times below use the selected <strong>station's local time.</strong>
+              </p>
+              
+              <v-layout mt-1>
+                <!-- start date -->
+                <v-flex lg5 class="d-flex justify-between">
+                  <v-menu
+                    :close-on-content-click="false"
+                    v-model="menu1"
+                    :nudge-right="40"
+                    transition="scale-transition"
+                    offset-y
+                    class="max-50"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="currentSelection.startDate"
+                        label="Start date"
+                        prepend-icon="event"
+                        v-on="on"
+                        required
+                        hint="*Required"
+                        persistent-hint
+                        :rules="simpleTextFieldsRules"
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
+                      name="startDate"
+                      v-model="currentSelection.startDate"
+                      @input="menu1 = false"
+                    ></v-date-picker>
+                  </v-menu>
+
+                  <v-menu
+                    ref="menu"
+                    :close-on-content-click="false"
+                    v-model="menu3"
+                    :nudge-right="40"
+                    transition="scale-transition"
+                    offset-y
+                    class="max-50"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="currentSelection.startTime"
+                        label="Start time"
+                        prepend-icon="access_time"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+                    <v-time-picker
+                      v-if="menu3"
+                      v-model="currentSelection.startTime"
+                      class="max-50"
+                      @click:minute="$refs.menu.save(currentSelection.startTime)"
+                    ></v-time-picker>
+                  </v-menu>
+                </v-flex>
+
+                <!-- end date -->
+                <v-flex pl-5 lg5 class="d-flex justify-between">
+                  <v-menu
+                    :close-on-content-click="false"
+                    v-model="menu2"
+                    :nudge-right="40"
+                    transition="scale-transition"
+                    offset-y
+                    class="max-50"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="currentSelection.endDate"
+                        label="End date"
+                        prepend-icon="event"
+                        v-on="on"
+                        required
+                        hint="*Required"
+                        persistent-hint
+                        :rules="simpleTextFieldsRules"
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
+                      name="endDate"
+                      v-model="currentSelection.endDate"
+                      @input="menu2 = false"
+                    ></v-date-picker>
+                  </v-menu>
+
+                  <v-menu
+                    ref="menu"
+                    :close-on-content-click="false"
+                    v-model="menu4"
+                    :nudge-right="40"
+                    transition="scale-transition"
+                    offset-y
+                    class="max-50"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="currentSelection.endTime"
+                        label="End time"
+                        prepend-icon="access_time"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+                    <v-time-picker
+                      v-if="menu4"
+                      v-model="currentSelection.endTime"
+                      class="max-50"
+                      @click:minute="$refs.menu.save(currentSelection.endTime)"
+                    ></v-time-picker>
+                  </v-menu>
+                </v-flex>
+
+                <!-- search button -->
+                <v-flex pl-5 mt-5 lg2 class="d-flex justify-between">
+                  <v-btn
                     outlined
-                    clearable
-                    class="mb-4"
-                    :disabled="selectedRows.length === 0 || savingBulk"
-                  ></v-select>
+                    justify-end
+                    color="primary"
+                    @click="doSearch"
+                    :disabled="$v.currentSelection.$invalid"
+                    >
+                      SEARCH
+                    </v-btn
+                  >
+                </v-flex>
+              </v-layout>
 
-                  <v-textarea
-                    v-model="bulkForm.remarks"
-                    label="Remarks"
+              <!-- alerts -->
+              <v-layout column fluid mt-5>
+                <!-- Error messages alerts -->
+                <v-alert v-model="request_error" dismissible type="error">
+                  [[ request_error_message ]]
+                </v-alert>
+
+                <!-- warning alerts -->
+                <v-alert
+                  type="warning"
+                  dense
+                  outlined
+                  text
+                  dismissible
+                  style="max-width: 460px;"
+                >
+                  Only <strong>UNVALIDATED</strong> rows / items can be edited.
+                </v-alert>
+              </v-layout>
+
+              <!-- Snackbar Component -->
+              <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="2000">
+                [[ snackbar.text ]]
+              </v-snackbar>
+
+              {% if request|has_any_feature_permission:"quality-control:write" %}
+              <v-layout>
+                <v-flex>
+                  <!-- bulk save btn -->
+                  <v-btn
+                    :disabled="selectedRows.length <= 1"
+                    class="mt-2"
                     outlined
-                    auto-grow
-                    no-resize
-                    rows="4"
-                  ></v-textarea>
+                    raised
+                    color="success"
+                    @click="openBulkSave"
+                  >
+                    <v-icon left dark>mdi-square-edit-outline</v-icon>
+                    Bulk Update
+                    <span v-if="selectedRows.length" class="ml-1">([[ selectedRows.length ]])</span>
+                  </v-btn>
 
-                  <div class="d-flex justify-end mt-5">
-                    <v-btn  
-                      @click="closeBulkSave" 
-                      :disabled="savingBulk"
-                      class="ml-2"
-                      color="error"
-                      depressed  
-                    >
-                      Cancel
-                    </v-btn>
+                  <!-- Insert Missing btn -->
+                  <v-btn
+                    :disabled="rawDataList.length < 1"
+                    class="mt-2 ml-3"
+                    outlined
+                    raised
+                    color="purple"
+                    @click="insertMissingDialog = true"
+                  >
+                    <v-icon left dark>mdi-table-plus</v-icon>
+                    Insert Missing
+                  </v-btn>
+                </v-flex>
+              </v-layout>
+              {% endif %}
 
-                    <v-btn
-                      class="ml-2"
-                      color="success"
-                      depressed
-                      :loading="savingBulk"
-                      :disabled="selectedRows.length === 0 || savingBulk"
-                      @click="saveBulk"
-                    >
-                      Save changes
-                    </v-btn>
-                  </div>
-                </v-card-text>
+              <!-- Dialog for bulk save -->
+              <v-dialog v-model="bulkDialog" max-width="500px">
+                  <v-card class="rounded-lg">
+                      <v-card-title>
+                          Bulk Update Selected Rows
 
-              </v-card>
-            </v-dialog>
+                          <v-spacer></v-spacer>
 
-            <!-- Dialog for inserting missing data -->
-            <v-dialog v-model="insertMissingDialog" max-width="500px">
-                <v-card>
-                    <v-card-title>
-                        Insert Missing Data
+                          <v-btn icon @click="bulkDialog = false">
+                              <v-icon>mdi-close</v-icon>
+                          </v-btn>
+                      </v-card-title>
 
-                        <v-spacer></v-spacer>
+                      <v-divider></v-divider>
 
-                        <v-btn icon @click="insertMissingDialog = false">
-                            <v-icon>mdi-close</v-icon>
-                        </v-btn>
-                    </v-card-title>
-
-                    <v-divider></v-divider>
-
-                    <v-card-text class="pt-5">
-                        <p>
-                            Select an interval to identify and insert missing records. 
-                            <br/>
-                            Note: The current Time range will be be the one for set for the current search query.
-                        </p>
+                      <v-card-text class="pt-5">
+                        <v-alert
+                          v-if="selectedRows.length === 0"
+                          type="warning"
+                          dense
+                          text
+                          class="mb-4"
+                        >
+                          Select at least one row to enable bulk update.
+                        </v-alert>
+                        <v-alert
+                          type="warning"
+                          dense
+                          text
+                          class="mb-4"
+                        >
+                          This will overwrite the value in the 'Proposed Value' column, leaving it blank for all rows selected.
+                        </v-alert>
 
                         <v-select
-                            v-model="selectedInterval"
-                            :items="intervalOptions"
-                            item-text="text"
-                            item-value="value"
-                            label="Interval"
-                            outlined
-                            dense
+                          v-model="bulkForm.manual_flag"
+                          :items="qualityFlags"
+                          item-text="name"
+                          item-value="id"
+                          label="Proposed flag"
+                          outlined
+                          dense
+                          clearable
+                          :disabled="selectedRows.length === 0 || savingBulk"
                         ></v-select>
-                    </v-card-text>
 
-                    <v-card-actions>
-                        <v-spacer></v-spacer>
+                        <v-textarea
+                          v-model="bulkForm.remarks"
+                          label="Remarks"
+                          hint="Leaving this feild blank will erase existing remarks."
+                          persistent-hint="True"
+                          outlined
+                          auto-grow
+                          no-resize
+                          rows="4"
+                        ></v-textarea>
 
-                        <v-btn
+                      </v-card-text>
+
+                      <v-card-actions>
+                          <v-spacer></v-spacer>
+
+                          <v-btn
+                            @click="closeBulkSave" 
+                            :disabled="savingBulk"
+                            class="ml-2"
                             color="error"
-                            @click="insertMissingDialog = false"
+                          >
+                              Cancel
+                          </v-btn>
+
+                          <v-btn
+                            color="success"
+                            :loading="savingBulk"
+                            :disabled="selectedRows.length === 0 || savingBulk || bulkForm.manual_flag < 1"
+                            @click="saveBulk"
+                          >
+                              Bulk Fill
+                          </v-btn>
+                      </v-card-actions>
+                  </v-card>
+              </v-dialog>
+
+              <!-- Dialog for inserting missing data -->
+              <v-dialog v-model="insertMissingDialog" max-width="500px">
+                  <v-card>
+                      <v-card-title>
+                          Insert Missing Data
+
+                          <v-spacer></v-spacer>
+
+                          <v-btn icon @click="insertMissingDialog = false">
+                              <v-icon>mdi-close</v-icon>
+                          </v-btn>
+                      </v-card-title>
+
+                      <v-divider></v-divider>
+
+                      <v-card-text class="pt-5">
+                          <v-alert
+                            type="warning"
+                            dense
+                            text
+                            class="mb-4"
+                          >
+                            Selected range must contain no more than 1000 records to insert.
+                          </v-alert>
+
+                          <p>
+                              Select an interval to identify and insert missing records. 
+                              <br/>
+                              <span style="color: red;">
+                                Note: The current Time range will be be the one for set for the current search query.
+                              </span>
+                          </p>
+
+                          <v-select
+                              v-model="selectedInterval"
+                              :items="intervalOptions"
+                              item-text="text"
+                              item-value="value"
+                              label="Interval"
+                              outlined
+                              dense
+                          ></v-select>
+                      </v-card-text>
+
+                      <v-card-actions>
+                          <v-spacer></v-spacer>
+
+                          <v-btn
+                              color="error"
+                              @click="insertMissingDialog = false"
+                          >
+                              Cancel
+                          </v-btn>
+
+                          <v-btn
+                              color="purple"
+                              style="color: #fff;"
+                              :loading="fillMissingLoading"
+                              :disabled="selectedInterval === null || fillMissingLoading"
+                              @click="fillMissing"
+                          >
+                              Fill Missing
+                          </v-btn>
+                      </v-card-actions>
+                  </v-card>
+              </v-dialog>
+
+              <!-- Dialog for AQC details -->
+              <v-dialog v-model="aqcDetails" width="800" persistent>
+                <v-card class="rounded-lg">
+                  <v-card-title class="headline">
+                    AQC Details
+                  </v-card-title>
+
+                  <!-- <v-divider></v-divider> -->
+
+                  <v-card-text> 
+                    <!-- Metadata container -->
+                    <div class="metadata-container mb-5">
+                      <div>
+                        <span class="label-text">Date/Hour:</span>
+                        [[ aqcDetailsMetadata.datetime ]]
+                      </div>
+
+                      <div>
+                        <span class="label-text">Measured:</span>
+                        [[ aqcDetailsMetadata.measured ]]
+                      </div>
+
+                      <div>
+                        <span class="label-text">Overall AQC Quality Flag:</span>
+                        <v-chip 
+                          :color="paintFlag(aqcDetailsMetadata.final_flag)" 
+                          style="color: white;"
                         >
-                            Cancel
-                        </v-btn>
-
-                        <v-btn
-                            color="purple"
-                            dark
-                            :loading="fillMissingLoading"
-                            :disabled="selectedInterval === null || fillMissingLoading"
-                            @click="fillMissing"
-                        >
-                            Fill Missing
-                        </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
-
-            <!-- Dialog for AQC details -->
-            <v-dialog v-model="aqcDetails" width="800" persistent>
-              <v-card class="rounded-lg">
-                <v-card-title class="headline">
-                  AQC Details
-                </v-card-title>
-
-                <v-card-text> 
-
-                  <!-- Metadata container -->
-                  <div class="metadata-container mb-5">
-                    <div>
-                      <span class="label-text">Date/Hour:</span>
-                      [[ aqcDetailsMetadata.datetime ]]
+                          [[ qualityFlagsDict[aqcDetailsMetadata.final_flag]?.name ]]
+                        </v-chip>
+                      </div>
+                      
+                      <div class="mt-2">
+                        [[ aqcDetailsMetadata.description ]]
+                      </div>
                     </div>
 
-                    <div>
-                      <span class="label-text">Measured:</span>
-                      [[ aqcDetailsMetadata.measured ]]
-                    </div>
-
-                    <div>
-                      <span class="label-text">Overall AQC Quality Flag:</span>
-                      <v-chip 
-                        :color="paintFlag(aqcDetailsMetadata.final_flag)" 
-                        style="color: white;"
-                      >
-                        [[ qualityFlagsDict[aqcDetailsMetadata.final_flag]?.name ]]
-                      </v-chip>
-                    </div>
-                    
-                    <div class="mt-2">
-                      [[ aqcDetailsMetadata.description ]]
-                    </div>
-                  </div>
-
-                  <!-- Threshold table -->
-                  <v-data-table
-                    :headers="aqcDetailsHeaders"
-                    :items="aqcDetailsItems"
-                    hide-default-footer
-                  >
-                    <!-- flag -->
-                    <template v-slot:item.quality_flag="{ item }">
-                      <v-chip 
-                        :color="paintFlag(item.quality_flag)" 
-                        style="color: white;"
-                      >
-                        [[ qualityFlagsDict[item.quality_flag]?.name ]]
-                      </v-chip>
-                    </template>
-
-                    <!-- description -->
-                    <template v-slot:item.description="{ item }">
-                      <span style="white-space: pre-line;">[[ item.description ]]</span>
-                    </template>
-                  </v-data-table>
-
-                  <!-- close btn -->
-                  <div class="d-flex justify-end mt-5">
-                    <v-btn  
-                      @click="aqcDetails = false" 
-                      class="ml-2"
-                      color="error"
-                      depressed  
+                    <!-- Threshold table -->
+                    <v-data-table
+                      :headers="aqcDetailsHeaders"
+                      :items="aqcDetailsItems"
+                      hide-default-footer
                     >
+                      <!-- flag -->
+                      <template v-slot:item.quality_flag="{ item }">
+                        <v-chip 
+                          :color="paintFlag(item.quality_flag)" 
+                          style="color: white;"
+                        >
+                          [[ qualityFlagsDict[item.quality_flag]?.name ]]
+                        </v-chip>
+                      </template>
+
+                      <!-- description -->
+                      <template v-slot:item.description="{ item }">
+                        <span style="white-space: pre-line;">[[ item.description ]]</span>
+                      </template>
+                    </v-data-table>
+
+                    <!-- close btn -->
+                    <div class="d-flex justify-end mt-5">
+                      <v-btn  
+                        @click="aqcDetails = false" 
+                        class="ml-2"
+                        color="error"
+                        depressed  
+                      >
+                        Close
+                      </v-btn>
+                    </div>
+                  </v-card-text> 
+
+                </v-card>
+              </v-dialog>
+
+              <!-- Dialog for unvalidate confirmation  -->
+              <v-dialog v-model="unvalidateDialog" max-width="400">
+                <v-card>
+                  <v-card-title class="text-h6">Unvalidate Record?</v-card-title>
+
+                  <v-divider></v-divider>
+
+                  <v-card-text>
+                    Are you sure you want to unvalidate this record
+                  </v-card-text>
+
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="success" @click="unvalidateDialog = false">Cancel</v-btn>
+                    <v-btn color="error" @click="confirmUnvalidate">Unvalidate</v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-dialog>
+
+              <!-- Dialog to view QC Description -->
+              <v-dialog v-model="remarksPreviewDialog" max-width="550">
+                <v-card>
+                  <v-card-title class="text-h6">
+                    [[ remarksPreviewTitle ]]
+                  </v-card-title>
+
+                  <v-divider></v-divider>
+
+                  <v-card-text>
+                    <div
+                      class="body-1"
+                      style="white-space: pre-wrap; overflow-wrap: anywhere;"
+                    >[[ remarksPreviewText ]]</div>
+                  </v-card-text>
+
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn color="error" @click="remarksPreviewDialog = false">
                       Close
                     </v-btn>
-                  </div>
-                </v-card-text> 
-
-              </v-card>
-            </v-dialog>
+                  </v-card-actions>
+                </v-card>
+              </v-dialog>
 
 
-            <!-- OUTPUT TABLE -->
-            <v-layout column fluid fill-height>
-              <v-flex sm12 md12 lg12 mt-5>
+              <!-- OUTPUT TABLE -->
+              <v-layout column fluid fill-height>
+                <v-flex sm12 md12 lg12 mt-5>
 
-                <v-data-table
-                  mt-5
-                  :headers="headers"
-                  :items="rawDataList"
-                  :items-per-page="rowsPerPage"
-                  v-model="selectedRows"
-                  item-key="formated_datetime"
-                  show-select
-                >
-                  <!-- automatic flag -->
-                  <template v-slot:item.automatic_flag="{ item }">
-                    <v-chip 
-                      :color="paintFlag(item.automatic_flag)" 
-                      style="color: white;"
-                      @click="openAqcDetails(item)"
-                      clickable
-                    >
-                      [[ qualityFlagsDict[item.automatic_flag]?.name ]]
-                    </v-chip>
-                  </template>
+                  <v-data-table
+                    mt-5
+                    class="validation-table"
+                    :headers="headers"
+                    :items="rawDataList"
+                    :items-per-page="rowsPerPage"
+                    v-model="selectedRows"
+                    item-key="formated_datetime"
+                    show-select
+                    :item-class="getRowClass"
+                  >
+                    <!-- header grouping design -->
+                    <template v-slot:header="{ props, isMobile }">
+                      <thead v-if="!isMobile" class="qc-header-groups">
+                        <tr>
+                          <th
+                            v-for="group in getHeaderGroups(props.headers)"
+                            :key="group.key"
+                            :colspan="group.colspan"
+                            :class="{ 'qc-group-start': group.separator }"
+                            :scope="group.label ? 'colgroup' : null"
+                            :aria-hidden="group.label ? null : 'true'"
+                          >
+                            [[ group.label ]]
+                          </th>
+                        </tr>
+                      </thead>
+                    </template>
 
-                  <!-- manual flag -->
-                  <template v-slot:item.manual_flag="{ item }">
-                    <v-chip :color="paintFlag(item.manual_flag)">
-                      <v-autocomplete
-                        class="qc-manual-flag"
-                        item-text="name"
-                        item-value="id"
-                        :items="qualityFlags"
-                        v-model="item.manual_flag"
-                        autocomplete="off"
-                      ></v-autocomplete>
-                    </v-chip>
-                  </template>
+                    <!-- automatic flag -->
+                    <template v-slot:item.automatic_flag="{ item }">
+                      <v-chip
+                        class="qc-flag-pill"
+                        :color="paintFlag(item.automatic_flag)"
+                        @click="openAqcDetails(item)"
+                      >
+                        [[ qualityFlagsDict[item.automatic_flag]?.name ]]
+                      </v-chip>
+                    </template>
 
-                  <!-- consisted value -->
-                  <template v-slot:item.consisted="{ item }">
-                    <v-text-field
-                      class="qc-consisted"
-                      single-line
-                      v-model="item.consisted"
-                    ></v-text-field>
-                  </template>
+                    <!-- manual flag -->
+                    <template v-slot:item.manual_flag="{ item }">
+                      <v-chip
+                        class="qc-flag-pill qc-flag-pill--editable"
+                        :color="paintFlag(item.manual_flag)"
+                      >
+                        <v-autocomplete
+                          {% if not request|has_any_feature_permission:"quality-control:write" %}
+                            disabled="True"
+                          {% else %}
+                            :disabled="item.is_validated"
+                          {% endif %}
+                          
+                          class="qc-flag"
+                          item-text="name"
+                          item-value="id"
+                          :items="qualityFlags"
+                          v-model="item.manual_flag"
+                          autocomplete="off"
+                          dense
+                          hide-details
+                        ></v-autocomplete>
+                      </v-chip>
+                    </template>
 
-                  <!-- remarks -->
-                  <template v-slot:item.remarks="{ item }">
-                    <v-text-field
-                      class="qc-remarks"
-                      single-line
-                      maxlength="120"
-                      v-model="item.remarks"
-                    ></v-text-field>
-                  </template>
+                    <!-- proposed value -->
+                    <template v-slot:item.proposed_value="{ item }">
+                      <v-text-field
+                        {% if not request|has_any_feature_permission:"quality-control:write" %}
+                          disabled="True"
+                        {% else %}
+                          :disabled="item.is_validated"
+                        {% endif %}
 
-                  <!-- action btns (currently only save) -->
-                  <template v-slot:item.action="{ item }">
-                    <v-tooltip bottom>
-                      <template v-slot:activator="{ on }">
-                        <v-icon
-                          v-on="on"
-                          @click="handleUpdate(item)"
-                          :hidden="!isUpdated(item)"
-                          >save</v-icon
+                        class="qc-number-input"
+                        single-line
+                        dense
+                        hide-details
+                        v-model="item.proposed_value"
+                      ></v-text-field>
+                    </template>
+
+                    <!-- Remarks -->
+                    <template v-slot:item.remarks="{ item }">
+                      <div class="d-flex align-center">
+                        <v-text-field
+                          {% if not request|has_any_feature_permission:"quality-control:write" %}
+                            disabled="True"
+                          {% else %}
+                            :disabled="item.is_validated"
+                          {% endif %}
+
+                          single-line
+                          dense
+                          hide-details
+                          maxlength="120"
+                          v-model="item.remarks"
+                        ></v-text-field>
+
+                        <v-btn
+                          icon
+                          small
+                          class="ml-1"
+                          :disabled="!item.remarks"
+                          title="Read full remarks"
+                          aria-label="Read full remarks"
+                          @click="openRemarksPreview(item, 'remarks')"
                         >
-                      </template>
-                      <span>Update record</span>
-                    </v-tooltip>
-                  </template>
+                          <v-icon small color="primary">mdi-eye-outline</v-icon>
+                        </v-btn>
+                      </div>
+                    </template>
 
-                </v-data-table>
+                    <!-- Validated (consisted) value -->
+                    <template v-slot:item.consisted="{ item }">
+                      <div class="d-flex align-center">
+                        <v-text-field
+                          {% if not request|has_any_feature_permission:"quality-control:write" %}
+                            disabled="True"
+                          {% else %}
+                            :disabled="item.is_validated"
+                          {% endif %}
+                          class="qc-number-input"
+                          v-model="item.consisted"
+                          :disabled="item.validated_flag == 5"
+                          single-line
+                          dense
+                          hide-details
+                        ></v-text-field>
 
-              </v-flex>
+                        <v-tooltip bottom>
+                          <template v-slot:activator="{ on, attrs }">
+                            <v-btn
+                              :disabled="item.validated_flag == 5"
+                              {% if not request|has_any_feature_permission:"quality-control:write" %}
+                                disabled="True"
+                              {% else %}
+                                :disabled="item.is_validated"
+                              {% endif %}
+                              icon
+                              small
+                              v-bind="attrs"
+                              v-on="on"
+                              class="ml-1"
+                              @click="copyProposedToConsisted(item)"
+                            >
+                              <v-icon small color="primary">mdi-content-copy</v-icon>
+                            </v-btn>
+                          </template>
+                          <span>Copy proposed value</span>
+                        </v-tooltip>
+                      </div>
+                    </template>
+
+                    <!-- validated flag -->
+                    <template v-slot:item.validated_flag="{ item }">
+                      <v-chip
+                        class="qc-flag-pill qc-flag-pill--editable"
+                        :color="paintFlag(item.validated_flag)"
+                      >
+                        <v-autocomplete
+                          {% if not request|has_any_feature_permission:"quality-control:write" %}
+                            disabled="True"
+                          {% else %}
+                            :disabled="item.is_validated"
+                          {% endif %}
+                          class="qc-flag"
+                          item-text="name"
+                          item-value="id"
+                          :items="validatedQualityFlags"
+                          v-model="item.validated_flag"
+                          autocomplete="off"
+                          dense
+                          hide-details
+                          @change="onFlagChange(item)"
+                        ></v-autocomplete>
+                      </v-chip>
+                    </template>
+
+                    <!-- Validated Remarks -->
+                    <template v-slot:item.validated_remarks="{ item }">
+                      <div class="d-flex align-center">
+                        <v-text-field
+                          {% if not request|has_any_feature_permission:"quality-control:write" %}
+                            disabled="True"
+                          {% else %}
+                            :disabled="item.is_validated"
+                          {% endif %}
+                          single-line
+                          dense
+                          hide-details
+                          maxlength="120"
+                          v-model="item.validated_remarks"
+                        ></v-text-field>
+
+                        <v-btn
+                          icon
+                          small
+                          class="ml-1"
+                          :disabled="!item.validated_remarks"
+                          title="Read full validated remarks"
+                          aria-label="Read full validated remarks"
+                          @click="openRemarksPreview(item, 'validated_remarks')"
+                        >
+                          <v-icon small color="primary">mdi-eye-outline</v-icon>
+                        </v-btn>
+                      </div>
+                    </template>
+
+                    <!-- validated btn -->
+                    <template v-slot:item.is_validated="{ item }">
+                      <v-tooltip bottom>
+                        <template v-slot:activator="{ on, attrs }">
+                          <v-btn
+                            x-large
+                            icon
+                            v-bind="attrs"
+                            v-on="on"
+                            :color="item.is_validated ? 'success' : 'grey'"
+                                      
+                            {% if request|has_any_group_access:"5,7" and request|has_any_feature_permission:"quality-control:write" %}
+                              @click="onValidateClick(item)"
+                            {% endif %}
+                          >
+                            <v-icon>
+                              [[ item.is_validated ? 'mdi-check-decagram' : 'mdi-check-decagram-outline' ]]
+                            </v-icon>
+                          </v-btn>
+                        </template>
+                        {% if request|has_any_group_access:"5,7" and request|has_any_feature_permission:"quality-control:write" %}
+                        <span>[[ item.is_validated ? 'Validated' : 'Click to validate' ]]</span>
+                        {% else%}
+                        <span>[[ item.is_validated ? 'Validated' : 'Not Validated' ]]</span>
+                        {% endif %}
+                      </v-tooltip>
+                    </template>
+
+                    <!-- action btns (currently only save) -->
+                    <template v-slot:item.action="{ item }">
+                      <v-tooltip bottom>
+                        <template v-slot:activator="{ on }">
+                          <v-icon
+                            medium
+                            v-on="on"
+                            @click="handleUpdate(item)"
+                            :hidden="!isUpdated(item)"
+                            >save</v-icon
+                          >
+                        </template>
+                        <span>Update record</span>
+                      </v-tooltip>
+                    </template>
+
+                  </v-data-table>
+                </v-flex>
+              </v-layout>
+
             </v-layout>
 
-          </v-layout>
+          </div>
 
         </v-layout>
       </v-main>
@@ -628,6 +907,10 @@
         selected_station_offset: null, // holds the selected stations utc offset in minutes
 
         variables: [],
+
+        unvalidateDialog: false,
+        
+        selectedItemToUnvalidate: null,
 
         // Rows selected in v-data-table
         selectedRows: [],
@@ -698,8 +981,15 @@
 
         updatingItem: null, // the item which is currently being updated
 
+        // remarks preview vars
+        remarksPreviewDialog: false,
+        remarksPreviewTitle: "",
+        remarksPreviewText: "",
+
+        validatedQualityFlags: [],
         qualityFlags: [],
         qualityFlagsDict: {},
+
         menu1: false,
         menu2: false,
         menu3: false,
@@ -722,50 +1012,104 @@
         rowsPerPage: 10,
         loading: false,
         rawDataList: [],
+
+        MISSING_VALUE: "{{ MISSING_VALUE|escapejs }}",
         
         headers: [
           {
             text: "Date/Hour",
-            align: "left",
+            align: "center",
             sortable: true,
             value: "formated_datetime",
+            width: "1%",
+            class: "qc-datetime",
+            cellClass: "qc-datetime",
           },
           {
             text: "Measured",
-            align: "left",
+            align: "center",
             sortable: true,
             value: "measured",
           },
           {
             text: "AQC Flag",
-            align: "left",
+            align: "center",
             sortable: true,
             value: "automatic_flag",
           },
+          // Start of the Manual Review group.
           {
             text: "Manual Flag",
-            align: "left",
-            sortable: false,
+            align: "center",
+            sortable: true,
             value: "manual_flag",
+            class: "qc-group-start",
+            cellClass: "qc-group-start",
           },
           {
-            text: "Consisted",
-            align: "left",
+            text: "Proposed Value",
+            align: "center",
             sortable: false,
-            value: "consisted",
+            value: "proposed_value",
+            width: "100px",
+            class: "qc-number-header",
           },
           {
             text: "Remarks",
-            align: "left",
+            align: "center",
             sortable: false,
             value: "remarks",
           },
+
+          // Start of the Climatologist / System Administrator Validation group.
+          // User must be in a part of group 5,7 (Climate Administrator & System Administrator) and must have write permisions for quality-control
+          {% if request|has_any_group_access:"5,7" and request|has_any_feature_permission:"quality-control:write" %}
+          {
+            text: "Validated Value (Consisted)",
+            align: "center",
+            sortable: false,
+            value: "consisted",
+            width: "130px",
+            class: "qc-group-start qc-number-header",
+            cellClass: "qc-group-start",
+          },
+          {
+            text: "Validated Flag",
+            align: "center",
+            sortable: false,
+            value: "validated_flag",
+          },
+          {
+            text: "Validated Remarks",
+            align: "center",
+            sortable: false,
+            value: "validated_remarks",
+          },
+          {
+            text: "Validate",
+            align: "center",
+            sortable: true,
+            value: "is_validated",
+          },
+          {% else %}
+
+          {
+            text: "Validated Check",
+            align: "center",
+            sortable: true,
+            value: "is_validated",
+          },
+          {% endif %}
+
+          // must have write access to see the save btn
+          {% if request|has_any_feature_permission:"quality-control:write" %}
           {
             text: "Action",
-            align: "left",
+            align: "center",
             sortable: false,
             value: "action",
-          },
+          }
+          {% endif %}
         ],
         
         filter: {
@@ -885,12 +1229,18 @@
         getQualityFlags() {
           this.getAll(`api/quality_flags`).then((data) => {
             this.qualityFlags = data;
+
             data.forEach((qualityFlag) => {
               this.qualityFlagsDict[qualityFlag.id] = {
                 name: qualityFlag.name,
                 color: qualityFlag.color,
               };
             });
+
+            // Allowing only the 'Not Checked', 'Good', 'Missing' for the validated flag
+            const validIds = [1, 4, 5];
+            this.validatedQualityFlags = data.filter(flag => validIds.includes(flag.id));
+
           });
         },
 
@@ -901,7 +1251,7 @@
           );
         },
 
-        
+
         parsePatchParameters(item) {
           let params = "?station_id=" + item.station_id;
           params += "&variable_id=" + item.variable_id;
@@ -919,10 +1269,72 @@
 
         isUpdated(item) {
           return (
-            item.consisted != item.old.consisted ||
+            item.proposed_value != item.old.proposed_value ||
             item.manual_flag != item.old.manual_flag ||
-            item.remarks != item.old.remarks
+            item.remarks != item.old.remarks ||
+            item.validated_remarks != item.old.validated_remarks ||
+            item.validated_flag != item.old.validated_flag ||
+            item.is_validated != item.old.is_validated ||
+            item.consisted != item.old.consisted
           );
+        },
+
+
+        getHeaderGroups(visibleHeaders) {
+          const definitions = [
+            {
+              id: "observation",
+              label: "Observation",
+              columns: ["formated_datetime", "measured", "automatic_flag"],
+            },
+            {
+              id: "manual",
+              label: "Manual Review",
+              columns: ["manual_flag", "proposed_value", "remarks"],
+            },
+            {
+              id: "validation",
+              label: "Climatologist Validation",
+              columns: [
+                "consisted",
+                "validated_flag",
+                "validated_remarks",
+                "is_validated",
+              ],
+            },
+          ];
+
+          const groups = [];
+
+          // Use the rendered columns, including the selection checkbox.
+          visibleHeaders.forEach((header, index) => {
+            const definition = definitions.find(group =>
+              group.columns.includes(header.value)
+            );
+
+            const id = definition ? definition.id : header.value;
+            const previous = groups[groups.length - 1];
+
+            if (definition && previous && previous.id === id) {
+              previous.colspan += 1;
+            } else {
+              groups.push({
+                key: `${id}-${index}`,
+                id,
+                label: definition ? definition.label : "",
+                colspan: 1,
+                separator: definition ? id !== "observation" : false,
+              });
+            }
+          });
+
+          return groups;
+        },
+
+
+        getRowClass(item) {
+          // Use the same change check that controls the Save icon.
+          return this.isUpdated(item) ? "qc-row-unsaved" : "";
         },
 
 
@@ -979,7 +1391,7 @@
           this.loading = true;
           this.rawDataList = [];
 
-          axios.get(`/api/quality_control/${this.parseParameters()}`)
+          axios.get(`/api/quality_control/get/${this.parseParameters()}`)
             .then(res => {
               this.taskId = res.data.task_id;
               this.startPolling();
@@ -1020,34 +1432,42 @@
 
 
         handleUpdate(item) {
+          const fields = ["manual_flag", "proposed_value", "remarks"];
+
+          {% if request|has_any_group_access:"5,7" and request|has_any_feature_permission:"quality-control:write" %}
+          fields.push("validated_flag", "consisted", "validated_remarks", "is_validated");
+          {% endif %}
+
+          // Use the existing snapshot to send only values the user changed.
+          const updates = {};
+          fields.forEach(field => {
+            if (item[field] != item.old[field]) {
+              updates[field] = item[field];
+            }
+          });
+          if (Object.keys(updates).length === 0) return;
+
           this.loading = true;
-
-          this.searchAction = false; // not a search action
-
-          this.savingBulk = false; // not a bulk save action
-
+          this.searchAction = false;
+          this.savingBulk = false;
           this.updatingItem = item;
 
-          axios.patch(`/api/quality_control/${this.parsePatchParameters(item)}`, {
-            manual_flag: item.manual_flag,
-            consisted: item.consisted,
-            remarks: item.remarks,
-          })
-          .then(res => {
-            this.taskId = res.data.task_id;
-            this.startPolling();
-          })
-          .catch(err => {
-            this.loading = false;
-            this.request_error = true;
-            this.request_error_message = err?.response?.data?.message || "Request failed";
-          });
+          axios.patch(`/api/quality_control/update/${this.parsePatchParameters(item)}`, updates)
+            .then(res => {
+              this.taskId = res.data.task_id;
+              this.startPolling();
+            })
+            .catch(err => {
+              this.loading = false;
+              this.updatingItem = null;
+              this.request_error = true;
+              this.request_error_message = err?.response?.data?.message || "Request failed";
+            });
         },
 
 
         // Open dialog when aqc chip is clicked
         openAqcDetails(item) {
-
           // start loading
           this.loading = true;
         
@@ -1112,6 +1532,75 @@
         },
 
 
+        onFlagChange(item) {
+          // if the flag is set to 'Not Checked' set is_validated to false
+          if (item.validated_flag === 1) {
+            item.is_validated = false;
+          }
+
+          if(item.validated_flag == 5) { // if the validated flag is set to 'Missing' fill in the consisted feild with the missing data value
+            item.consisted = this.MISSING_VALUE;
+          }
+          else if(item.consisted == this.MISSING_VALUE) { // if validated flag is not 'Missing' but the value is MISSING_VALUE (-99.9), clear the consited value
+            item.consisted = null;
+          }
+        },
+
+        
+        copyProposedToConsisted(item) {
+          // Guard against updating when consisted is 5 (missing)
+          if (item.validated_flag == 5){
+            // alert the user
+            this.snackbar = {
+              show: true,
+              text: 'Validated Flag is set to missing.',
+              color: 'warning'
+            };
+
+            return;
+          }
+          
+          if (item.proposed_value !== undefined && item.proposed_value !== null) {
+            item.consisted = item.proposed_value;
+          }
+        },
+
+
+        onValidateClick(item) {
+            // Force is_validated to false if validated_flag is 1. Validation unavailable if the validated flag is "Not Checked"
+            if (item.validated_flag === 1) {
+              item.is_validated = false;
+
+              // alert the user why validation cannot take place
+              this.snackbar = {
+                show: true,
+                text: 'Update the Validated Flag to validated this item.',
+                color: 'warning'
+              };
+
+              return;
+            }
+
+            if (item.is_validated) {
+              // Item is currently true -> prompt confirmation dialog before setting to false
+              this.selectedItemToUnvalidate = item;
+              this.unvalidateDialog = true;
+            } else {
+              // Item is false -> validate immediately
+              item.is_validated = true;
+            }
+        },
+
+
+        confirmUnvalidate() {
+          if (this.selectedItemToUnvalidate) {
+            this.selectedItemToUnvalidate.is_validated = false;
+          }
+          this.unvalidateDialog = false;
+          this.selectedItemToUnvalidate = null;
+        },
+
+
         startPolling() {
           if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
@@ -1150,9 +1639,13 @@
                   this.rawDataList = res.data.data.results.map((record) => {
                     // Store original editable values so later changes can be detected.
                     record["old"] = {
-                      consisted: record.consisted,
+                      proposed_value: record.proposed_value,
                       manual_flag: record.manual_flag,
                       remarks: record.remarks,
+                      consisted: record.consisted,
+                      validated_flag: record.validated_flag,
+                      validated_remarks: record.validated_remarks,
+                      is_validated: record.is_validated,
                     };
 
                     record["formated_datetime"] = this.formatDatetimeForDataTable(
@@ -1177,15 +1670,37 @@
                 else if (this.savingBulk) {
                   this.savingBulk = false;
 
-                  // Reload the table after saving.
-                  this.doSearch();
+                  const count = res.data.data.updated_rows;
+                  this.snackbar = {
+                    show: true,
+                    text: `${count} record${count === 1 ? "" : "s"} updated.`,
+                    color: "success",
+                  };
 
+                  this.doSearch();
                   return;
                 }
 
                 // Polling for filling missing observations.
                 else if (this.fillMissingLoading) {
                   this.fillMissingLoading = false;
+
+                  // user attempts to fill more than 1000 records
+                  if (res.data.data['limit_violation']) {
+                    // Set text and open the snackbar
+                    this.snackbar.text = `${res.data.data['limit_violation']}`;
+                    this.snackbar.color = 'warning';
+                    this.snackbar.show = true;
+
+                    this.loading = false; // turn off loading
+                    // Reset all polling actions.
+                    this.searchAction = false;
+                    this.updatingItem = null;
+                    this.savingBulk = false;
+                    this.fillMissingLoading = false;
+
+                    return;
+                  }
 
                   console.log(`Inserted ${res.data.data['inserted_count']} record(s).`);
 
@@ -1203,9 +1718,19 @@
                 // Polling for single observation save.
                 else if (this.updatingItem) {
                   this.updatingItem["old"] = {
-                    consisted: this.updatingItem.consisted,
+                    proposed_value: this.updatingItem.proposed_value,
                     manual_flag: this.updatingItem.manual_flag,
                     remarks: this.updatingItem.remarks,
+                    consisted: this.updatingItem.consisted,
+                    validated_flag: this.updatingItem.validated_flag,
+                    validated_remarks: this.updatingItem.validated_remarks,
+                    is_validated: this.updatingItem.is_validated,
+                  };
+
+                  this.snackbar = {
+                    show: true,
+                    text: "Record saved.",
+                    color: "success",
                   };
                 }
                 this.request_error = false;
@@ -1216,16 +1741,16 @@
 
               if (status === "failed") {
                 this.stopPolling();
-                this.loading = false;
 
+                this.request_error = true;
+                this.request_error_message = res.data.message || "An error occurred, please see logs.";
+
+                this.loading = false; // turn off loading
                 // Reset all polling actions.
                 this.searchAction = false;
                 this.updatingItem = null;
                 this.savingBulk = false;
                 this.fillMissingLoading = false;
-
-                this.request_error = true;
-                this.request_error_message = res.data.message || "An error occurred, please see logs.";
               }
             })
             .catch(err => {
@@ -1309,6 +1834,15 @@
 
         // Perform bulk save
         saveBulk() {
+          if (this.selectedRows.some(item => item.is_validated)) {
+            this.snackbar = {
+              show: true,
+              text: "Validated rows cannot be bulk updated. Deselect them first.",
+              color: "warning",
+            };
+            return;
+          }
+          
           this.savingBulk = true;
           this.searchAction = false; // reset the search action
           this.loading = true;
@@ -1337,6 +1871,16 @@
           });
         },
 
+
+        // Share one preview dialog between both remarks columns.
+        openRemarksPreview(item, field) {
+          this.remarksPreviewTitle = field === "validated_remarks"
+            ? "Validated Remarks"
+            : "Remarks";
+
+          this.remarksPreviewText = item[field] || "";
+          this.remarksPreviewDialog = true;
+        },
       },
 
       mounted() {
@@ -1361,35 +1905,93 @@
 </div>
 
 <style>
-  .qc-manual-flag {
-    cursor: pointer;
-    padding-top: 20px;
-    padding-left: 5px;
-    width: 125px;
-  }
-  .qc-manual-flag input {
-    color: white !important;
-    caret-color: transparent;   /* hides blinking cursor */
-    pointer-events: none;       /* prevents typing but keeps dropdown */
-  }
-
-  .qc-manual-flag .v-select__selection {
-    cursor: pointer;
+  .qc-flag-pill {
+    height: 32px !important;
+    padding: 0 10px !important;
     color: white !important;
   }
 
-  /* dropdown arrow */
-  .qc-manual-flag .v-icon {
+  .qc-flag-pill--editable {
+    width: 150px;
+  }
+
+  .qc-flag-pill--editable .v-chip__content {
+    width: 100%;
+  }
+
+  /* Show a pointer throughout the editable pills. */
+  .qc-flag-pill--editable,
+  .qc-flag-pill--editable * {
+    cursor: pointer !important;
+  }
+
+  .qc-flag {
+    width: 100%;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 0 !important;
     cursor: pointer;
+  }
+
+  .qc-flag .v-select__slot {
+    position: relative;
+  }
+
+  .qc-flag .v-input__slot {
+    height: 32px;
+    min-height: 32px !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Remove the underline inside the coloured pill. */
+  .qc-flag .v-input__slot::before,
+  .qc-flag .v-input__slot::after {
+    display: none;
+  }
+
+  /* Balance the space on either side of the selected text. */
+  .qc-flag .v-select__selections {
+    justify-content: center;
+    flex-wrap: nowrap;
+    min-height: 0 !important;
+    padding: 0 18px !important;
+  }
+
+  .qc-flag .v-select__selection {
+    margin: 0 !important;
+    max-width: 100%;
+    text-align: center;
+    color: white !important;
+    font-size: 14px;
+  }
+
+  .qc-flag .v-input__append-inner {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    margin: 0 !important;
+    transform: translateY(-50%);
+  }
+
+  .qc-flag .v-input__append-inner .v-icon {
+    font-size: 18px;
+  }
+
+  .qc-flag .v-icon,
+  .qc-flag input {
     color: white !important;
   }
 
-  .qc-consisted {
-    width: 75px;
-  }
-
-  .qc-remarks {
-    width: 200px;
+  /* Keep the selected label visible and centre it within the pill. */
+  .qc-flag input {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    text-align: center;
+    font-size: 14px;
+    caret-color: transparent;
+    pointer-events: none;
   }
 
   .v-textarea textarea {
@@ -1398,9 +2000,87 @@
 
   .label-text {
     font-weight: 450;
-    font-size: 1rem; /* "larger" is roughly 1.1rem to 1.2rem */
-    margin-right: 8px; /* Adds a tiny gap before the value */
+    font-size: 1rem;
+    margin-right: 8px;
   }
 
+  .validation-table {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .validation-table table {
+    border-collapse: collapse;
+  }
+
+  /* Light grid lines, like the Custom Threshold table. */
+  .validation-table th,
+  .validation-table td {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+  }
+
+  .validation-table thead th {
+    background: #f4f6f9;
+    font-weight: 600 !important;
+  }
+
+  /* Separate Observation → Manual Review → Validation. */
+  .validation-table .qc-group-start {
+    border-left: 2px solid rgba(0, 0, 0, 0.22) !important;
+  }
+
+  /* Keep the date and time together. */
+  .validation-table .qc-datetime {
+    white-space: nowrap;
+  }
+
+  /* Allow the longer numeric headings to wrap. */
+  .validation-table .qc-number-header {
+    white-space: normal;
+  }
+
+  /* Keep the numeric editing fields compact. */
+  .validation-table .qc-number-input {
+    width: 64px;
+    max-width: 64px;
+    min-width: 0;
+    flex: 0 0 64px;
+  }
+
+  /* Keep sort icons visible on sortable columns. */
+  .validation-table .v-data-table-header th.sortable
+  .v-data-table-header__icon {
+    opacity: 0.5 !important;
+  }
+
+  .validation-table .v-data-table-header th.sortable:hover
+  .v-data-table-header__icon,
+  .validation-table .v-data-table-header th.active
+  .v-data-table-header__icon {
+    opacity: 1 !important;
+  }
+
+  .validation-table .v-data-table-header th.active
+  .v-data-table-header__icon {
+    color: #1976d2 !important;
+  }
+
+  /* Make pending edits easy to spot. */
+  .validation-table tbody tr.qc-row-unsaved {
+    background-color: #fff8e195 !important;
+  }
+
+  .validation-table .qc-header-groups th {
+    height: 34px !important;
+    padding: 6px 12px !important;
+    background: #eef1f5 !important;
+    color: #45546a !important;
+    font-size: 13px;
+    font-weight: 600 !important;
+    line-height: 1.3;
+    text-align: center !important;
+    white-space: normal;
+  }
 </style>
 {% endblock %}

@@ -412,7 +412,7 @@ class Station(BaseModel):
         MaxValueValidator(90.)
     ])
     
-    elevation = models.FloatField(null=True)
+    elevation = models.FloatField(null=True, verbose_name="Elevation (m)")
     
     code = models.CharField(max_length=64, unique=True)
     

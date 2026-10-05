@@ -81,7 +81,7 @@ from wx.models import AdministrativeRegion, StationFile, Decoder, QualityFlag, D
 from wx.models import Country, Unit, Station, Variable, DataSource, StationVariable, StationDataFileStatus,\
     StationProfile, Document, Watershed, Interval, CountryISOCode, Wis2BoxPublish, Wis2PublishOffset, LocalWisCredentials, RegionalWisCredentials,  Wis2BoxPublishLogs, Crop, Soil
 from wx.utils import get_altitude, get_watershed, get_interpolation_image, parse_float_value, \
-    parse_int_value, generate_expected_times
+    parse_int_value, parse_bool_value, generate_expected_times
 from .utils import get_raw_data, get_station_raw_data
 from wx.models import MaintenanceReport, VisitType, Technician
 from django.views.decorators.http import require_http_methods
@@ -94,6 +94,11 @@ from wx.models import HighFrequencyData, MeasurementVariable
 from wx.tasks import fft_decompose, export_station_to_oscar, export_station_to_oscar_wigos, data_inventory_month_view, save_monthly_form, save_synop_form
 import math
 import numpy as np
+
+from wx.templatetags.wx_filters import (
+    has_any_feature_permission,
+    has_any_group_access,
+)
 
 from wx.models import Equipment, EquipmentType, EquipmentModel, Manufacturer, FundingSource, StationProfileEquipmentType
 from django.core.serializers import serialize
@@ -2283,7 +2288,7 @@ class QualityFlagList(viewsets.ReadOnlyModelViewSet):
 
 
 @wx_mapped_permission_required
-def qc_list(request):
+def get_qc_list(request):
     if request.method == 'GET':
         station_id = request.GET.get('station_id', None)
         variable_id = request.GET.get('variable_id', None)
@@ -2395,6 +2400,10 @@ def qc_list(request):
                             ,value.qc_range_quality_flag
                             ,value.qc_step_quality_flag
                             ,value.qc_persist_quality_flag
+                            ,value.proposed_value
+                            ,value.validated_flag
+                            ,value.validated_remarks
+                            ,value.is_validated
                         FROM raw_data as value
                         WHERE value.station_id=%s
                         AND value.variable_id=%s
@@ -2420,7 +2429,25 @@ def qc_list(request):
 
         return JsonResponse({"task_id": task.id})
 
+    return JsonResponse({'message': 'Only the GET method is allowed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@wx_mapped_permission_required
+def update_qc_list(request):
     if request.method == "PATCH":
+
+        can_write = bool(has_any_feature_permission(request, "quality-control:write"))
+        if not can_write:
+            return JsonResponse(
+                {"message": "You do not have permission to save quality-control changes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Compute this on the server; never read it from the request body.
+        can_validate = bool(
+            can_write and has_any_group_access(request, "5,7")
+        )
+
         station_id = request.GET.get("station_id")
         variable_id = request.GET.get("variable_id")
         req_datetime = request.GET.get("datetime")
@@ -2438,18 +2465,63 @@ def qc_list(request):
         try:
             station_id = int(station_id)
             variable_id = int(variable_id)
+
+            # variable id is < 0 and not <= because precipitation has an id of 0
+            if station_id <= 0 or variable_id < 0:
+                return JsonResponse(
+                    {"message": "Station Id and Variable Id must be positive integers."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             # expecting the a UTC datetime value
             req_datetime = datetime.datetime.strptime(req_datetime, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
         except ValueError:
             return JsonResponse({"message": "Invalid parameter type."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        body = json.loads(request.body.decode("utf-8"))
+        # BODY JSON
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return JsonResponse(
+                {"message": "Invalid JSON body."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(body, dict):
+            return JsonResponse(
+                {"message": "The request body must be a JSON object."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+        validation_fields = tasks.QC_VALIDATION_FIELDS.intersection(body)
+        if validation_fields and not can_validate:
+            return JsonResponse(
+                {"message": "You do not have permission to change validation fields."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if set(body) - tasks.ALLOWED_UPDATE_FIELDS:
+            return JsonResponse(
+                {"message": "Unsupported QC update fields."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
         set_parts = []
         params = []
 
         updates = {}
 
+        # catch ValueError & TypeError rather than only ValueError for the "manual_flag", "validated_flag", "proposed_value", "consisted" feilds
+        for field in ("manual_flag", "validated_flag", "proposed_value", "consisted"):
+            if field in body and isinstance(body[field], bool):
+                return JsonResponse(
+                    {"message": f"{field} cannot be a boolean."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # manual flag, proposed value & remarks options
         if "manual_flag" in body:
             try:
                 updates["manual_flag"] = parse_int_value(body["manual_flag"])
@@ -2457,30 +2529,94 @@ def qc_list(request):
                 return JsonResponse({"message": "Wrong manual flag value type."},
                                     status=status.HTTP_400_BAD_REQUEST)
 
-        if "consisted" in body:
+        if "proposed_value" in body:
             try:
-                updates["consisted"] = parse_float_value(body["consisted"])
+                updates["proposed_value"] = parse_float_value(body["proposed_value"])
             except ValueError:
-                return JsonResponse({"message": "Wrong consisted value type. Please enter a float value."},
+                return JsonResponse({"message": "Wrong proposed value value type. Please enter a float value."},
                                     status=status.HTTP_400_BAD_REQUEST)
 
         if "remarks" in body:
             updates["remarks"] = body["remarks"]
 
+        # validation options:
+        if "validated_flag" in body:
+            try:
+                updates["validated_flag"] = parse_int_value(body["validated_flag"])
+            except ValueError:
+                return JsonResponse({"message": "Wrong validated flag value type."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+        if "consisted" in body:
+            try:
+                updates["consisted"] = parse_float_value(body["consisted"])
+            except ValueError:
+                return JsonResponse({"message": "Wrong validated value (consisted) value type. Please enter a float value."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+        if "validated_remarks" in body:
+            updates["validated_remarks"] = body["validated_remarks"]
+
+        if "is_validated" in body:
+            if type(body["is_validated"]) is not bool:
+                return JsonResponse(
+                    {"message": "is_validated must be true or false."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            updates["is_validated"] = body["is_validated"]
+
+
+        if "validated_flag" in updates:
+            flag = updates["validated_flag"]
+            if flag is not None and (
+                type(flag) is not int or flag not in tasks.QC_VALIDATED_FLAG_IDS
+            ):
+                return JsonResponse(
+                    {"message": "Validated Flag must be Not Checked, Good, or Missing."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        for field in ("proposed_value", "consisted"):
+            if field in updates and updates[field] is not None:
+                if not math.isfinite(updates[field]):
+                    return JsonResponse(
+                        {"message": f"{field} must be a finite number."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        for field in ("remarks", "validated_remarks"):
+            if field in updates and updates[field] is not None:
+                if not isinstance(updates[field], str) or len(updates[field]) > 120:
+                    return JsonResponse(
+                        {"message": f"{field} must be text of at most 120 characters."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                    
+        # Single view, after parsing manual_flag and before enqueueing:
+        flag = updates.get("manual_flag")
+        if flag is not None and not QualityFlag.objects.filter(pk=flag).exists():
+            return JsonResponse(
+                {"message": "Invalid manual flag."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # updates must be populated
         if not updates:
-            return JsonResponse({"message": "You must send 'manual_flag', 'consisted' or 'remarks' data to update."},
+            return JsonResponse({"message": "Send at least one QC field to update."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        task = tasks.qc_manual_checks.delay(
+        task = tasks.qc_validation_save.delay(
             station_id=station_id,
             variable_id=variable_id,
             req_datetime=req_datetime.strftime("%Y-%m-%dT%H:%M:%SZ"),
             updates=updates,
+            can_validate=can_validate,
         )
 
         return JsonResponse({"task_id": task.id})
 
-    return JsonResponse({'message': 'Only the GET and PATCH methods is allowed.'}, status=status.HTTP_400_BAD_REQUEST)
+    return JsonResponse({'message': 'Only the PATCH method is allowed.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET'])
@@ -2655,6 +2791,13 @@ def qc_validate_bulk(request):
         return JsonResponse({"message": "Only the PATCH method is allowed."},
                             status=status.HTTP_400_BAD_REQUEST)
 
+    can_write = bool(has_any_feature_permission(request, "quality-control:write"))
+    if not can_write:
+        return JsonResponse(
+            {"message": "You do not have permission to save quality-control changes."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     # get station and variable ids and check them
     station_id = request.GET.get("station_id")
     variable_id = request.GET.get("variable_id")
@@ -2669,6 +2812,12 @@ def qc_validate_bulk(request):
     try:
         station_id = int(station_id)
         variable_id = int(variable_id)
+
+        if station_id <= 0 or variable_id < 0:
+            return JsonResponse(
+                {"message": "Station Id and Variable Id must be positive integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
     except ValueError:
         return JsonResponse({"message": "Invalid Station Id or Variable Id."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -2676,9 +2825,30 @@ def qc_validate_bulk(request):
     # Body JSON
     try:
         body = json.loads(request.body.decode("utf-8"))
-    except Exception:
-        return JsonResponse({"message": "Invalid JSON body."},
-                            status=status.HTTP_400_BAD_REQUEST)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse(
+            {"message": "Invalid JSON body."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(body, dict):
+        return JsonResponse(
+            {"message": "The request body must be a JSON object."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+    if tasks.QC_VALIDATION_FIELDS.intersection(body):
+        return JsonResponse(
+            {"message": "Validation fields cannot be changed through Bulk Update."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if set(body) - {"manual_flag", "remarks", "datetime_list"}:
+        return JsonResponse(
+            {"message": "Unsupported bulk update fields."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     manual_flag = body.get("manual_flag")
     remarks = body.get("remarks", "")
@@ -2687,16 +2857,28 @@ def qc_validate_bulk(request):
     if manual_flag is None:
         return JsonResponse({"message": "'Manual Flag' cannot be null."},
                             status=status.HTTP_400_BAD_REQUEST)
+                            
     if datetime_list is None or not isinstance(datetime_list, list) or len(datetime_list) == 0:
         return JsonResponse({"message": "'Datetime List' must be a non-empty list."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        manual_flag = int(manual_flag)
-        remarks = str(remarks)
-    except ValueError:
-        return JsonResponse({"message": "Invalid manual_flag or remarks."},
-                            status=status.HTTP_400_BAD_REQUEST)
+    if type(manual_flag) is not int:
+        return JsonResponse(
+            {"message": "manual_flag must be an integer."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not QualityFlag.objects.filter(pk=manual_flag).exists():
+        return JsonResponse(
+            {"message": "Invalid manual flag."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(remarks, str) or len(remarks) > 120:
+        return JsonResponse(
+            {"message": "Remarks must be text of at most 120 characters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     req_datetime_list = []
 

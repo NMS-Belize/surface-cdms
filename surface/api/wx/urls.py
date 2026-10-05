@@ -204,7 +204,8 @@ urlpatterns = [
 
     # Data Validation Page
     path('wx/quality_control/validation/', views.QualityControlView.as_view(), name='quality-control'),
-    path('api/quality_control/', views.qc_list, name='get-update-quality-control'),
+    path('api/quality_control/get/', views.get_qc_list, name='get-quality-control'),
+    path('api/quality_control/update/', views.update_qc_list, name='update-quality-control'),
     path('api/quality_control/description/', views.get_qc_description, name='get-qc-description'),
     path('api/quality_control/bulksave/', views.qc_validate_bulk, name='bulk-update-quality-control'),
     path('api/quality_control/fill_missing/', views.qc_validate_fill_missing, name='fill-missing-quality-control'),
