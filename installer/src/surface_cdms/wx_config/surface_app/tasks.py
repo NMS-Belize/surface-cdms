@@ -10,7 +10,8 @@ import shutil
 import click
 
 
-@shared_task(bind=True, soft_time_limit=3000, time_limit=3600)  # Set soft time limit of 50 min and a hard time limit of 1 hour
+#@shared_task(bind=True, soft_time_limit=3000, time_limit=3600)  # Set soft time limit of 50 min and a hard time limit of 1 hour
+@shared_task(bind=True, soft_time_limit=39600, time_limit=43200)  # Set soft time limit of 11 hrs and a hard time limit of 12 hrs
 def install_surface(self, project_dir, playbook_name, install_type):
     ansible_run = AnsibleRun.objects.create(task_id=self.request.id, status='STARTED')
 
