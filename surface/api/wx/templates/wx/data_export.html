@@ -141,6 +141,9 @@
               v-model="dataInterval"
               :items="dataIntervals"
               label="Data Interval"
+              :disabled="exportMode === 'validated'"
+              :hint="exportMode === 'validated' ? 'Validated exports use actual stored timestamps.' : 'Controls the timestamp grid and gap filling.'"
+              persistent-hint
               ></v-select>
             </v-col>
 
@@ -291,6 +294,20 @@
 
           <!-- Row 6 -->
           <v-row dense justify="start">
+            <!-- Choose the record filter independently of the exported numeric value. -->
+            <v-col cols="12" md="6" v-if="source.source === 'raw_data'">
+              <v-select
+                v-model="exportMode"
+                :items="exportModes"
+                label="Export data"
+                :hint="exportModeHint"
+                persistent-hint
+              ></v-select>
+            </v-col>
+            <v-col cols="12" v-else>
+              <span class="text-caption">Summary exports use stored summaries calculated under the summary QC rules.</span>
+            </v-col>
+
             <!-- Togglable switch to determine whether the output should be in local time of utc time -->
             <v-col class="text-center" cols="auto" v-if="source.source === 'hourly_summary' || source.source === 'raw_data'">
               <v-switch
@@ -299,28 +316,10 @@
                 label="Show in UTC"
               ></v-switch>
             </v-col>
-
-            <!-- Export aqc validated -->
-            <v-col class="text-center" cols="auto" v-if="source.source === 'raw_data'">
-              <v-switch
-                inset
-                v-model="export_aqc"
-                label="Export AQC Validated Data"
-              ></v-switch>
-            </v-col>
-
-            <!-- Export manual validated -->
-            <v-col class="text-center" cols="auto" v-if="source.source === 'raw_data'">
-              <v-switch
-                inset
-                v-model="export_mqc"
-                label="Export Manual Validated Data"
-              ></v-switch>
-            </v-col>    
           </v-row>
 
           <!-- Action Buttons -->
-          <v-row dense justify="start">
+          <v-row dense justify="start" class="mt-5 pt-5">
             <!-- Export to CSV button -->
             <v-col class="text-center" cols="auto">
               <v-btn
@@ -508,7 +507,7 @@
             :value="`tab-2`"
           >
 
-            <v-row dense v-if="documents.length > 0" justify="center">
+            <v-row dense v-if="combine_documents.length > 0" justify="center">
               <v-overlay :value="loading">
                 <v-progress-circular indeterminate size="64"></v-progress-circular>
               </v-overlay>
@@ -632,8 +631,12 @@
         station: [],
         searchStations: '',
         displayUTC: true,
-        export_aqc: true,
-        export_mqc: false,
+        exportMode: "aqc_good",
+        exportModes: [
+          { text: "Validated data", value: "validated" },
+          { text: "Good data — AQC only", value: "aqc_good" },
+          { text: "All data", value: "all" },
+        ],
         stations: [
           {% for station in station_list %}
           { value: {{ station.id }},
@@ -655,8 +658,7 @@
           { text: "Id", value: "id", align: "left"},
           { text: "Station", value: "station", align: "left"},
           { text: "Prepared by", value: "prepared_by", align: "left"},
-          { text: "AQC Checks", value: "aqc_checks", align: "left"},
-          { text: "MQC Checks", value: "mqc_checks", align: "left"},
+          { text: "Export selection", value: "export_mode_label", align: "left"},
           { text: "Requested at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "request_date", align: "left"},
           { text: "Ready at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "ready_date", align: "left"},
           { text: "Status", value: "status.text", align: "left"},
@@ -667,8 +669,7 @@
         combine_documents_headers: [
           { text: "Id", value: "id", align: "left"},
           { text: "Prepared by", value: "prepared_by", align: "left"},
-          { text: "AQC Checks", value: "aqc_checks", align: "left"},
-          { text: "MQC Checks", value: "mqc_checks", align: "left"},
+          { text: "Export selection", value: "export_mode_label", align: "left"},
           { text: "Requested at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "request_date", align: "left"},
           { text: "Ready at (SURFACE Default: {{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }})", value: "ready_date", align: "left"},
           { text: "Status", value: "status.text", align: "left"},
@@ -754,6 +755,15 @@
         }
       },
       computed: {
+        exportModeHint() {
+          if (this.exportMode === "validated") {
+            return "All validated records, including confirmed Missing. Actual timestamps; unvalidated cells stay blank. Numeric values use consisted when present, otherwise measured.";
+          }
+          if (this.exportMode === "aqc_good") {
+            return "AQC Good (flag 4) only. Numeric values use consisted when validated and present, otherwise measured. Gaps use -99.9.";
+          }
+          return "All QC statuses. Numeric values use consisted when validated and present, otherwise measured. Gaps use -99.9.";
+        },
         stationList () {
           let filteredStations = this.stations;
 
@@ -847,8 +857,7 @@
             variables: this.variables.map(v => v.value),
             data_interval: this.dataInterval,
             aggregation: this.aggregation.map(a => a.value),
-            aqc_checks: this.export_aqc,
-            mqc_checks: this.export_mqc,
+            export_mode: this.source.source === "raw_data" ? this.exportMode : "summary",
             displayUTC: this.displayUTC // determine whether or not the timestamps in the final output will be in UTC.
           }).then(response => {
             // update the table
@@ -910,8 +919,7 @@
             variables: this.variables.map(v => v.value),
             data_interval: this.dataInterval,
             aggregation: this.aggregation.map(a => a.value),
-            aqc_checks: this.export_aqc,
-            mqc_checks: this.export_mqc,
+            export_mode: this.source.source === "raw_data" ? this.exportMode : "summary",
             displayUTC: this.displayUTC // determine whether or not the timestamps in the final output will be in UTC.
           }).then(response => {
             // update the table combine xlsx table

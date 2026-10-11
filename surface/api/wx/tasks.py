@@ -16,6 +16,7 @@ import csv
 import tempfile
 import urllib3
 from minio import Minio
+from itertools import islice
 
 import math, cmath
 from matplotlib.transforms import Bbox
@@ -48,7 +49,7 @@ from django.utils.timezone import now
 from django.db.models import Count, Q
 from django.db import transaction
 from django_celery_beat.models import PeriodicTask
-
+from wx.utils import generate_expected_times
 
 from tempestas_api import settings
 from wx.decoders.flash import read_data as read_data_flash
@@ -66,6 +67,7 @@ from wx.decoders.weatherlink_json import read_file as read_file_weatherlink_json
 from wx.decoders.f2000 import read_file as read_file_f2000
 from wx.decoders.davis import read_file as read_file_davis
 from wx.decoders.R_format import read_file as read_file_R_format
+from wx.decoders.insert_missing_raw_data import insert_missing
 from wx.models import DataFile, CombineDataFile
 from wx.models import Document
 from wx.models import NoaaDcp
@@ -90,6 +92,7 @@ NOT_CHECKED = QualityFlagEnum.NOT_CHECKED.id
 SUSPICIOUS = QualityFlagEnum.SUSPICIOUS.id
 BAD = QualityFlagEnum.BAD.id
 GOOD = QualityFlagEnum.GOOD.id
+MISSING = QualityFlagEnum.MISSING.id
 
 logger = get_task_logger(__name__)
 db_logger = get_task_logger('db')
@@ -511,8 +514,10 @@ def backup_postgres():
 @shared_task
 def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_list=None):
     """
-        IMPORTANT: Hourly summaries are ran on SUSPICIOUS, GOOD and NOT CHECKED
-        
+        Completed validation: include validated Good (4), using consisted
+        when present and measured otherwise. Unvalidated observations: include
+        only AQC Not checked (1) or Good (4), using measured only.
+        Null and configured missing values are excluded.
         Hourly SUMMARIES include the top of the next hour and exclude the top of the current hour
         eg: (1300,1400]
 
@@ -541,7 +546,6 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
     if start_datetime > end_datetime:
         print('Error - start date is more recent than end date.')
         return
-    
     # ✅ Normalize to the hour bucket
     hour_start = start_datetime.replace(minute=0, second=0, microsecond=0)
     hour_end = hour_start + timedelta(hours=1)
@@ -598,10 +602,24 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
                 count(calc.value) AS num_records
             FROM 
                 raw_data rd
-                ,LATERAL (SELECT CASE WHEN rd.consisted IS NOT NULL THEN rd.consisted ELSE rd.measured END as value) AS calc
+                ,LATERAL (
+                    SELECT CASE
+                        -- A correction contributes only after validation.
+                        WHEN rd.is_validated
+                            THEN COALESCE(rd.consisted, rd.measured)
+                        ELSE rd.measured
+                    END AS value
+                ) AS calc
             WHERE rd.datetime > %(hour_start)s
               AND rd.datetime <=  %(hour_end)s
-              AND (rd.manual_flag in (1,4) OR (rd.manual_flag IS NULL AND rd.quality_flag in (1,2,4)))
+              AND (
+                  -- Completed validation takes precedence over AQC.
+                  (rd.is_validated AND rd.validated_flag = 4)
+                  OR (
+                      NOT rd.is_validated
+                      AND rd.quality_flag IN (1, 4)
+                  )
+              )
               AND NOT rd.is_daily
               AND calc.value != %(MISSING_VALUE)s
               AND station_id = ANY(%(station_ids)s) 
@@ -632,6 +650,11 @@ def calculate_hourly_summary(start_datetime=None, end_datetime=None, station_id_
 def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None):
     """
     Calculate (or recalculate) DAILY summaries.
+
+    Completed validation: include validated Good (4), using consisted when
+    present and measured otherwise. Unvalidated observations: include only
+    AQC Not checked (1) or Good (4), using measured only.
+    Null and configured missing values are excluded.
 
     IMPORTANT DESIGN RULES
     ----------------------
@@ -812,8 +835,9 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                                 rd.variable_id,
 
                                 CASE
-                                    WHEN rd.consisted IS NOT NULL
-                                        THEN rd.consisted
+                                    -- A correction contributes only after validation.
+                                    WHEN rd.is_validated
+                                        THEN COALESCE(rd.consisted, rd.measured)
                                     ELSE rd.measured
                                 END AS value
 
@@ -836,10 +860,11 @@ def calculate_daily_summary(start_date=None, end_date=None, station_id_list=None
                               )
 
                               AND (
-                                  rd.manual_flag IN (1, 4)
+                                  -- Completed validation takes precedence over AQC.
+                                  (rd.is_validated AND rd.validated_flag = 4)
                                   OR (
-                                      rd.manual_flag IS NULL
-                                      AND rd.quality_flag IN (1, 2, 4)
+                                      NOT rd.is_validated
+                                      AND rd.quality_flag IN (1, 4)
                                   )
                               )
                         ),
@@ -1144,7 +1169,6 @@ def calculate_station_minimum_interval(start_date=None, end_date=None, station_i
     )
 
 
-
 # retrieved data inventory (Individual MONTH VIEW)
 @shared_task
 def data_inventory_month_view(year, month, station_id, variable_id):
@@ -1168,6 +1192,14 @@ def data_inventory_month_view(year, month, station_id, variable_id):
 
     This ensures the QC percentage is calculated from the same
     reporting-day window as the stored completeness percentage.
+
+    QC eligibility (the same rules used by the summaries):
+    - Validated: only validated_flag=4 (Good) passes.
+      Use consisted when present; otherwise use measured.
+    - Unvalidated: only quality_flag IN (1, 4) passes.
+      Use measured, regardless of manual_flag or proposed_value.
+    - The selected value must be non-null and not MISSING_VALUE.
+    - Count all observations in the QC percentage denominator.
 
     Performance design:
     -------------------
@@ -1310,8 +1342,14 @@ def data_inventory_month_view(year, month, station_id, variable_id):
                     (rd.datetime AT TIME ZONE 'UTC')
                     + (%(utc_offset_minutes)s * INTERVAL '1 minute')
                 ) AS local_datetime,
-                rd.manual_flag,
-                rd.quality_flag
+                rd.is_validated,
+                rd.validated_flag,
+                rd.quality_flag,
+                CASE
+                    WHEN rd.is_validated
+                        THEN COALESCE(rd.consisted, rd.measured)
+                    ELSE rd.measured
+                END AS effective_value
             FROM raw_data rd
             WHERE rd.station_id = %(station_id)s
             AND rd.variable_id = %(variable_id)s
@@ -1334,8 +1372,10 @@ def data_inventory_month_view(year, month, station_id, variable_id):
                         THEN local_datetime::date - 1
                     ELSE local_datetime::date
                 END AS day_date,
-                manual_flag,
-                quality_flag
+                is_validated,
+                validated_flag,
+                quality_flag,
+                effective_value
             FROM raw_local
         ),
 
@@ -1343,9 +1383,18 @@ def data_inventory_month_view(year, month, station_id, variable_id):
             -- Aggregate QC once for the entire month.
             SELECT
                 day_date,
+                -- Keep failed/missing observations in the denominator.
                 COUNT(*) AS qc_amount,
                 COUNT(*) FILTER (
-                    WHERE COALESCE(manual_flag, quality_flag) IN (1, 4)
+                    WHERE (
+                        (is_validated AND validated_flag = 4)
+                        OR (
+                            NOT is_validated
+                            AND quality_flag IN (1, 4)
+                        )
+                    )
+                    AND effective_value IS NOT NULL
+                    AND effective_value != %(MISSING_VALUE)s
                 ) AS qc_passed_amount
             FROM raw_reporting_days
             GROUP BY day_date
@@ -1386,6 +1435,7 @@ def data_inventory_month_view(year, month, station_id, variable_id):
         "raw_start": raw_start,
         "raw_end": raw_end,
         "utc_offset_minutes": station.utc_offset_minutes,
+        "MISSING_VALUE": settings.MISSING_VALUE,
         "station_id": station_id,
         "variable_id": variable_id,
     }
@@ -1498,10 +1548,9 @@ def data_inventory_month_view(year, month, station_id, variable_id):
     return days
 
 
-
 @shared_task
 def calculate_last24h_summary():
-    # IMPORTANT: last24h summaries are run on SUSPICIOUS, GOOD and NOT CHECKED
+    """Refresh the rolling 24-hour summaries using the agreed QC rules."""
     start_at = time()
     run_datetime = datetime.now(pytz.UTC)
     end_datetime = run_datetime
@@ -1517,25 +1566,16 @@ def calculate_last24h_summary():
 
     try:
         with conn.cursor() as cursor:
-            sql_insert = f"""
-                INSERT INTO last24h_summary (
-                    datetime,
-                    station_id,
-                    variable_id,
-                    min_value,
-                    max_value,
-                    avg_value,
-                    sum_value,
-                    num_records,
-                    latest_value
-                )
-                WITH filtered AS (
+            sql_insert = """
+                WITH source_data AS (
                     SELECT
                         rd.datetime,
                         rd.station_id,
                         rd.variable_id,
                         CASE
-                            WHEN rd.consisted IS NOT NULL THEN rd.consisted
+                            -- Corrections contribute only after validation.
+                            WHEN rd.is_validated
+                                THEN COALESCE(rd.consisted, rd.measured)
                             ELSE rd.measured
                         END AS value
                     FROM raw_data rd
@@ -1543,15 +1583,24 @@ def calculate_last24h_summary():
                       AND rd.datetime <= %(end_datetime)s
                       AND rd.is_daily = false
                       AND (
-                            rd.consisted IS NOT NULL
-                            OR rd.quality_flag IN (1, 2, 4)
+                          -- Completed validation takes precedence over AQC.
+                          (rd.is_validated AND rd.validated_flag = 4)
+                          OR (
+                              NOT rd.is_validated
+                              AND rd.quality_flag IN (1, 4)
+                          )
                       )
-                      AND (
-                            CASE
-                                WHEN rd.consisted IS NOT NULL THEN rd.consisted
-                                ELSE rd.measured
-                            END
-                          ) != %(missing_value)s
+                ),
+                filtered AS (
+                    SELECT
+                        datetime,
+                        station_id,
+                        variable_id,
+                        value
+                    FROM source_data
+                    -- Check the selected value; zero is still valid.
+                    WHERE value IS NOT NULL
+                      AND value != %(missing_value)s
                 ),
                 agg AS (
                     SELECT
@@ -1568,6 +1617,7 @@ def calculate_last24h_summary():
                         variable_id
                 ),
                 latest AS (
+                    -- Use the newest observation eligible for the summary.
                     SELECT DISTINCT ON (station_id, variable_id)
                         station_id,
                         variable_id,
@@ -1577,6 +1627,28 @@ def calculate_last24h_summary():
                         station_id,
                         variable_id,
                         datetime DESC
+                ),
+                stale_rows AS (
+                    -- Remove old summaries when no eligible observations remain.
+                    -- These pairs are absent from agg, so they are not upserted.
+                    DELETE FROM last24h_summary AS previous
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM agg
+                        WHERE agg.station_id = previous.station_id
+                          AND agg.variable_id = previous.variable_id
+                    )
+                )
+                INSERT INTO last24h_summary (
+                    datetime,
+                    station_id,
+                    variable_id,
+                    min_value,
+                    max_value,
+                    avg_value,
+                    sum_value,
+                    num_records,
+                    latest_value
                 )
                 SELECT
                     %(run_datetime)s AS datetime,
@@ -1629,7 +1701,6 @@ def calculate_last24h_summary():
         "Last 24h summary finished | took=%.2fs",
         time() - start_at,
     )
-
 
 
 @shared_task
@@ -1865,6 +1936,166 @@ def save_flash_data(data_string):
     read_data_flash(data_string.encode('latin-1'))
 
 
+############################################################
+EXPORT_MODE_LABELS = {
+    "validated": "Validated data",
+    "aqc_good": "Good data - AQC only",
+    "all": "All data",
+    "summary": "Stored summary",
+}
+
+
+def normalise_export_mode(source, export_mode):
+    if source != "raw_data":
+        if export_mode not in (None, "legacy", "summary"):
+            raise ValueError("Export selection filters are available for raw data only.")
+        return "summary"
+    mode = "legacy" if export_mode is None else export_mode
+    if mode not in ("legacy", "validated", "aqc_good", "all"):
+        raise ValueError("Invalid raw-data export selection.")
+    return mode
+
+
+def describe_export_mode(export_mode, aqc_checks=False, mqc_checks=False, source=None):
+    if source and source.lower() not in ("raw_data", "raw data"):
+        return "Stored summary"
+    if export_mode in (None, "legacy"):
+        # Existing files used manual_flag for MQC; their labels must retain that meaning.
+        if aqc_checks and mqc_checks:
+            return "Legacy: AQC Good + MQC Good"
+        if aqc_checks:
+            return "Legacy: AQC Good"
+        if mqc_checks:
+            return "Legacy: MQC Good"
+        return "Legacy: All data"
+    return EXPORT_MODE_LABELS[export_mode]
+
+
+def describe_export_values(source):
+    if source != "raw_data":
+        return "Values from the selected stored summary and aggregation."
+    return (
+        "Numeric: consisted when validated and present, otherwise measured; "
+        "code variables use their stored code."
+    )
+
+
+def build_raw_export_query(export_mode, displayUTC, aqc_checks=False, mqc_checks=False):
+    """Return a parameterized query shared by CSV and combined XLSX exports."""
+    export_mode = normalise_export_mode("raw_data", export_mode)
+    quality_clause = ""
+    if export_mode == "validated":
+        # Validation completion is independent of the final flag/value, including Missing.
+        quality_clause = "AND data.is_validated IS TRUE"
+    elif export_mode == "aqc_good":
+        quality_clause = "AND data.quality_flag = 4"
+    elif export_mode == "legacy":
+        if aqc_checks:
+            quality_clause += " AND data.quality_flag = 4"
+        if mqc_checks:
+            quality_clause += " AND data.manual_flag = 4"
+
+    value_expression = """
+        CASE
+            WHEN var.variable_type ILIKE 'code' THEN data.code::text
+            WHEN data.is_validated IS TRUE
+                THEN COALESCE(data.consisted, data.measured)::text
+            ELSE data.measured::text
+        END
+    """
+    clock_shift = "" if displayUTC else " + %(utc_offset)s * INTERVAL '1 minute'"
+
+    if export_mode == "validated":
+        # Read actual records; generating a grid would fabricate unvalidated Missing rows.
+        # A null stored value stays blank; an explicit missing sentinel stays a value.
+        return f"""
+            SELECT
+                (data.datetime{clock_shift}) AT TIME ZONE 'UTC' AS datetime,
+                var.id AS variable_id,
+                {value_expression} AS value
+            FROM raw_data AS data
+            JOIN wx_variable AS var ON var.id = data.variable_id
+            WHERE data.station_id = %(station_id)s
+              AND data.datetime >= %(start_datetime)s
+              AND data.datetime < %(end_datetime)s
+              AND var.id IN %(variable_ids)s
+              {quality_clause}
+            ORDER BY data.datetime, var.id
+        """
+
+    # AQC Good and All retain the existing interval grid and sentinel gap filling.
+    return f"""
+        WITH processed_data AS (
+            SELECT
+                data.datetime,
+                var.id AS variable_id,
+                COALESCE({value_expression}, %(missing_value)s) AS value
+            FROM raw_data AS data
+            JOIN wx_variable AS var ON var.id = data.variable_id
+            WHERE data.station_id = %(station_id)s
+              AND data.datetime >= %(start_datetime)s
+              AND data.datetime < %(end_datetime)s
+              AND var.id IN %(variable_ids)s
+              {quality_clause}
+        )
+        SELECT
+            (times.generated_time{clock_shift}) AT TIME ZONE 'UTC' AS datetime,
+            variable.id AS variable_id,
+            COALESCE(processed_data.value, %(missing_value)s) AS value
+        FROM generate_series(
+            %(start_datetime)s,
+            %(end_datetime)s - INTERVAL '1 second',
+            %(data_interval)s * INTERVAL '1 second'
+        ) AS times(generated_time)
+        CROSS JOIN wx_variable AS variable
+        LEFT JOIN processed_data
+            ON processed_data.datetime = times.generated_time
+           AND processed_data.variable_id = variable.id
+        WHERE variable.id IN %(variable_ids)s
+        ORDER BY times.generated_time, variable.id
+    """
+
+
+def build_export_dataframe(query_result, variable_dict, precision_dict, type_dict, source):
+    # Reindex columns, never timestamps: sparse exports retain all requested variables
+    # without inventing readings or filling unvalidated cells with a missing sentinel.
+    variable_ids = sorted(variable_dict)
+    if query_result:
+        df = pandas.DataFrame(query_result, columns=["datetime", "variable_id", "value"])
+        df = df.pivot(index="datetime", columns="variable_id", values="value")
+        df = df.reindex(columns=variable_ids)
+        df.index = pandas.DatetimeIndex(df.index)
+        df.rename(columns=variable_dict, inplace=True)
+    else:
+        df = pandas.DataFrame(
+            columns=[variable_dict[variable_id] for variable_id in variable_ids],
+            index=pandas.DatetimeIndex([]),
+        )
+
+    date_formats = [("Year", "%Y")]
+    if source != "yearly_summary":
+        date_formats.append(("Month", "%m"))
+    if source not in ("monthly_summary", "yearly_summary"):
+        date_formats.append(("Day", "%d"))
+    if source in ("raw_data", "hourly_summary"):
+        date_formats.append(("Time", "%H:%M:%S"))
+
+    value_columns = list(df.columns)
+    for name, fmt in date_formats:
+        df[name] = df.index.strftime(fmt)
+    date_columns = [name for name, _ in date_formats]
+    df = df[date_columns + value_columns]
+    if source in ("daily_summary", "monthly_summary", "yearly_summary"):
+        df = df.drop_duplicates(subset=date_columns, keep="first")
+
+    for symbol, precision in precision_dict.items():
+        if symbol in df.columns and str(type_dict.get(symbol, "")).lower() != "code":
+            df[symbol] = df[symbol].map(
+                lambda value: format_export_value_by_precision(value, precision)
+            )
+    return df
+
+
 def format_export_value_by_precision(value, precision):
     """
     Format an exported numeric value using the variable's configured precision.
@@ -1884,8 +2115,8 @@ def format_export_value_by_precision(value, precision):
         return value
 
     # Keep the missing-data sentinel unchanged
-    if str(value) == "-99.9":
-        return "-99.9"
+    if str(value) == str(settings.MISSING_VALUE):
+        return str(settings.MISSING_VALUE)
 
     # If no precision is configured, leave the value as-is
     if precision is None:
@@ -1911,8 +2142,10 @@ def format_export_value_by_precision(value, precision):
 
 
 @shared_task
-def export_data(station_id, source, start_date, end_date, variable_ids, file_id, agg, aqc_checks, mqc_checks, displayUTC):
+def export_data(station_id, source, start_date, end_date, variable_ids, file_id, agg, aqc_checks, mqc_checks, displayUTC, export_mode=None):
+    current_datafile = DataFile.objects.get(pk=file_id)
     try:
+        export_mode = normalise_export_mode(source, export_mode or current_datafile.export_mode)
         logger.info(f'Exporting data (file "{file_id}")')
 
         start_date_utc = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
@@ -1921,8 +2154,6 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
         station = Station.objects.get(pk=station_id)
         station_timezone_offset_min = station.utc_offset_minutes
         station_local_tz = timezone(timedelta(minutes=station_timezone_offset_min)) # Convert minutes into a timezone object
-
-        current_datafile = DataFile.objects.get(pk=file_id)
 
         variable_ids = tuple(variable_ids)
         # variable_ids = ','.join([str(x) for x in variable_ids])
@@ -2049,25 +2280,11 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
         # adding extra seconds to the list when the souce is raw_data
         # the number of seconds added is based on the data interval selected
         elif source == 'raw_data':
-            datetime_list.append(converted_end_date + timedelta(seconds=current_datafile.interval_in_seconds))
-
-        # quality control clause based on users request
-        quality_clause = ""
-
-        # if user request aqc data
-        if aqc_checks and mqc_checks:
-            quality_clause = """
-                AND data.quality_flag = 4
-                AND data.manual_flag = 4
-            """
-        elif aqc_checks:
-            quality_clause = """
-                AND data.quality_flag = 4
-            """
-        elif mqc_checks:
-            quality_clause = """
-                AND data.manual_flag = 4
-            """
+            if export_mode == "validated":
+                # Include the selected end timestamp once, without creating future gaps.
+                datetime_list[-1] = converted_end_date + timedelta(microseconds=1)
+            else:
+                datetime_list.append(converted_end_date + timedelta(seconds=current_datafile.interval_in_seconds))
 
         query_result = []
         for i in range(0, len(datetime_list) - 1):
@@ -2075,59 +2292,20 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
             current_end_datetime = datetime_list[i + 1]
 
             with connection.cursor() as cursor:
-                if source == 'raw_data': 
-
-                    # removing the offset addition from the query based on the truthines of displayUTC. Removed `+ interval '%(utc_offset)s minutes'`
-                    if displayUTC:
-                        query_raw_data = f'''
-                            WITH processed_data AS (
-                                SELECT datetime
-                                    ,var.id as variable_id
-                                    ,COALESCE(CASE WHEN var.variable_type ilike 'code' THEN data.code ELSE data.measured::varchar END, '-99.9') AS value
-                                FROM raw_data data
-                                JOIN wx_variable var ON data.variable_id = var.id AND var.id IN %(variable_ids)s
-                                WHERE data.datetime >= %(start_datetime)s
-                                AND data.datetime <= %(end_datetime)s
-                                AND data.station_id = %(station_id)s
-                                {quality_clause}
-                            )
-                            SELECT (generated_time) at time zone 'utc' as datetime
-                                ,variable.id
-                                ,COALESCE(value, '-99.9')
-                            FROM generate_series(%(start_datetime)s, %(end_datetime)s - INTERVAL '1 seconds', INTERVAL '%(data_interval)s seconds') generated_time
-                            JOIN wx_variable variable ON variable.id IN %(variable_ids)s
-                            LEFT JOIN processed_data ON datetime = generated_time AND variable.id = variable_id
-                        ''' 
-                    # keeping the offset addition in the query based on the truthines of displayUTC.
-                    else:
-                        query_raw_data = f'''
-                            WITH processed_data AS (
-                                SELECT datetime
-                                    ,var.id as variable_id
-                                    ,COALESCE(CASE WHEN var.variable_type ilike 'code' THEN data.code ELSE data.measured::varchar END, '-99.9') AS value
-                                FROM raw_data data
-                                JOIN wx_variable var ON data.variable_id = var.id AND var.id IN %(variable_ids)s
-                                WHERE data.datetime >= %(start_datetime)s
-                                AND data.datetime <= %(end_datetime)s
-                                AND data.station_id = %(station_id)s
-                                {quality_clause}
-                            )
-                            SELECT (generated_time + interval '%(utc_offset)s minutes') at time zone 'utc' as datetime
-                                ,variable.id
-                                ,COALESCE(value, '-99.9')
-                            FROM generate_series(%(start_datetime)s, %(end_datetime)s - INTERVAL '1 seconds', INTERVAL '%(data_interval)s seconds') generated_time
-                            JOIN wx_variable variable ON variable.id IN %(variable_ids)s
-                            LEFT JOIN processed_data ON datetime = generated_time AND variable.id = variable_id
-                        ''' 
-
-                    logging.info(query_raw_data, {'utc_offset': station.utc_offset_minutes, 'variable_ids': variable_ids,
-                          'start_datetime': current_start_datetime, 'end_datetime': current_end_datetime,
-                          'station_id': station_id, 'data_interval': current_datafile.interval_in_seconds})
-
-
-                    cursor.execute(query_raw_data, {'utc_offset': station.utc_offset_minutes, 'variable_ids': variable_ids,
-                          'start_datetime': current_start_datetime, 'end_datetime': current_end_datetime,
-                          'station_id': station_id, 'data_interval': current_datafile.interval_in_seconds})
+                if source == 'raw_data':
+                    # One shared query gives CSV and combined XLSX the same QC behavior.
+                    query_raw_data = build_raw_export_query(
+                        export_mode, displayUTC, aqc_checks, mqc_checks
+                    )
+                    cursor.execute(query_raw_data, {
+                        "utc_offset": station.utc_offset_minutes,
+                        "variable_ids": variable_ids,
+                        "start_datetime": current_start_datetime,
+                        "end_datetime": current_end_datetime,
+                        "station_id": station_id,
+                        "data_interval": current_datafile.interval_in_seconds,
+                        "missing_value": str(settings.MISSING_VALUE),
+                    })
 
                 elif source == 'hourly_summary':
                     
@@ -2337,8 +2515,9 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
             f.write(f'Description:{variable_names_string}\n')
             f.write(f'Latitude:{station.latitude}\n')
             f.write(f'Longitude:{station.longitude}\n')
-            f.write(f'Passed AQC Checks: {current_datafile.aqc_checks}\n')
-            f.write(f'Passed MQC Checks: {current_datafile.mqc_checks}\n')
+            selection = describe_export_mode(export_mode, aqc_checks, mqc_checks, source)
+            f.write(f'Export selection:{selection}\n')
+            f.write(f'Value selection:{describe_export_values(source)}\n')
             f.write(f'Date of completion (UTC):{date_of_completion.strftime("%Y-%m-%d %H:%M:%S")}\n')
             f.write(f'Prepared by:{current_datafile.prepared_by}\n')
             f.write(f'Start date (UTC):{start_date_header}, End date (UTC):{end_date_header}\n\n')
@@ -2365,72 +2544,16 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
                 f.write(f'Aggregation: Instantaneous Raw Data\n\n')
 
 
-        lines = 0
-        if query_result:
-            df = pandas.DataFrame(data=query_result).pivot(index=0, columns=1)
-            df.rename(columns=variable_dict, inplace=True)
-            df.columns = df.columns.droplevel(0)
-            if source == 'daily_summary':
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                df['Month'] = df.index.map(lambda x: x.strftime('%m'))
-                df['Day'] = df.index.map(lambda x: x.strftime('%d'))
-                cols = df.columns.tolist()
-                cols = cols[-3:] + cols[:-3]
-                df = df[cols]
-                df = df.drop_duplicates(subset=['Day', 'Month', 'Year'], keep='first')
-            elif source == 'monthly_summary':                
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                df['Month'] = df.index.map(lambda x: x.strftime('%m'))
-                cols = df.columns.tolist()
-                cols = cols[-2:] + cols[:-2]
-                df = df[cols]
-                df = df.drop_duplicates(subset=['Month', 'Year'], keep='first')
-            elif source == 'yearly_summary':
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                cols = df.columns.tolist()
-                cols = cols[-1:] + cols[:-1]
-                df = df[cols]
-                df = df.drop_duplicates(subset=['Year'], keep='first')
-            else:
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                df['Month'] = df.index.map(lambda x: x.strftime('%m'))
-                df['Day'] = df.index.map(lambda x: x.strftime('%d'))
-                df['Time'] = df.index.map(lambda x: x.strftime('%H:%M:%S'))
-                cols = df.columns.tolist()
-                cols = cols[-4:] + cols[:-4]
-                df = df[cols]
+        # Empty exports still have headings and can be converted to XLSX.
+        df = build_export_dataframe(
+            query_result, variable_dict, variable_precision_dict,
+            variable_type_dict, source
+        )
+        df.to_csv(filepath, index=False, mode="a", header=True)
+        lines = len(df.index)
 
-
-            # Apply each variable's configured precision before writing the CSV.
-            #
-            # At this point, the DataFrame columns have already been renamed from
-            # variable IDs to variable symbols using variable_dict.
-            #
-            # Example:
-            #   If Air Temperature has symbol "AT" and precision=4,
-            #   then values in df["AT"] will be exported like:
-            #       25.3000
-            #       25.3457
-            #
-            # Code variables are skipped because their values are not normal numeric
-            # measured values.
-            for variable_symbol, precision in variable_precision_dict.items():
-                if variable_symbol not in df.columns:
-                    continue
-
-                variable_type = variable_type_dict.get(variable_symbol)
-
-                if variable_type and variable_type.lower() == "code":
-                    continue
-
-                df[variable_symbol] = df[variable_symbol].map(
-                    lambda value: format_export_value_by_precision(value, precision)
-                )
-
-            df.to_csv(filepath, index=False, mode='a', header=True)
-
-
-            lines = len(df.index)
+        # Mark ready only after both output formats have been created.
+        convert_csv_xlsx(filepath, station.name, file_id)
 
         current_datafile.ready = True
         current_datafile.ready_at = date_of_completion
@@ -2438,70 +2561,52 @@ def export_data(station_id, source, start_date, end_date, variable_ids, file_id,
         current_datafile.save()
         logger.info(f'Data exported successfully (file "{file_id}")')
 
-        # create a new .xlsx version of the file
-        convert_csv_xlsx(filepath, station.name, file_id)
-
 
     except Exception as e:
         current_datafile.ready = False
         current_datafile.ready_at = datetime.utcnow()
         current_datafile.lines = 0
         current_datafile.save()
-        logger.error(f'Error on export data file "{file_id}". {repr(e)}')
+        logger.exception(f'Error on export data file "{file_id}". {repr(e)}')
 
 
 # converts csv files to .xlsx format
+# Convert CSV with proper quoting and blank cells, including headings-only files.
 def convert_csv_xlsx(file_path, file_station, file_id):
-    if os.path.exists(file_path) and file_station:
-        # open the csv and read all lines
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
+    import csv
 
-        try:
-            # represents the workbook
-            wb = Workbook()
-            # currently active default worksheet in the workbook
-            ws = wb.active
-            # Naming the worksheet
-            ws.title = f'{file_station}'
+    wb = Workbook()
+    ws = wb.active
+    ws.title = str(file_station)
+    table_started = False
 
-            # Write metadata
-            for i, line in enumerate(lines):
-                # Stop adding metadata once the data table starts
-                if "Year" in line:
-                    start_data_index = i + 1
-                    break
-                # writing the metadata to a single column
-                ws.cell(row=i + 1, column=1, value=line.strip())
+    with open(file_path, "r", newline="") as file:
+        for row in csv.reader(file):
+            if not table_started and row and row[0] == "Year":
+                table_started = True
+            if table_started:
+                ws.append([None if value == "" else value for value in row])
+            else:
+                ws.append([",".join(row)])
 
-            # Write tabular data headers and rows
-            headers = lines[start_data_index - 1].strip().split(",")
-            ws.append(headers)  # Add headers
+    if not table_started:
+        raise ValueError("The exported CSV has no table headings.")
 
-            # Add the tabular data stating from start_data_index till the end of the list
-            for line in lines[start_data_index:]:
-                row_data = line.strip().split(",")
-                ws.append(row_data)
-        except Exception as e:
-            logger.error(f'An error occured while attempting to convert {file_id}.csv to .xlsx. Error Output: {e}')
-
-        try:
-            # Save the workbook
-            wb.save(f'{settings.EXPORTED_DATA_CELERY_PATH}{file_id}.xlsx')  
-        except Exception as e:
-            logger.error(f'An error occured while attempting to save the {file_id}.xlsx file. Error Output: {e}')
+    wb.save(f"{settings.EXPORTED_DATA_CELERY_PATH}{file_id}.xlsx")
 
 
 # combine .xlsx files into a single .xlsx file
 @shared_task
-def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_ids, aggregation, displayUTC, data_interval_seconds, prepared_by, data_source_description, aqc_checks, mqc_checks, entry_id):
+def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_ids, aggregation, displayUTC, data_interval_seconds, prepared_by, data_source_description, aqc_checks, mqc_checks, entry_id, export_mode=None):
     # grab the current combine xlsx data file entry
     current_datafile = CombineDataFile.objects.get(pk=entry_id)
 
     try:
 
         # list containing the data frame of each station
+        export_mode = normalise_export_mode(data_source, export_mode or current_datafile.export_mode)
         station_data_frames = []
+        total_lines = 0
 
         for station_id in station_ids:
             # a list to hold the dataframes containing the data queried from the db
@@ -2513,9 +2618,9 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             if aggregation:
                 for agg in aggregation:
 
-                    export_data_df.append(export_data_xlsx(station_id, data_source, start_date, end_date, variable_ids, agg, aqc_checks, mqc_checks, displayUTC, data_interval_seconds))
+                    export_data_df.append(export_data_xlsx(station_id, data_source, start_date, end_date, variable_ids, agg, aqc_checks, mqc_checks, displayUTC, data_interval_seconds, export_mode=export_mode))
             else:
-                export_data_df.append(export_data_xlsx(station_id, data_source, start_date, end_date, variable_ids, aggregation, aqc_checks, mqc_checks, displayUTC, data_interval_seconds))
+                export_data_df.append(export_data_xlsx(station_id, data_source, start_date, end_date, variable_ids, aggregation, aqc_checks, mqc_checks, displayUTC, data_interval_seconds, export_mode=export_mode))
 
             # Getting the columns in common between dataframs pertaining to a specific station
             if data_source in ['raw_data', 'hourly_summary']:
@@ -2597,6 +2702,7 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
 
             # the number of entries in the data
             lines = len(station_data_frames[x].index)
+            total_lines += lines
 
             # Create a new sheet with the station name
             sheet = combined_workbook.create_sheet(title=f"{station.name} - {station.code}")
@@ -2604,10 +2710,10 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             # Write DataFrame to the sheet
             for r_idx, row in enumerate(dataframe_to_rows(station_data_frames[x], index=False, header=True), start=1):
                 for c_idx, value in enumerate(row, start=1):
-                    sheet.cell(row=r_idx, column=c_idx, value=value)
+                    sheet.cell(row=r_idx, column=c_idx, value=None if pandas.isna(value) else value)
 
             # insert a new row at the top of the sheet to add the aggregation options and headers
-            sheet.insert_rows(1, 12) # insert two rows at row 1
+            sheet.insert_rows(1, 13)  # Metadata and aggregation headings occupy separate rows.
 
             # raw data does not have any aggregation options
             if data_source != 'raw_data':
@@ -2633,13 +2739,13 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
 
                 for x in range(qty_merge,-1,-1):
                     # Merge
-                    sheet.merge_cells(start_row=12, start_column=start_col, end_row=12, end_column=end_col)
-                    cell = sheet.cell(row=12, column=start_col, value=aggregation[x].upper())
+                    sheet.merge_cells(start_row=13, start_column=start_col, end_row=13, end_column=end_col)
+                    cell = sheet.cell(row=13, column=start_col, value=aggregation[x].upper())
                     cell.font = Font(bold=True)
                     cell.alignment = Alignment(horizontal="center", vertical="center")
 
                     # Apply bold border to all merged cells
-                    for row in range(12, 13):  # Only row 12
+                    for row in range(13, 14):  # Only the aggregation heading row
                         for col in range(start_col, end_col + 1):
                             sheet.cell(row=row, column=col).border = bold_border
 
@@ -2654,8 +2760,9 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
             cell = sheet.cell(row=3, column=1, value=f'Description:{variable_names_string}')
             cell = sheet.cell(row=4, column=1, value=f'Latitude:{station.latitude}')
             cell = sheet.cell(row=5, column=1, value=f'Longitude:{station.longitude}')
-            cell = sheet.cell(row=6, column=1, value=f'Passed AQC Checks:{aqc_checks}')
-            cell = sheet.cell(row=7, column=1, value=f'Passed MQC Checks:{mqc_checks}')
+            selection = describe_export_mode(export_mode, aqc_checks, mqc_checks, data_source)
+            cell = sheet.cell(row=6, column=1, value=f'Export selection:{selection}')
+            cell = sheet.cell(row=7, column=1, value=f'Value selection:{describe_export_values(data_source)}')
             cell = sheet.cell(row=8, column=1, value=f'Date of completion (UTC):{date_of_completion.strftime("%Y-%m-%d %H:%M:%S")}')
             cell = sheet.cell(row=9, column=1, value=f'Prepared by:{prepared_by}')
 
@@ -2674,7 +2781,7 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
 
         current_datafile.ready = True
         current_datafile.ready_at = date_of_completion
-        current_datafile.lines = lines
+        current_datafile.lines = total_lines
         current_datafile.save()
         logger.info(f'Combine Data exported successfully (file "combine-{entry_id}")')
     
@@ -2688,7 +2795,8 @@ def combine_xlsx_files(station_ids, data_source, start_date, end_date, variable_
 
 
 # returns the data frame for each query ran in order to facilitate combining the files later
-def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg, aqc_checks, mqc_checks, displayUTC, data_interval_seconds):
+def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg, aqc_checks, mqc_checks, displayUTC, data_interval_seconds, export_mode=None):
+    export_mode = normalise_export_mode(source, export_mode)
 
     start_date_utc = pytz.UTC.localize(datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S'))
     end_date_utc = pytz.UTC.localize(datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S'))
@@ -2823,26 +2931,11 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
         # adding extra seconds to the list when the souce is raw_data
         # the number of seconds added is based on the data interval selected
         elif source == 'raw_data':
-            datetime_list.append(converted_end_date + timedelta(seconds=data_interval_seconds))
-
-        # quality control clause based on users request
-        quality_clause = ""
-
-        # if user request aqc data
-        if aqc_checks and mqc_checks:
-            quality_clause = """
-                AND data.quality_flag = 4
-                AND data.manual_flag = 4
-            """
-        elif aqc_checks:
-            quality_clause = """
-                AND data.quality_flag = 4
-            """
-        elif mqc_checks:
-            quality_clause = """
-                AND data.manual_flag = 4
-            """
-
+            if export_mode == "validated":
+                # Include the selected end timestamp once, without creating future gaps.
+                datetime_list[-1] = converted_end_date + timedelta(microseconds=1)
+            else:
+                datetime_list.append(converted_end_date + timedelta(seconds=data_interval_seconds))
 
         query_result = []
         for i in range(0, len(datetime_list) - 1):
@@ -2850,59 +2943,20 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
             current_end_datetime = datetime_list[i + 1]
 
             with connection.cursor() as cursor:
-                if source == 'raw_data': 
-
-                    # removing the offset addition from the query based on the truthines of displayUTC. Removed `+ interval '%(utc_offset)s minutes'`
-                    if displayUTC:
-                        query_raw_data = f'''
-                            WITH processed_data AS (
-                                SELECT datetime
-                                    ,var.id as variable_id
-                                    ,COALESCE(CASE WHEN var.variable_type ilike 'code' THEN data.code ELSE data.measured::varchar END, '-99.9') AS value
-                                FROM raw_data data
-                                JOIN wx_variable var ON data.variable_id = var.id AND var.id IN %(variable_ids)s
-                                WHERE data.datetime >= %(start_datetime)s
-                                AND data.datetime <= %(end_datetime)s
-                                AND data.station_id = %(station_id)s
-                                {quality_clause}
-                            )
-                            SELECT (generated_time) at time zone 'utc' as datetime
-                                ,variable.id
-                                ,COALESCE(value, '-99.9')
-                            FROM generate_series(%(start_datetime)s, %(end_datetime)s - INTERVAL '1 seconds', INTERVAL '%(data_interval)s seconds') generated_time
-                            JOIN wx_variable variable ON variable.id IN %(variable_ids)s
-                            LEFT JOIN processed_data ON datetime = generated_time AND variable.id = variable_id
-                        ''' 
-                    # keeping the offset addition in the query based on the truthines of displayUTC.
-                    else:
-                        query_raw_data = f'''
-                            WITH processed_data AS (
-                                SELECT datetime
-                                    ,var.id as variable_id
-                                    ,COALESCE(CASE WHEN var.variable_type ilike 'code' THEN data.code ELSE data.measured::varchar END, '-99.9') AS value
-                                FROM raw_data data
-                                JOIN wx_variable var ON data.variable_id = var.id AND var.id IN %(variable_ids)s
-                                WHERE data.datetime >= %(start_datetime)s
-                                AND data.datetime <= %(end_datetime)s
-                                AND data.station_id = %(station_id)s
-                                {quality_clause}
-                            )
-                            SELECT (generated_time + interval '%(utc_offset)s minutes') at time zone 'utc' as datetime
-                                ,variable.id
-                                ,COALESCE(value, '-99.9')
-                            FROM generate_series(%(start_datetime)s, %(end_datetime)s - INTERVAL '1 seconds', INTERVAL '%(data_interval)s seconds') generated_time
-                            JOIN wx_variable variable ON variable.id IN %(variable_ids)s
-                            LEFT JOIN processed_data ON datetime = generated_time AND variable.id = variable_id
-                        ''' 
-
-                    logging.info(query_raw_data, {'utc_offset': station.utc_offset_minutes, 'variable_ids': variable_ids,
-                          'start_datetime': current_start_datetime, 'end_datetime': current_end_datetime,
-                          'station_id': station_id, 'data_interval': data_interval_seconds})
-
-
-                    cursor.execute(query_raw_data, {'utc_offset': station.utc_offset_minutes, 'variable_ids': variable_ids,
-                          'start_datetime': current_start_datetime, 'end_datetime': current_end_datetime,
-                          'station_id': station_id, 'data_interval': data_interval_seconds})
+                if source == 'raw_data':
+                    # One shared query gives CSV and combined XLSX the same QC behavior.
+                    query_raw_data = build_raw_export_query(
+                        export_mode, displayUTC, aqc_checks, mqc_checks
+                    )
+                    cursor.execute(query_raw_data, {
+                        "utc_offset": station.utc_offset_minutes,
+                        "variable_ids": variable_ids,
+                        "start_datetime": current_start_datetime,
+                        "end_datetime": current_end_datetime,
+                        "station_id": station_id,
+                        "data_interval": data_interval_seconds,
+                        "missing_value": str(settings.MISSING_VALUE),
+                    })
 
                 elif source == 'hourly_summary':
                     
@@ -3079,72 +3133,14 @@ def export_data_xlsx(station_id, source, start_date, end_date, variable_ids, agg
                 query_result.extend(cursor.fetchall())
 
 
-        if query_result:
-            
-            df = pandas.DataFrame(data=query_result).pivot(index=0, columns=1)
-            df.rename(columns=variable_dict, inplace=True)
-            df.columns = df.columns.droplevel(0)
-            if source == 'daily_summary':
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                df['Month'] = df.index.map(lambda x: x.strftime('%m'))
-                df['Day'] = df.index.map(lambda x: x.strftime('%d'))
-                cols = df.columns.tolist()
-                cols = cols[-3:] + cols[:-3]
-                df = df[cols]
-                df = df.drop_duplicates(subset=['Day', 'Month', 'Year'], keep='first')
-            elif source == 'monthly_summary':                
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                df['Month'] = df.index.map(lambda x: x.strftime('%m'))
-                cols = df.columns.tolist()
-                cols = cols[-2:] + cols[:-2]
-                df = df[cols]
-                df = df.drop_duplicates(subset=['Month', 'Year'], keep='first')
-            elif source == 'yearly_summary':
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                cols = df.columns.tolist()
-                cols = cols[-1:] + cols[:-1]
-                df = df[cols]
-                df = df.drop_duplicates(subset=['Year'], keep='first')
-            else:
-                df['Year'] = df.index.map(lambda x: x.strftime('%Y'))
-                df['Month'] = df.index.map(lambda x: x.strftime('%m'))
-                df['Day'] = df.index.map(lambda x: x.strftime('%d'))
-                df['Time'] = df.index.map(lambda x: x.strftime('%H:%M:%S'))
-                cols = df.columns.tolist()
-                cols = cols[-4:] + cols[:-4]
-                df = df[cols]
-
-            # Apply each variable's configured precision before returning the DataFrame.
-            #
-            # At this point:
-            #   - df has already been pivoted
-            #   - variable ID columns have already been renamed to variable symbols
-            #   - Year/Month/Day/Time columns have already been added
-            #
-            # Example:
-            #   If Air Temperature has symbol "AT" and precision=4,
-            #   then df["AT"] will contain values like:
-            #       25.3000
-            #       25.3457
-            #
-            # Code variables are skipped because they are not normal numeric measured values.
-            for variable_symbol, precision in variable_precision_dict.items():
-                if variable_symbol not in df.columns:
-                    continue
-
-                variable_type = variable_type_dict.get(variable_symbol)
-
-                if variable_type and variable_type.lower() == "code":
-                    continue
-
-                df[variable_symbol] = df[variable_symbol].map(
-                    lambda value: format_export_value_by_precision(value, precision)
-                )
-
-            return df
+        return build_export_dataframe(
+            query_result, variable_dict, variable_precision_dict,
+            variable_type_dict, source
+        )
 
     except Exception as e:
-        logger.error(f'Error on export data as combine xlsx. Error - {repr(e)}')
+        logger.exception(f'Error on export data as combine xlsx. Error - {repr(e)}')
+        raise  # The parent task must record a failed query as an error.
 
 
 ############################################################
@@ -4063,7 +4059,7 @@ def process_manual_station_data_files(data_file_id_list, selected_decoder="defau
             if selected_decoder == "default":
                 current_decoder(filename=station_data_file.filepath
                                 , override_data_on_conflict=station_data_file.override_data_on_conflict
-                                , is_manually_validated=station_data_file.is_manually_validated)
+                                , is_manually_reviewed=station_data_file.is_manually_reviewed)
                 
             elif selected_decoder == "davis":
                 current_decoder(filename=station_data_file.filepath
@@ -4098,319 +4094,6 @@ def process_manual_station_data_files(data_file_id_list, selected_decoder="defau
             logger.error(f'Error - {repr(e)}')
 
 
-# Persist Logic Starts here
-# Despite its name this fxn doesn't get only hourly_raw_data
-# persist checks called during hourly AND daily summaries call this fxn with daily summaries retrieving data for the whole day.
-def get_hourly_raw_data(start_datetime, end_datetime, station_ids):
-    con = get_connection()
-
-    # note that in the query bellow the 'qc_persist_quality_flag IS NULL' condition IS COMMENTED OUT!
-    sql = '''SELECT *
-             FROM raw_data
-             WHERE datetime BETWEEN %(start_datetime)s AND %(end_datetime)s
-               AND station_id = ANY(%(station_ids)s) 
-               -- AND qc_persist_quality_flag IS NULL
-             ORDER BY datetime DESC
-          '''
-    params = {"station_ids": station_ids, "start_datetime": start_datetime, "end_datetime": end_datetime}
-    
-
-    # sql_query = pd.read_sql_query(sql=sql, con=con, params=params)
-    # con.close()
-
-    # df = pd.DataFrame(sql_query)
-
-    df = pd.read_sql_query(sql=sql, con=ENGINE, params=params)
-
-    return df
-
-
-# Build a dictionary of stations and their variables with observed datetime ranges
-def get_hourly_sv_dict(start_datetime, end_datetime, station_ids):
-
-    # Retrieve raw_data for the given time range and station IDs
-    df = get_hourly_raw_data(start_datetime, end_datetime, station_ids)
-
-    dict_sv = {}
-
-    # Loop through each station
-    # Note: stations with no data in the time range will map to an empty dict
-    for station_id in station_ids:
-
-        # Get unique variable IDs observed at this station
-        variable_ids = df[df['station_id']==station_id].variable_id.unique()
-
-        dict_v = {}
-
-        # For each variable, determine the earliest and latest datetime observed
-        for variable_id in variable_ids:
-
-            s_datetime = df[(df['station_id']==station_id) & (df['variable_id']==variable_id)].datetime.min()
-
-            e_datetime = df[(df['station_id']==station_id) & (df['variable_id']==variable_id)].datetime.max()
-
-            dict_v[variable_id] = (s_datetime, e_datetime)
-
-        # Assign variable ranges to the station
-        dict_sv[station_id] = dict_v
-
-    # Resulting format of dict_sv:
-    # {
-    #     station_id: {
-    #         variable_id: (start_datetime, end_datetime)
-    #     }
-    # }
-
-    return dict_sv
-
-
-
-def get_hourly_sv_data(start_datetime, end_datetime, station_id, variable_id, window):
-    sql = '''
-        SELECT *
-        FROM raw_data
-        WHERE (datetime BETWEEN %(start_datetime)s AND %(end_datetime)s)
-          AND station_id = %(station_id)s
-          AND variable_id = %(variable_id)s
-    '''
-
-    params = {
-        "station_id": station_id,
-        "variable_id": int(variable_id),
-        "start_datetime": start_datetime - timedelta(seconds=window),
-        "end_datetime": end_datetime,
-    }
-
-    df = pd.read_sql_query(sql=sql, con=ENGINE, params=params)
-
-    # sql_query = pd.read_sql_query(sql=sql, con=con, params=params)
-    # con.close()
-
-    # df = pd.DataFrame(sql_query)
-
-    if not df.empty:
-        mask = df.datetime.between(start_datetime, end_datetime)
-        df["updated"] = False
-        df.loc[mask, "updated"] = True
-
-    return df
-
-
-
-def most_frequent(List):
-    return max(set(List), key = List.count)
-
-# Interval
-# This function computes the most common time difference (in seconds) between consecutive datetime 
-# entries in a DataFrame, effectively detecting the dataset’s sampling interval.
-# If each interval occurs exactly once, it returns the first one it encounters.
-def get_interval(df):
-    interval_list = df.datetime.diff(periods=1).dt.total_seconds().replace(np.nan, 0).astype("int32")
-    interval_list = list(interval_list)
-    interval = most_frequent(interval_list)
-    return abs(interval)
-
-# Window
-def get_window(station_id, variable_id):
-
-    # default window of 3600 seconds (1 hour) if the station/variable doesn't exist
-    try:
-        _station = Station.objects.get(id=station_id)
-        _variable = Variable.objects.get(id=variable_id) 
-    except ObjectDoesNotExist:
-        return 3600
-        
-    if  _station.is_automatic:
-        hours = _variable.persistence_window_hourly
-
-        if hours is None:
-            hours = 1 # 1 Hour
-    else:
-        hours = _variable.persistence_window
-
-        if hours is None:
-            hours = 96 # 4 Days
-
-    return hours*3600
-
-# Thresholds
-def get_thresholds(station_id, variable_id, interval, window):
-    thresholds = {}
-    if window == 0 or interval==0:
-        return thresholds
-
-    try:
-        # Trying to set persist thresholds using current station
-        _persist = QcPersistThreshold.objects.get(station_id=station_id, variable_id=variable_id, interval=interval, window=window)
-        thresholds['persist_min'] = _persist.minimum_variance
-        thresholds['persist_des'] = 'Custom station Threshold'
-    except ObjectDoesNotExist:
-        try:
-            # Trying to set persist thresholds using current station with NULL intervall
-            _range = QcPersistThreshold.objects.get(station_id=station_id, variable_id=variable_id, interval__isnull=True, window=window)        
-            thresholds['persist_min'] = _persist.minimum_variance
-            thresholds['persist_des'] = 'Custom station Threshold'
-        except ObjectDoesNotExist:
-            try:
-                # Trying to set persist thresholds using current station
-                _station = Station.objects.get(pk=station_id)
-                _persist = QcPersistThreshold.objects.get(station_id=_station.reference_station_id, variable_id=variable_id, interval=interval, window=window)
-                thresholds['persist_min'] = _persist.minimum_variance
-                thresholds['persist_des'] = 'Reference station threshold'
-            except ObjectDoesNotExist:
-                try:
-                    # Trying to set persist thresholds using current station with NULL intervall
-                    _station = Station.objects.get(pk=station_id)
-                    _persist = QcPersistThreshold.objects.get(station_id=_station.reference_station_id, variable_id=variable_id, interval__isnull=True, window=window)        
-                    thresholds['persist_min'] = _persist.minimum_variance
-                    thresholds['persist_des'] = 'Reference station threshold'
-                except ObjectDoesNotExist:
-                    try:
-                        # Trying to set persistence thresholds using global ranges
-                        _station = Station.objects.get(pk=station_id)
-                        _persist = Variable.objects.get(pk=variable_id)
-                        if _station.is_automatic:
-                            thresholds['persist_min'] = _persist.persistence_hourly
-                            thresholds['persist_des'] = 'Global threshold (Automatic)'
-                        else:
-                            thresholds['persist_min'] = _persist.persistence
-                            thresholds['persist_des'] = 'Global threshold (Manual)'
-                    except ObjectDoesNotExist:
-                        pass;                    
-    return thresholds
-
-# Persistance function and calculation
-def persit_function(values):
-    return abs(max(values)-min(values))
-
-def get_persist(row, df, window):
-    datetime = row.datetime
-
-    s_datetime = datetime-timedelta(seconds=window)
-    e_datetime = datetime
-
-    mask = df.datetime.between(s_datetime, e_datetime)
-    List = list(df[mask]['measured'])
-
-    persist = persit_function(List)
-    return persist
-
-def qc_persist(value, thresholds):
-    if 'persist_min' not in thresholds:
-        return NOT_CHECKED, "Threshold not found"
-
-    p_min = thresholds['persist_min']
-    p_des = thresholds['persist_des']
-           
-    if p_min is None:
-        return NOT_CHECKED, "Threshold not found"           
-
-    if value >= p_min:
-        return GOOD, p_des
-    else:
-        return BAD, p_des    
-
-def set_persist_sus(row, df, window, persist_flag):
-    updated = row.updated
-    datetime = row.datetime
-
-    if persist_flag in [BAD, SUSPICIOUS]:
-        return persist_flag, updated
-
-    s_datetime = datetime
-    e_datetime = datetime+timedelta(seconds=window)
-
-    mask = df.datetime.between(s_datetime, e_datetime)
-    List = list(df[mask]['qc_persist_quality_flag'])
-
-    if BAD in List:
-        return SUSPICIOUS, True
-    
-    return persist_flag, updated
-
-def qc_final(row, persist_flag):
-    range_flag = row.qc_range_quality_flag
-    step_flag = row.qc_step_quality_flag
-
-    flags = (persist_flag, range_flag, step_flag)
-    if BAD in flags:
-        return BAD
-    elif GOOD in flags:
-        return GOOD
-    elif SUSPICIOUS in flags:
-        return SUSPICIOUS        
-    return NOT_CHECKED
-
-def set_persist(row, df, s_datetime, e_datetime, interval, window, thresholds):
-    if s_datetime <= row.datetime <= e_datetime:
-        persist = get_persist(row, df, window)
-        persist_flag, persist_des = qc_persist(persist, thresholds)
-
-    else:
-        persist_flag, persist_des = row.qc_persist_quality_flag, row.qc_persist_description
-
-    # By the pandas apply function order, the previous rows are calculated so we can set suspicous flags using them
-    persist_flag, updated = set_persist_sus(row, df, window, persist_flag)
-
-    # Finally compute the final flag using all three flags, range, step, and persistence
-    final_flag =  qc_final(row, persist_flag)
-
-    return updated, persist_flag, persist_des, final_flag
-
-# Persistance update
-def update_insert_persist(df):
-    data = df.to_dict('records')
-    query = '''
-            INSERT INTO raw_data(created_at, updated_at, datetime, station_id, variable_id, measured, qc_persist_quality_flag, qc_persist_description, quality_flag)
-                VALUES (CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %(datetime)s, %(station_id)s, %(variable_id)s, 0, %(qc_persist_quality_flag)s, %(qc_persist_description)s, %(quality_flag)s)
-            ON CONFLICT (datetime, station_id, variable_id) DO UPDATE SET
-                updated_at=CURRENT_TIMESTAMP,
-                qc_persist_quality_flag = %(qc_persist_quality_flag)s,
-                qc_persist_description = %(qc_persist_description)s,
-                quality_flag = %(quality_flag)s
-            '''
-    con = get_connection()            
-    with con.cursor() as cursor:
-        cursor.executemany(query, data)
-    con.commit()
-    con.close()
-
-# Main Persist Function
-def update_qc_persist(start_datetime, end_datetime, station_ids, summary_type):
-
-    # Dictionary of stations and their variables with observed datetime ranges
-    dict_sv = get_hourly_sv_dict(start_datetime, end_datetime, station_ids)
-
-    for station_id in dict_sv:
-
-        for variable_id in dict_sv[station_id]:
-            # grab datetime ranges
-            s_datetime, e_datetime = dict_sv[station_id][variable_id]
-
-            # Get the window from persistence window hourly or persistence window from the variable
-            window = get_window(station_id, variable_id)
-
-            df = get_hourly_sv_data(s_datetime, e_datetime, station_id, variable_id, window)
-            
-            if not df.empty:
-                interval = get_interval(df)
-
-                thresholds = get_thresholds(station_id, variable_id, interval, window)   
-                
-                columns = ['updated', 'qc_persist_quality_flag', 'qc_persist_description', 'quality_flag']
-                
-                df[columns] = df.apply(
-                    lambda row: set_persist(row, df, s_datetime, e_datetime, interval, window, thresholds), 
-                    axis=1, 
-                    result_type="expand")
-
-                df = df[df['updated']==True]                
-
-                columns = ['station_id', 'variable_id', 'qc_persist_quality_flag', 'qc_persist_description', 'quality_flag', 'datetime']
-
-                update_insert_persist(df[columns])
-
-                recalculate_summary(df, station_id, s_datetime, e_datetime, summary_type)
 
 def insert_summay(date, station_id, summary_type):
     query_hourly = '''
@@ -4435,6 +4118,7 @@ def insert_summay(date, station_id, summary_type):
     con.commit()
     con.close()
 
+
 def recalculate_summary(df, station_id, s_datetime, e_datetime, summary_type):
     mask = df.datetime.between(s_datetime, e_datetime)    
     datetimes = list(df[~mask]['datetime'])
@@ -4455,6 +4139,7 @@ def recalculate_summary(df, station_id, s_datetime, e_datetime, summary_type):
 
                     insert_summay(date, station_id, summary_type)
 
+
 def hourly_summary(hourly_summary_tasks_ids, station_ids, s_datetime, e_datetime):
     try:
         HourlySummaryTask.objects.filter(id__in=hourly_summary_tasks_ids).update(started_at=datetime.now(tz=pytz.UTC))
@@ -4464,6 +4149,7 @@ def hourly_summary(hourly_summary_tasks_ids, station_ids, s_datetime, e_datetime
         db_logger.error('Error calculation hourly summary for hour "{0}". '.format(s_datetime) + repr(err))
     else:
         HourlySummaryTask.objects.filter(id__in=hourly_summary_tasks_ids).update(finished_at=datetime.now(tz=pytz.UTC))
+
 
 @shared_task
 def process_hourly_summary_tasks():
@@ -4477,10 +4163,6 @@ def process_hourly_summary_tasks():
         hourly_summary_tasks = HourlySummaryTask.objects.filter(started_at=None, datetime=hourly_summary_datetime)
         hourly_summary_tasks_ids = list(hourly_summary_tasks.values_list('id', flat=True))
         station_ids = list(hourly_summary_tasks.values_list('station_id', flat=True).distinct())
-
-        # legacy way of calculating QC persist
-        # if station_ids:
-        #     update_qc_persist(start_datetime, end_datetime, station_ids, 'hourly')
 
         # Updating Hourly summary task
         hourly_summary(hourly_summary_tasks_ids, station_ids, start_datetime, end_datetime)
@@ -6797,17 +6479,18 @@ def interpolation_img_cleanup():
 
 
 
-ALLOWED_UPDATE_FIELDS = {"manual_flag", "consisted", "remarks"}
+ALLOWED_UPDATE_FIELDS = {"manual_flag", "proposed_value", "remarks", "validated_flag", "consisted", "validated_remarks", "is_validated"}
 
 def _build_set_clause(updates: dict):
     """
     Returns (set_clause_sql, set_params)
-    Example: ("manual_flag=%s, remarks=%s", [4, "note"])
+    Example: ("manual_flag=%s, remarks=%s,", [4, "note"])
     """
+
     parts = []
     params = []
 
-    for key in ("manual_flag", "consisted", "remarks"):
+    for key in ("manual_flag", "proposed_value", "remarks", "validated_flag", "consisted", "validated_remarks", "is_validated"):
         if key not in updates:
             continue
         if key not in ALLOWED_UPDATE_FIELDS:
@@ -6822,20 +6505,101 @@ def _build_set_clause(updates: dict):
     return sql.SQL(", ").join(parts), params
 
 
+QC_MANUAL_FIELDS = {"manual_flag", "proposed_value", "remarks"}
+QC_VALIDATION_FIELDS = {
+    "validated_flag", "consisted", "validated_remarks", "is_validated"
+}
+QC_VALIDATED_FLAG_IDS = {1, 4, 5}  # Same IDs as validatedQualityFlags in the page. (Good, Missing, Not Checked)
+
+
+def _qc_same_number(left, right):
+    # proposed_value may be stored as text but arrive as a parsed number.
+    left = None if left is None or left == "" else left
+    right = None if right is None or right == "" else right
+
+    if left is None or right is None:
+        return left is right
+    try:
+        return Decimal(str(left)) == Decimal(str(right))
+    except InvalidOperation:
+        return left == right
+
+
+def _prepare_qc_update(updates, current, can_validate):
+    updates = dict(updates)
+    unknown = set(updates) - ALLOWED_UPDATE_FIELDS
+    if unknown:
+        raise ValueError("Unsupported QC update fields.")
+
+    validation_requested = bool(QC_VALIDATION_FIELDS.intersection(updates))
+    if validation_requested and can_validate is not True:
+        raise PermissionError("You do not have permission to update validation fields.")
+
+    if "is_validated" in updates and type(updates["is_validated"]) is not bool:
+        raise ValueError("is_validated must be a boolean.")
+
+    if "validated_flag" in updates:
+        flag = updates["validated_flag"]
+        if flag is not None and (type(flag) is not int or flag not in QC_VALIDATED_FLAG_IDS):
+            raise ValueError("Validated Flag must be Not Checked, Good, or Missing.")
+        if flag is None or flag == 1:
+            if updates.get("is_validated") is True:
+                raise ValueError("A Not Checked or unset observation cannot be validated.")
+            # Mirror onFlagChange(); legacy null flags also mean unchecked.
+            updates["is_validated"] = False
+
+    final_flag = updates.get("validated_flag", current["validated_flag"])
+    if validation_requested:
+        if final_flag == 5:
+            updates["consisted"] = float(settings.MISSING_VALUE)
+        elif current["validated_flag"] == 5 and "validated_flag" in updates:
+            if "consisted" not in updates:
+                updates["consisted"] = None
+
+        final_value = updates.get("consisted", current["consisted"])
+        if final_flag != 5 and final_value is not None:
+            if _qc_same_number(final_value, settings.MISSING_VALUE):
+                raise ValueError("The missing value requires the Missing validated flag.")
+
+    final_validated = updates.get("is_validated", current["is_validated"])
+    if final_validated and final_flag not in {4, 5}:
+        raise ValueError("Choose Good or Missing before validating this observation.")
+
+    if current["is_validated"]:
+        # Full-row requests include unchanged manual values. Allow those,
+        # but protect actual manual changes until an authorized unvalidation.
+        manual_changes = set()
+        for field in QC_MANUAL_FIELDS.intersection(updates):
+            same = (
+                _qc_same_number(updates[field], current[field])
+                if field in {"manual_flag", "proposed_value"}
+                else updates[field] == current[field]
+            )
+            if same:
+                del updates[field]
+            else:
+                manual_changes.add(field)
+
+        unvalidating = can_validate is True and updates.get("is_validated") is False
+        if manual_changes and not unvalidating:
+            raise ValueError("Unvalidate this observation before changing manual review fields.")
+
+    return updates
+
+
 # Update the QC manual checks
 @shared_task(bind=True)
-def qc_manual_checks(self, station_id: int, variable_id: int, req_datetime: str, updates: dict):
+def qc_validation_save(self, station_id: int, variable_id: int, req_datetime: str, updates: dict, can_validate: bool = False):
     """
     req_datetime: ISO string like '2026-02-05T12:00:00Z'
-    updates: {"manual_flag": 4, "consisted": 1.23, "remarks": "ok"}
+    updates: {"manual_flag": 4, "proposed_value": 1.23, "remarks": "ok", "validated_flag": 1, "consisted": 23, "validated_remarks": "ok", "is_validated": True}
     """
+
     # Parse datetime (UTC)
     dt = datetime.strptime(req_datetime, "%Y-%m-%dT%H:%M:%SZ").replace(
         tzinfo=timezone.utc
     )
     now_time = datetime.now(timezone.utc)
-
-    set_sql, set_params = _build_set_clause(updates)
 
     with transaction.atomic():
         with connection.cursor() as cursor:
@@ -6860,6 +6624,32 @@ def qc_manual_checks(self, station_id: int, variable_id: int, req_datetime: str,
                 # Guardrail for the future: compressed chunks are not safe to update directly
                 raise ValueError("Target chunk is compressed; cannot apply manual QC update.")
 
+            # Lock and read the stored state, rather than trusting the page's state.
+            cursor.execute(
+                sql.SQL("""
+                    SELECT is_validated, validated_flag, consisted,
+                           manual_flag, proposed_value, remarks
+                    FROM {chunk}
+                    WHERE station_id = %s
+                      AND variable_id = %s
+                      AND datetime = %s::timestamptz
+                    FOR UPDATE
+                """).format(chunk=sql.Identifier(chunk_schema, chunk_name)),
+                (station_id, variable_id, dt),
+            )
+            stored = cursor.fetchone()
+            if stored is None:
+                raise ValueError("No matching record found to update.")
+
+            current = dict(zip(
+                ("is_validated", "validated_flag", "consisted",
+                 "manual_flag", "proposed_value", "remarks"),
+                stored,
+            ))
+            updates = _prepare_qc_update(updates, current, can_validate)
+            set_sql, set_params = _build_set_clause(updates)
+            final_validated = updates.get("is_validated", current["is_validated"])
+
             # 2) Update chunk directly
             update_stmt = sql.SQL("""
                 UPDATE {chunk}
@@ -6878,23 +6668,24 @@ def qc_manual_checks(self, station_id: int, variable_id: int, req_datetime: str,
             if cursor.rowcount == 0:
                 raise ValueError("No matching record found to update.")
 
-            # 3) Schedule summaries
-            cursor.execute("""
-                INSERT INTO wx_hourlysummarytask (station_id, datetime, updated_at, created_at)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-            """, (station_id, dt, now_time, now_time))
+            # Refresh summaries after changes to validated data or unvalidation.
+            if current["is_validated"] or final_validated:
+                cursor.execute("""
+                    INSERT INTO wx_hourlysummarytask (station_id, datetime, updated_at, created_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (station_id, dt, now_time, now_time))
 
-            cursor.execute("""
-                INSERT INTO wx_dailysummarytask (station_id, date, updated_at, created_at)
-                SELECT
-                    %s,
-                    ( (%s AT TIME ZONE 'UTC') + make_interval(mins => COALESCE(s.utc_offset_minutes, 0)) )::date,
-                    %s, %s
-                FROM wx_station s
-                WHERE s.id = %s
-                ON CONFLICT DO NOTHING
-            """, (station_id, dt, now_time, now_time, station_id))
+                cursor.execute("""
+                    INSERT INTO wx_dailysummarytask (station_id, date, updated_at, created_at)
+                    SELECT
+                        %s,
+                        ( (%s AT TIME ZONE 'UTC') + make_interval(mins => COALESCE(s.utc_offset_minutes, 0)) )::date,
+                        %s, %s
+                    FROM wx_station s
+                    WHERE s.id = %s
+                    ON CONFLICT DO NOTHING
+                """, (station_id, dt, now_time, now_time, station_id))
 
     return {"updated": True}
 
@@ -6913,7 +6704,7 @@ def qc_manual_checks_bulk(
     - Updates raw_data rows for a station+variable at many datetimes
     - Uses Timescale chunk lookup to update chunk tables directly (fast)
     - Groups datetimes by chunk to reduce chunk lookups and UPDATE statements
-    - Dedupe hourly/daily summary task inserts (insert once per unique hour/day)
+    - Reject validated rows; all requested rows must be updated or none are saved
 
     Inputs:
       datetime_list: list of ISO-Z strings like '2026-02-05T12:00:00Z'
@@ -7003,6 +6794,7 @@ def qc_manual_checks_bulk(
                     "name": r[1],
                     "start": r[2],
                     "end": r[3],
+                    "compressed": r[4],
                 }
                 for r in chunk_rows
             ]
@@ -7013,6 +6805,8 @@ def qc_manual_checks_bulk(
                 matched = False
                 for ch in chunks:
                     if ch["start"] <= dt < ch["end"]:
+                        if ch["compressed"]:
+                            raise ValueError("A target chunk is compressed; cannot apply bulk update.")
                         key = (ch["schema"], ch["name"])
                         chunk_map.setdefault(key, []).append(dt)
                         matched = True
@@ -7033,10 +6827,11 @@ def qc_manual_checks_bulk(
                     UPDATE {chunk}
                     SET manual_flag = %s,
                         remarks = %s,
-                        consisted = NULL
+                        proposed_value = NULL
                     WHERE station_id = %s
                       AND variable_id = %s
                       AND datetime = ANY(%s::timestamptz[])
+                      AND is_validated = FALSE
                 """).format(
                     chunk=sql.Identifier(chunk_schema, chunk_name)
                 )
@@ -7049,61 +6844,22 @@ def qc_manual_checks_bulk(
                     (manual_flag, remarks, station_id, variable_id, chunk_dts),
                 )
 
-                # rowcount is how many rows were updated in this statement
+                # A mismatch means a requested row is missing or validated.
+                # Raising inside atomic() rolls back updates in every chunk.
+                if cursor.rowcount != len(chunk_dts):
+                    raise ValueError(
+                        "Some selected observations are missing or validated. "
+                        "No bulk changes were saved; reload and check your selection."
+                    )
                 total_updated += cursor.rowcount
 
             if total_updated == 0:
                 # Nothing matched. Could be wrong station/variable, or datetimes not present.
                 raise ValueError("No matching records found to update in bulk.")
 
-            # ------------------------------------------------------------
-            # 2e) Dedupe hourly + daily summary task scheduling
-            # ------------------------------------------------------------
-            # Hourly: dedupe by hour bucket (UTC hour)
-            # Daily: dedupe by station-local date (offset minutes)
-            hourly_set = set()
-            daily_set = set()
-
-            for dt in dts:
-                # Convert UTC dt -> station-local datetime
-                local_dt = dt + timedelta(minutes=utc_offset_minutes)
-
-                # DAILY bucket: if dt is exactly at 00:00:00, treat it as belonging to the previous day
-                # (matches daily summary logic that effectively assigns midnight boundary values to the prior day)
-                if (local_dt.hour == 0 and local_dt.minute == 0 and local_dt.second == 0 and local_dt.microsecond == 0):
-                    local_dt = local_dt - timedelta(seconds=1)
-
-                daily_set.add(local_dt.date())
-
-                # Hour bucket stays UTC (unchanged)
-                hour_dt = dt.replace(minute=0, second=0, microsecond=0)
-                hourly_set.add(hour_dt)
-
-            # Insert hourly summary tasks once per unique hour
-            cursor.executemany(
-                """
-                INSERT INTO wx_hourlysummarytask (station_id, datetime, updated_at, created_at)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-                """,
-                [(station_id, hour_dt, now_time, now_time) for hour_dt in sorted(hourly_set)],
-            )
-
-            # Insert daily summary tasks once per unique day
-            cursor.executemany(
-                """
-                INSERT INTO wx_dailysummarytask (station_id, date, updated_at, created_at)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT DO NOTHING
-                """,
-                [(station_id, day, now_time, now_time) for day in sorted(daily_set)],
-            )
-
     # Return useful info for debugging/polling responses
     return {
         "updated_rows": total_updated,
-        "unique_hours": len(hourly_set),
-        "unique_days": len(daily_set),
         "chunks_touched": len(chunk_map),
     }
 
@@ -7128,7 +6884,11 @@ def get_qc_data(sql_string, where_parameters, response, station_id):
                 'remarks': row[7],
                 'qc_range_quality_flag': row[8],
                 'qc_step_quality_flag': row[9],
-                'qc_persist_quality_flag': row[10]
+                'qc_persist_quality_flag': row[10],
+                'proposed_value': row[11],
+                'validated_flag': row[12],
+                'validated_remarks': row[13],
+                'is_validated': row[14]
             }
 
             response['results'].append(obj)
@@ -7380,3 +7140,106 @@ def get_station_offset_min(station_id):
     station = Station.objects.get(id=int(station_id))
     
     return station.utc_offset_minutes
+
+
+MAX_EXPECTED_QC_INSERT_MISSING_RECORDS = 1000
+
+# qc_validate_fill_missing helper fxn
+@shared_task(bind=True)
+def fill_missing_data(
+    self,
+    station_id,
+    variable_id,
+    start_date,
+    end_date,
+    interval,
+    utc_offset_minutes,
+):
+
+    # Re-create the naive station-local datetimes passed by the view.
+    start = datetime.fromisoformat(start_date)
+    end = datetime.fromisoformat(end_date)
+
+    # Generate at most one more timestamp than allowed so a very
+    # large request cannot build an unlimited list in memory.
+    expected_local = list(
+        islice(
+            generate_expected_times(start, end, interval),
+            MAX_EXPECTED_QC_INSERT_MISSING_RECORDS + 1,
+        )
+    )
+
+    if len(expected_local) > MAX_EXPECTED_QC_INSERT_MISSING_RECORDS:
+        # raise ValueError(
+        #     "Selected range contains too many records to insert (limit 1000)."
+        # )
+
+        return {
+            "limit_violation": f"Selected range contains too many records ({len(expected_local)}) to insert (limit 1000).",
+        }
+
+    # The generated timestamps represent the station's local clock.
+    # Attach the station's fixed offset, then convert to UTC for DB work.
+    station_tz = timezone(timedelta(minutes=utc_offset_minutes))
+
+    expected_utc = [
+        local_dt.replace(tzinfo=station_tz).astimezone(
+            timezone.utc
+        )
+        for local_dt in expected_local
+    ]
+
+    expected_count = len(expected_utc)
+
+    if not expected_utc:
+        return {
+            "expected_count": 0,
+            "missing_count": 0,
+            "inserted_count": 0,
+        }
+
+    # Retrieve only records that match timestamps we expect to exist.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT datetime
+            FROM raw_data
+            WHERE station_id = %s
+              AND variable_id = %s
+              AND datetime >= %s
+              AND datetime <= %s
+              AND datetime = ANY(%s::timestamptz[])
+            """,
+            [
+                station_id,
+                variable_id,
+                expected_utc[0],
+                expected_utc[-1],
+                expected_utc,
+            ],
+        )
+
+        existing = {
+            row[0].astimezone(timezone.utc)
+            for row in cursor.fetchall()
+        }
+
+    # Anything not already present becomes a missing observation.
+    missing = [
+        utc_dt
+        for utc_dt in expected_utc
+        if utc_dt not in existing
+    ]
+
+    inserted_count = insert_missing(
+        station_id=station_id,
+        variable_id=variable_id,
+        interval_seconds=interval,
+        missing_datetimes=missing,
+    )
+
+    return {
+        "expected_count": expected_count,
+        "missing_count": len(missing),
+        "inserted_count": inserted_count,
+    }

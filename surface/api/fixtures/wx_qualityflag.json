@@ -41,5 +41,16 @@
         "name": "Good",
         "color": "#00C853"
     }
+},
+{
+    "model": "wx.qualityflag",
+    "pk": 5,
+    "fields": {
+        "created_at": "2019-09-28T00:00:00.000Z",
+        "updated_at": "2019-09-28T00:00:00.000Z",
+        "symbol": "M",
+        "name": "Missing",
+        "color": "#7E57C2"
+    }
 }
 ]

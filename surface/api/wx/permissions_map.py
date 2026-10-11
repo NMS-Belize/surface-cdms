@@ -308,9 +308,10 @@ ENDPOINT_PARENT_PAGE = {
     # Page:
     #   quality-control (GET page)
     "get-qc-description": ("quality-control", "read"),
-    "get-update-quality-control": ("quality-control", "write"),
+    "get-quality-control": ("quality-control", "read"),
+    "update-quality-control": ("quality-control", "write"),
     "bulk-update-quality-control": ("quality-control", "write"),
-    "update-threshold-reference-station": ("quality-control", "write"),
+    "fill-missing-quality-control": ("quality-control", "write"),
 
 
     # -------------------------------------------------------------------------
@@ -352,6 +353,7 @@ ENDPOINT_PARENT_PAGE = {
     "persist-threshold-get": ("custom-threshold", "read"),
     "persist-threshold-update": ("custom-threshold", "write"),
     "persist-threshold-delete": ("custom-threshold", "delete"),
+    "update-threshold-reference-station": ("custom-threshold", "write"),
 
 
     # -------------------------------------------------------------------------

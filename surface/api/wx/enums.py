@@ -21,6 +21,7 @@ class QualityFlagEnum(Enum):
     SUSPICIOUS = 'S', 'Suspicious', 2
     BAD = 'B', 'Bad', 3
     GOOD = 'G', 'Good', 4
+    MISSING = 'M', 'Missing', 5
 
     def __init__(self, symbol, name, id):
         self.symbol = symbol

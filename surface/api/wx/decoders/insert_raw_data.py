@@ -74,38 +74,29 @@ qc_columns = [
 
 
 ##########################  Functions ##########################
-
 def get_data(raw_data_list):
     """
     Convert decoded raw tuples into rows ready for bulk insertion.
-
     Main optimization:
     - Older code called qc_thresholds(...) for every row.
     - That caused repeated threshold lookups, station offset lookups, and previous-value lookups.
     - This version groups the data first, then builds QC context once per group.
-
     A group is:
         station_id + variable_id + seconds + month
-
     This matters because QC thresholds and previous-value context are normally the same
     for all rows in one group.
-
     Additional optimization:
     - Use pandas groupby() once and reuse the grouped DataFrames.
     - This avoids repeatedly scanning/filtering the full DataFrame for each group.
     """
-
     start_total = time.perf_counter()
     now = timezone.now()
-
     df = pd.DataFrame(raw_data_list, columns=columns)
-
     logger.info(
         "insert_raw_data get_data input | raw_data_list=%s | df_rows=%s",
         len(raw_data_list),
         len(df),
     )
-
     if df.empty:
         logger.warning("insert_raw_data get_data received empty dataframe.")
         return []
@@ -116,24 +107,67 @@ def get_data(raw_data_list):
     df["variable_id"] = pd.to_numeric(df["variable_id"]).astype(int)
     df["seconds"] = pd.to_numeric(df["seconds"]).astype(int)
 
-    # created_at and updated_at are added before converting to insert rows.
-    # month is used for seasonal/monthly QC thresholds.
+    # Add insertion timestamps; QC month is calculated after loading station offsets.
     df["created_at"] = now
     df["updated_at"] = now
-    df["month"] = pd.to_datetime(df["datetime"]).dt.month.astype(int)
-
     after_df_setup = time.perf_counter()
-
     reads = []
 
     # Timing buckets. These logs help us see exactly where time is being spent.
     total_prev_bulk_lookup = 0
     total_station_offset_lookup = 0
+    total_month_calculation = 0
     total_variable_lookup = 0
     total_data_batch = 0
     total_build_context = 0
     total_apply_qc = 0
     total_extend_reads = 0
+
+    # Fetch offsets before grouping so QC months follow each station's local calendar.
+    t0 = time.perf_counter()
+    station_ids = {int(station_id) for station_id in df["station_id"].unique()}
+    station_offsets = dict(
+        Station.objects.filter(id__in=station_ids).values_list(
+            "id", "utc_offset_minutes"
+        )
+    )
+    total_station_offset_lookup += time.perf_counter() - t0
+
+    missing_station_ids = station_ids - station_offsets.keys()
+    if missing_station_ids:
+        raise ValueError(
+            "Missing station or utc_offset_minutes for station_id values: "
+            f"{sorted(missing_station_ids)}"
+        )
+
+    logger.info(
+        "insert_raw_data station offsets | station_ids=%s | offsets_loaded=%s",
+        len(station_ids),
+        len(station_offsets),
+    )
+
+    # Cache each station's timezone rather than reconstructing it for every row.
+    station_timezones = {
+        station_id: pytz.FixedOffset(offset)
+        for station_id, offset in station_offsets.items()
+    }
+
+    def get_station_local_month(station_id, observation_dt):
+        dt = pd.Timestamp(observation_dt)
+        if pd.isna(dt):
+            raise ValueError("Observation datetime cannot be null.")
+
+        # Naive decoder dates are already local; aware dates need local conversion.
+        if dt.tzinfo is None:
+            return dt.month
+        return dt.tz_convert(station_timezones[int(station_id)]).month
+
+    t0 = time.perf_counter()
+    df["month"] = [
+        get_station_local_month(station_id, observation_dt)
+        for station_id, observation_dt in zip(df["station_id"], df["datetime"])
+    ]
+    total_month_calculation += time.perf_counter() - t0
 
     # Build grouped data once and reuse it.
     #
@@ -145,12 +179,10 @@ def get_data(raw_data_list):
             sort=False,
         )
     )
-
     logger.info(
         "insert_raw_data grouped | grouped_rows=%s",
         len(grouped_data),
     )
-
     if not grouped_data:
         logger.warning("insert_raw_data get_data produced no grouped rows.")
         return []
@@ -158,7 +190,6 @@ def get_data(raw_data_list):
     # Load all numeric variable IDs in one query.
     # Only numeric variables go through QC.
     t0 = time.perf_counter()
-
     variable_ids = {
         int(variable_id)
         for (station_id, variable_id, seconds, month), df_group in grouped_data
@@ -173,94 +204,56 @@ def get_data(raw_data_list):
             id__in=variable_ids,
         ).values_list("id", flat=True)
     )
-
     missing_variable_ids = variable_ids - existing_variable_ids
-
     if missing_variable_ids:
         raise ValueError(
             "insert_raw_data received variable_id values that do not exist in wx_variable: "
             f"{sorted(missing_variable_ids)}"
         )
-
-
     numeric_variable_ids = set(
         Variable.objects.filter(
             id__in=variable_ids,
             variable_type="Numeric",
         ).values_list("id", flat=True)
     )
-
     total_variable_lookup += time.perf_counter() - t0
-
     logger.info(
         "insert_raw_data numeric vars | all_variable_ids=%s | numeric_variable_ids=%s",
         len(variable_ids),
         len(numeric_variable_ids),
     )
 
-    # Load station UTC offsets in one query.
-    t0 = time.perf_counter()
-
-    station_ids = {
-        int(station_id)
-        for (station_id, variable_id, seconds, month), df_group in grouped_data
-    }
-
-    station_offsets = dict(
-        Station.objects.filter(
-            id__in=station_ids,
-        ).values_list("id", "utc_offset_minutes")
-    )
-
-    total_station_offset_lookup += time.perf_counter() - t0
-
-    logger.info(
-        "insert_raw_data station offsets | station_ids=%s | offsets_loaded=%s",
-        len(station_ids),
-        len(station_offsets),
-    )
-
     # STEP QC needs the previous valid measured value before the first row in each group.
     # Instead of querying raw_data per row/group, we collect all requests and fetch them in bulk.
     t0 = time.perf_counter()
-
     prev_requests = []
-
     for (station_id, variable_id, seconds, month), df_group in grouped_data:
         station_id = int(station_id)
         variable_id = int(variable_id)
         seconds = int(seconds)
         month = int(month)
-
         if variable_id not in numeric_variable_ids:
             continue
-
         if df_group.empty:
             continue
-
         # We only need the previous DB value before the earliest record in this batch.
         first_datetime = df_group["datetime"].min()
         group_key = f"{station_id}|{variable_id}|{seconds}|{month}"
-
         prev_requests.append({
             "key": group_key,
             "station_id": station_id,
             "variable_id": variable_id,
             "before_datetime": first_datetime,
         })
-
     logger.info(
         "insert_raw_data prev_requests | count=%s",
         len(prev_requests),
     )
-
     previous_measured_lookup = get_prev_measured_bulk(
         prev_requests,
         lookback_days=30,
     )
-
     total_prev_bulk_lookup += time.perf_counter() - t0
-
     logger.info(
         "insert_raw_data prev_lookup results | requested=%s | returned=%s",
         len(prev_requests),
@@ -273,20 +266,15 @@ def get_data(raw_data_list):
         variable_id = int(variable_id)
         seconds = int(seconds)
         month = int(month)
-
         group_key = f"{station_id}|{variable_id}|{seconds}|{month}"
         previous_db_record = previous_measured_lookup.get(group_key)
-
         # Important:
         # df_group is already the subset for this station/variable/seconds/month.
         # So we do not need to filter df again.
         df1 = df_group.copy()
-
         # Sorting is important because STEP and persistence checks depend on time order.
         df1.sort_values(by="datetime", inplace=True)
-
         count = len(df1)
-
         if count == 0:
             logger.debug(
                 "Skipping station_id=%s, variable_id=%s, seconds=%s, month=%s because found 0 records.",
@@ -296,7 +284,6 @@ def get_data(raw_data_list):
                 month,
             )
             continue
-
         logger.debug(
             "Processing station_id=%s, variable_id=%s, seconds=%s, month=%s, records=%s.",
             station_id,
@@ -305,28 +292,20 @@ def get_data(raw_data_list):
             month,
             count,
         )
-
         process_qc = variable_id in numeric_variable_ids
-
         if process_qc:
             station_offset = station_offsets.get(station_id)
-
             if station_offset is None:
                 raise ValueError(
                     f"Missing utc_offset_minutes for station_id={station_id}"
                 )
-
             # data_batch is the current batch for this specific station/variable/month.
             # It is used by STEP and persistence QC to compare against nearby rows.
             t0 = time.perf_counter()
-
             data_batch = df1[["datetime", "measured"]].to_dict(orient="records")
-
             total_data_batch += time.perf_counter() - t0
-
             # Build reusable QC context once for the whole group.
             t0 = time.perf_counter()
-
             qc_context = build_qc_context(
                 station_id=station_id,
                 variable_id=variable_id,
@@ -335,12 +314,9 @@ def get_data(raw_data_list):
                 station_offset=station_offset,
                 previous_db_record=previous_db_record,
             )
-
             total_build_context += time.perf_counter() - t0
-
             # Apply QC to each row, but reuse the context instead of rebuilding it.
             t0 = time.perf_counter()
-
             df1[qc_columns] = df1.apply(
                 lambda row: evaluate_qc_row(
                     row=row,
@@ -351,23 +327,18 @@ def get_data(raw_data_list):
                 axis=1,
                 result_type="expand",
             )
-
             total_apply_qc += time.perf_counter() - t0
-
             # .replace(...) must be assigned back; otherwise pandas does not update df1.
             df1["qc_step_description"] = df1["qc_step_description"].replace("", None)
             df1["qc_range_description"] = df1["qc_range_description"].replace("", None)
             df1["qc_persist_description"] = df1["qc_persist_description"].replace("", None)
-
         else:
             # Non-numeric variables keep their code in other decoders, but this insert_raw_data
             # format does not include a code column, so measured is set to MISSING_VALUE.
             for qc_column in qc_columns:
                 if qc_column not in df1.columns:
                     df1[qc_column] = None
-
             df1 = df1.assign(measured=settings.MISSING_VALUE)
-
         # raw_data.quality_flag is NOT NULL.
         # If QC did not run, or a decoder left the overall quality flag empty,
         # mark the row as "Not checked".
@@ -378,15 +349,11 @@ def get_data(raw_data_list):
         # 3 = Bad
         # 4 = Good
         df1["quality_flag"] = df1["quality_flag"].fillna(1)
-
         # Convert the dataframe group into rows matching insert_columns.
         t0 = time.perf_counter()
-
         prepared_rows = df1[insert_columns].values.tolist()
         reads.extend(prepared_rows)
-
         total_extend_reads += time.perf_counter() - t0
-
         logger.debug(
             "insert_raw_data prepared group | station_id=%s | variable_id=%s | rows=%s | prepared_rows=%s | process_qc=%s",
             station_id,
@@ -395,21 +362,20 @@ def get_data(raw_data_list):
             len(prepared_rows),
             process_qc,
         )
-
     end_total = time.perf_counter()
-
     logger.info(
         "insert_raw_data get_data output | reads=%s",
         len(reads),
     )
-
     logger.info(
         "insert_raw_data get_data timing | df_setup: %.2fs | variable_lookup: %.2fs | "
-        "station_offset_lookup: %.2fs | prev_bulk_lookup: %.2fs | data_batch: %.2fs | "
-        "build_context: %.2fs | apply_qc: %.2fs | extend_reads: %.2fs | total: %.2fs",
+        "station_offset_lookup: %.2fs | month_calc: %.2fs | prev_bulk_lookup: %.2fs | "
+        "data_batch: %.2fs | build_context: %.2fs | apply_qc: %.2fs | "
+        "extend_reads: %.2fs | total: %.2fs",
         after_df_setup - start_total,
         total_variable_lookup,
         total_station_offset_lookup,
+        total_month_calculation,
         total_prev_bulk_lookup,
         total_data_batch,
         total_build_context,
@@ -417,8 +383,8 @@ def get_data(raw_data_list):
         total_extend_reads,
         end_total - start_total,
     )
-
     return reads
+
 
 
 def insert_query(reads, override_data_on_conflict, is_manually_validated):

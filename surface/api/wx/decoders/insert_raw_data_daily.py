@@ -429,7 +429,7 @@ def get_data(raw_data_list, utc_offset_minutes=None):
     return reads
 
 
-def insert_query(reads, station_id, date, override_data_on_conflict):
+def insert_query(reads, station_id, date, override_data_on_conflict, utc_offset_minutes):
     """
     Bulk insert/update daily raw_data rows.
 
@@ -495,20 +495,22 @@ def insert_query(reads, station_id, date, override_data_on_conflict):
             """, reads, fetch=True)
 
             if inserted_raw_data:
-                now = datetime.datetime.now()
+                now = timezone.now()
 
-                # One daily summary task per station/day that was inserted or updated.
-                daily_summary_tasks = set(
-                    map(
-                        lambda raw_data: (
-                            raw_data[0],
-                            raw_data[2].date(),
-                            now,
-                            now,
-                        ),
-                        inserted_raw_data,
-                    )
+                # Use the station's local calendar for daily summary tasks.
+                station_tz = datetime.timezone(
+                    datetime.timedelta(minutes=utc_offset_minutes if utc_offset_minutes is not None else -360)
                 )
+
+                daily_summary_tasks = {
+                    (
+                        row[0],
+                        row[2].astimezone(station_tz).date(),
+                        now,
+                        now,
+                    )
+                    for row in inserted_raw_data
+                }
 
                 execute_values(cursor, """
                     INSERT INTO wx_dailysummarytask (
@@ -519,7 +521,7 @@ def insert_query(reads, station_id, date, override_data_on_conflict):
                     )
                     VALUES %s
                     ON CONFLICT DO NOTHING
-                """, daily_summary_tasks)
+                """, list(daily_summary_tasks))
 
         conn.commit()
 
@@ -641,7 +643,7 @@ def insert(raw_data_list, date, station_id, override_data_on_conflict=False, utc
         )
         raise ValueError("No records were prepared for insert. Save aborted.")
 
-    insert_query(reads, station_id, date, override_data_on_conflict)
+    insert_query(reads, station_id, date, override_data_on_conflict, utc_offset_minutes)
     after_insert = time.perf_counter()
 
     update_stationvariable(reads)

@@ -14,6 +14,8 @@ from datetime import datetime as datetime_constructor
 from datetime import timezone, timedelta, date
 from dateutil.relativedelta import relativedelta
 from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
+from itertools import islice
 
 import matplotlib
 
@@ -79,7 +81,7 @@ from wx.models import AdministrativeRegion, StationFile, Decoder, QualityFlag, D
 from wx.models import Country, Unit, Station, Variable, DataSource, StationVariable, StationDataFileStatus,\
     StationProfile, Document, Watershed, Interval, CountryISOCode, Wis2BoxPublish, Wis2PublishOffset, LocalWisCredentials, RegionalWisCredentials,  Wis2BoxPublishLogs, Crop, Soil
 from wx.utils import get_altitude, get_watershed, get_interpolation_image, parse_float_value, \
-    parse_int_value
+    parse_int_value, parse_bool_value, generate_expected_times
 from .utils import get_raw_data, get_station_raw_data
 from wx.models import MaintenanceReport, VisitType, Technician
 from django.views.decorators.http import require_http_methods
@@ -92,6 +94,11 @@ from wx.models import HighFrequencyData, MeasurementVariable
 from wx.tasks import fft_decompose, export_station_to_oscar, export_station_to_oscar_wigos, data_inventory_month_view, save_monthly_form, save_synop_form
 import math
 import numpy as np
+
+from wx.templatetags.wx_filters import (
+    has_any_feature_permission,
+    has_any_group_access,
+)
 
 from wx.models import Equipment, EquipmentType, EquipmentModel, Manufacturer, FundingSource, StationProfileEquipmentType
 from django.core.serializers import serialize
@@ -127,132 +134,45 @@ User = get_user_model()
 # CONSTANT to be used in datetime to milliseconds conversion
 EPOCH = datetime_constructor(1970, 1, 1, tzinfo=timezone.utc)
 
+# ######################################################################################
+def parse_export_selection(body, source):
+    """Accept new selections and preserve the original flags for older clients."""
+    if source not in {"raw_data", "hourly_summary", "daily_summary", "monthly_summary", "yearly_summary"}:
+        raise ValueError("Invalid data source.")
+    mode = body.get("export_mode")
+    if source != "raw_data":
+        if mode not in (None, "summary"):
+            raise ValueError("Export selection filters are available for raw data only.")
+        return "summary", False, False
+    if mode is None:
+        aqc = body.get("aqc_checks", False)
+        mqc = body.get("mqc_checks", False)
+        if type(aqc) is not bool or type(mqc) is not bool:
+            raise ValueError("Legacy AQC/MQC settings must be booleans.")
+        return "legacy", aqc, mqc
+    if mode not in ("validated", "aqc_good", "all"):
+        raise ValueError("Export selection must be validated, aqc_good, or all.")
+    # MQC remains a legacy manual-flag setting; it is never a validation flag.
+    return mode, mode == "aqc_good", False
 
-@csrf_exempt
-@wx_mapped_permission_required
-def ScheduleDataExport(request):
-    if request.method != 'POST':
-        return HttpResponse(status=405)
 
-    # access values from the response
-    json_body = json.loads(request.body)
-    station_ids = json_body['stations']  # array with station ids
+class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
+    template_name = "wx/data_export.html"
 
-    data_source = json_body['source']  # could be either raw_data, hourly_summary, daily_summary, monthly_summary or yearly_summary
+    def get_context_data(self, **kwargs):
+        context =  super().get_context_data(**kwargs)
 
-    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
+        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
+        context['variable_list'] = Variable.objects.select_related('unit').all()
 
-    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
+        context['station_profile_list'] = StationProfile.objects.all()
+        context['station_watershed_list'] = Watershed.objects.all()
+        context['station_admin_region_list'] = AdministrativeRegion.objects.all()
 
-    variable_ids = json_body['variables']  # list of obj in format {id: Int, agg: Str}
+        interval_list = Interval.objects.filter(seconds__gte=2).order_by('seconds') # exclude 1 second interval
+        context['interval_list'] = interval_list
 
-    aggregation = json_body['aggregation'] # sets which column in the db will be used when the source is a summary. 
-
-    displayUTC = json_body['displayUTC'] # determines whether an offset will be applied based on the truthines of displayUTC
-
-    aqc_checks = json_body['aqc_checks'] # determines whether the output should only consist of data which pass aqc checks
-    
-    mqc_checks = json_body['mqc_checks'] # determines whether the output should only consist of data which pass mqc checks
-
-    # If source is raw_data, this will be set to none
-    if data_source == 'raw_data':
-        aggregation = None
-
-    data_interval_seconds = None
-    if data_source == 'raw_data' and 'data_interval' in json_body:  # a number with the data interval in seconds. Only required for raw_data
-        data_interval_seconds = json_body['data_interval']
-    elif data_source == 'raw_data':
-        data_interval_seconds = 300
-
-    created_data_file_ids = []
-
-    # format start and end date NOTE: START and END dates are all understood to be in UTC.
-    start_date_formatted = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
-    end_date_formatted = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
-
-    # Attach UTC timezone info
-    start_date_formatted = start_date_formatted.replace(tzinfo=datetime.timezone.utc)
-    end_date_formatted = end_date_formatted.replace(tzinfo=datetime.timezone.utc)
-
-    if start_date_formatted > end_date_formatted:
-        message = 'The initial date must be greater than final date.'
-        return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
-
-    days_interval = (end_date_formatted - start_date_formatted).days
-
-    data_source_dict = {
-        "raw_data": "Raw Data",
-        "hourly_summary": "Hourly Summary",
-        "daily_summary": "Daily Summary",
-        "monthly_summary": "Monthly Summary",
-        "yearly_summary": "Yearly Summary",
-    }
-
-    data_source_description = data_source_dict[data_source]
-
-    prepared_by = None
-    if request.user.first_name and request.user.last_name:
-        prepared_by = f'{request.user.first_name} {request.user.last_name}'
-    else:
-        prepared_by = request.user.username
-
-    for station_id in station_ids:
-        if aggregation:
-            for agg in aggregation:
-                newfile = DataFile.objects.create(ready=False, 
-                                                  initial_date=start_date_formatted, 
-                                                  final_date=end_date_formatted,
-                                                  source=data_source_description, 
-                                                  prepared_by=prepared_by,
-                                                  interval_in_seconds=data_interval_seconds,
-                                                  aqc_checks = aqc_checks,
-                                                  mqc_checks = mqc_checks)
-                
-                DataFileStation.objects.create(datafile=newfile, station_id=station_id)
-
-                try:
-                    for variable_id in variable_ids:
-                        variable = Variable.objects.get(pk=variable_id)
-                        DataFileVariable.objects.create(datafile=newfile, variable=variable)
-
-                    tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, agg, aqc_checks, mqc_checks, displayUTC)
-                    created_data_file_ids.append(newfile.id)
-                except Exception as err:
-                    # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
-                    # this shows that the operation failed
-                    # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not"
-                    # this prevents a possible error state from mascarading as a "processing" status
-
-                    newfile.ready_at = datetime.datetime.now(pytz.utc)
-        else:
-            newfile = DataFile.objects.create(ready=False, 
-                                              initial_date=start_date_formatted, 
-                                              final_date=end_date_formatted,
-                                              source=data_source_description, 
-                                              prepared_by=prepared_by,
-                                              interval_in_seconds=data_interval_seconds,
-                                              aqc_checks = aqc_checks,
-                                              mqc_checks = mqc_checks
-                                            )
-            
-            DataFileStation.objects.create(datafile=newfile, station_id=station_id)
-
-            try:
-                for variable_id in variable_ids:
-                    variable = Variable.objects.get(pk=variable_id)
-                    DataFileVariable.objects.create(datafile=newfile, variable=variable)
-
-                tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, aggregation, aqc_checks, mqc_checks, displayUTC)
-                created_data_file_ids.append(newfile.id)
-            except Exception as err:
-                # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
-                # this shows that the operation failed
-                # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not
-                # this prevents a possible error state from mascarading as a "processing" status
-
-                newfile.ready_at = datetime.datetime.now(pytz.utc)
-
-    return JsonResponse({'data': created_data_file_ids}, status=status.HTTP_200_OK)
+        return context
 
 
 @api_view(('GET',))
@@ -284,6 +204,10 @@ def DataExportFiles(request):
             'status': file_status,
             'aqc_checks': df['aqc_checks'],
             'mqc_checks': df['mqc_checks'],
+            'export_mode': df['export_mode'],
+            'export_mode_label': tasks.describe_export_mode(
+                df['export_mode'], df['aqc_checks'], df['mqc_checks'], df['source']
+            ),
             'initial_date': df['initial_date'],
             'final_date': df['final_date'],
             'source': {'text': df['source'],
@@ -369,7 +293,7 @@ def CombineFilesXLSX(request):
 
         # ensuring that the start date and the end date are valid
         if start_date_utc > end_date_utc:
-            message = 'The initial date must be greater than final date.'
+            message = 'The initial date must be on or before the final date.'
             return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
 
         station_ids = json_body['stations']  # array with station ids
@@ -382,9 +306,10 @@ def CombineFilesXLSX(request):
 
         displayUTC = json_body['displayUTC'] # determins wheter an offset will be applied based on the truthines of displayUTC
 
-        aqc_checks = json_body['aqc_checks'] # determines whether the output should only consist of data which pass aqc checks
-        
-        mqc_checks = json_body['mqc_checks'] # determines whether the output should only consist of data which pass mqc checks
+        try:
+            export_mode, aqc_checks, mqc_checks = parse_export_selection(json_body, data_source)
+        except ValueError as exc:
+            return JsonResponse({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         # If source is raw_data, aggregation will be set to none
         if data_source == 'raw_data':
@@ -432,10 +357,11 @@ def CombineFilesXLSX(request):
                                                    variable_ids=variable_ids_string, 
                                                    aggregation="  ".join(aggregation).upper(),                                                  
                                                    aqc_checks=aqc_checks,
-                                                   mqc_checks=mqc_checks)
+                                                   mqc_checks=mqc_checks,
+                                                   export_mode=export_mode)
 
         # send the MAIN task unto celery
-        combine_task = tasks.combine_xlsx_files.delay(station_ids, data_source, start_date, end_date, variable_ids, aggregation, displayUTC, data_interval_seconds, prepared_by, data_source_description, aqc_checks, mqc_checks, new_entry.id)
+        combine_task = tasks.combine_xlsx_files.delay(station_ids, data_source, start_date, end_date, variable_ids, aggregation, displayUTC, data_interval_seconds, prepared_by, data_source_description, aqc_checks, mqc_checks, new_entry.id, export_mode=export_mode)
 
         return JsonResponse({'data': new_entry.id}, status=status.HTTP_200_OK)
     except Exception as e:
@@ -490,6 +416,10 @@ def combineDataExportFiles(request):
                 'station': current_station_names_list,
                 'aqc_checks': df['aqc_checks'],
                 'mqc_checks': df['mqc_checks'],
+                'export_mode': df['export_mode'],
+                'export_mode_label': tasks.describe_export_mode(
+                    df['export_mode'], df['aqc_checks'], df['mqc_checks'], df['source']
+                ),
                 'variables': variable_list,
                 'status': file_status,
                 'initial_date': df['initial_date'],
@@ -535,6 +465,140 @@ def DeleteDataFile(request):
     if os.path.exists(file_path):
         os.remove(file_path)
     return JsonResponse({}, status=status.HTTP_200_OK)
+
+
+@csrf_exempt
+@wx_mapped_permission_required
+def ScheduleDataExport(request):
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    # access values from the response
+    json_body = json.loads(request.body)
+    station_ids = json_body['stations']  # array with station ids
+
+    data_source = json_body['source']  # could be either raw_data, hourly_summary, daily_summary, monthly_summary or yearly_summary
+
+    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
+
+    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
+
+    variable_ids = json_body['variables']  # list of obj in format {id: Int, agg: Str}
+
+    aggregation = json_body['aggregation'] # sets which column in the db will be used when the source is a summary. 
+
+    displayUTC = json_body['displayUTC'] # determines whether an offset will be applied based on the truthines of displayUTC
+
+    try:
+        export_mode, aqc_checks, mqc_checks = parse_export_selection(json_body, data_source)
+    except ValueError as exc:
+        return JsonResponse({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    # If source is raw_data, this will be set to none
+    if data_source == 'raw_data':
+        aggregation = None
+
+    data_interval_seconds = None
+    if data_source == 'raw_data' and 'data_interval' in json_body:  # a number with the data interval in seconds. Only required for raw_data
+        data_interval_seconds = json_body['data_interval']
+    elif data_source == 'raw_data':
+        data_interval_seconds = 300
+
+    created_data_file_ids = []
+
+    # format start and end date NOTE: START and END dates are all understood to be in UTC.
+    start_date_formatted = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+    end_date_formatted = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
+
+    # Attach UTC timezone info
+    start_date_formatted = start_date_formatted.replace(tzinfo=datetime.timezone.utc)
+    end_date_formatted = end_date_formatted.replace(tzinfo=datetime.timezone.utc)
+
+    if start_date_formatted > end_date_formatted:
+        message = 'The initial date must be on or before the final date.'
+        return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
+
+    days_interval = (end_date_formatted - start_date_formatted).days
+
+    data_source_dict = {
+        "raw_data": "Raw Data",
+        "hourly_summary": "Hourly Summary",
+        "daily_summary": "Daily Summary",
+        "monthly_summary": "Monthly Summary",
+        "yearly_summary": "Yearly Summary",
+    }
+
+    data_source_description = data_source_dict[data_source]
+
+    prepared_by = None
+    if request.user.first_name and request.user.last_name:
+        prepared_by = f'{request.user.first_name} {request.user.last_name}'
+    else:
+        prepared_by = request.user.username
+
+    for station_id in station_ids:
+        if aggregation:
+            for agg in aggregation:
+                newfile = DataFile.objects.create(ready=False, 
+                                                  initial_date=start_date_formatted, 
+                                                  final_date=end_date_formatted,
+                                                  source=data_source_description, 
+                                                  prepared_by=prepared_by,
+                                                  interval_in_seconds=data_interval_seconds,
+                                                  aqc_checks = aqc_checks,
+                                                  mqc_checks = mqc_checks,
+                                                  export_mode=export_mode)
+                
+                DataFileStation.objects.create(datafile=newfile, station_id=station_id)
+
+                try:
+                    for variable_id in variable_ids:
+                        variable = Variable.objects.get(pk=variable_id)
+                        DataFileVariable.objects.create(datafile=newfile, variable=variable)
+
+                    tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, agg, aqc_checks, mqc_checks, displayUTC, export_mode=export_mode)
+                    created_data_file_ids.append(newfile.id)
+                except Exception as err:
+                    # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
+                    # this shows that the operation failed
+                    # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not"
+                    # this prevents a possible error state from mascarading as a "processing" status
+
+                    newfile.ready_at = datetime.datetime.now(pytz.utc)
+                    newfile.save(update_fields=["ready_at"])
+        else:
+            newfile = DataFile.objects.create(ready=False, 
+                                              initial_date=start_date_formatted, 
+                                              final_date=end_date_formatted,
+                                              source=data_source_description, 
+                                              prepared_by=prepared_by,
+                                              interval_in_seconds=data_interval_seconds,
+                                              aqc_checks = aqc_checks,
+                                              mqc_checks = mqc_checks,
+                                              export_mode=export_mode
+                                            )
+            
+            DataFileStation.objects.create(datafile=newfile, station_id=station_id)
+
+            try:
+                for variable_id in variable_ids:
+                    variable = Variable.objects.get(pk=variable_id)
+                    DataFileVariable.objects.create(datafile=newfile, variable=variable)
+
+                tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, aggregation, aqc_checks, mqc_checks, displayUTC, export_mode=export_mode)
+                created_data_file_ids.append(newfile.id)
+            except Exception as err:
+                # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
+                # this shows that the operation failed
+                # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not
+                # this prevents a possible error state from mascarading as a "processing" status
+
+                newfile.ready_at = datetime.datetime.now(pytz.utc)
+                newfile.save(update_fields=["ready_at"])
+
+    return JsonResponse({'data': created_data_file_ids}, status=status.HTTP_200_OK)
+
+# ######################################################################################
 
 
 @wx_mapped_permission_required
@@ -656,27 +720,6 @@ def InterpolatePostData(request):
     task = tasks.fetch_mod_interpolation_img_task.delay(**params)
 
     return JsonResponse({"task_id": task.id})
-    
-
-
-
-class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/data_export.html"
-
-    def get_context_data(self, **kwargs):
-        context =  super().get_context_data(**kwargs)
-
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
-        context['variable_list'] = Variable.objects.select_related('unit').all()
-
-        context['station_profile_list'] = StationProfile.objects.all()
-        context['station_watershed_list'] = Watershed.objects.all()
-        context['station_admin_region_list'] = AdministrativeRegion.objects.all()
-
-        interval_list = Interval.objects.filter(seconds__gte=2).order_by('seconds') # exclude 1 second interval
-        context['interval_list'] = interval_list
-
-        return context
 
 
 # view to display manual upload page
@@ -987,7 +1030,7 @@ def UploadManualDataFile(request):
             data = json.loads(request.body)
 
             override_data = data.get('override_on_conflict')
-            is_manually_validated = data.get('is_manually_validated')
+            is_manually_reviewed = data.get('is_manually_reviewed')
             selected_decoder = data.get('selected_decoder')
 
             data_file_id_list=[] # holds ManualStationDataFile id's
@@ -1006,7 +1049,7 @@ def UploadManualDataFile(request):
                     # Check if it's a file
                     if os.path.isfile(source_path):
                         # create ManualStationDataFile object
-                        new_data_file = ManualStationDataFile.objects.create(file_name=filename, status_id=1, override_data_on_conflict=override_data, is_manually_validated=is_manually_validated)
+                        new_data_file = ManualStationDataFile.objects.create(file_name=filename, status_id=1, override_data_on_conflict=override_data, is_manually_reviewed=is_manually_reviewed)
 
                         destination_path = os.path.join(PROCESS_DIR, str(new_data_file.id) + ext) # create the destination path based on the file id
 
@@ -2281,7 +2324,7 @@ class QualityFlagList(viewsets.ReadOnlyModelViewSet):
 
 
 @wx_mapped_permission_required
-def qc_list(request):
+def get_qc_list(request):
     if request.method == 'GET':
         station_id = request.GET.get('station_id', None)
         variable_id = request.GET.get('variable_id', None)
@@ -2393,6 +2436,10 @@ def qc_list(request):
                             ,value.qc_range_quality_flag
                             ,value.qc_step_quality_flag
                             ,value.qc_persist_quality_flag
+                            ,value.proposed_value
+                            ,value.validated_flag
+                            ,value.validated_remarks
+                            ,value.is_validated
                         FROM raw_data as value
                         WHERE value.station_id=%s
                         AND value.variable_id=%s
@@ -2418,7 +2465,25 @@ def qc_list(request):
 
         return JsonResponse({"task_id": task.id})
 
+    return JsonResponse({'message': 'Only the GET method is allowed.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@wx_mapped_permission_required
+def update_qc_list(request):
     if request.method == "PATCH":
+
+        can_write = bool(has_any_feature_permission(request, "quality-control:write"))
+        if not can_write:
+            return JsonResponse(
+                {"message": "You do not have permission to save quality-control changes."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Compute this on the server; never read it from the request body.
+        can_validate = bool(
+            can_write and has_any_group_access(request, "5,7")
+        )
+
         station_id = request.GET.get("station_id")
         variable_id = request.GET.get("variable_id")
         req_datetime = request.GET.get("datetime")
@@ -2436,18 +2501,63 @@ def qc_list(request):
         try:
             station_id = int(station_id)
             variable_id = int(variable_id)
+
+            # variable id is < 0 and not <= because precipitation has an id of 0
+            if station_id <= 0 or variable_id < 0:
+                return JsonResponse(
+                    {"message": "Station Id and Variable Id must be positive integers."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             # expecting the a UTC datetime value
             req_datetime = datetime.datetime.strptime(req_datetime, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
         except ValueError:
             return JsonResponse({"message": "Invalid parameter type."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        body = json.loads(request.body.decode("utf-8"))
+        # BODY JSON
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return JsonResponse(
+                {"message": "Invalid JSON body."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(body, dict):
+            return JsonResponse(
+                {"message": "The request body must be a JSON object."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+        validation_fields = tasks.QC_VALIDATION_FIELDS.intersection(body)
+        if validation_fields and not can_validate:
+            return JsonResponse(
+                {"message": "You do not have permission to change validation fields."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if set(body) - tasks.ALLOWED_UPDATE_FIELDS:
+            return JsonResponse(
+                {"message": "Unsupported QC update fields."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
         set_parts = []
         params = []
 
         updates = {}
 
+        # catch ValueError & TypeError rather than only ValueError for the "manual_flag", "validated_flag", "proposed_value", "consisted" feilds
+        for field in ("manual_flag", "validated_flag", "proposed_value", "consisted"):
+            if field in body and isinstance(body[field], bool):
+                return JsonResponse(
+                    {"message": f"{field} cannot be a boolean."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # manual flag, proposed value & remarks options
         if "manual_flag" in body:
             try:
                 updates["manual_flag"] = parse_int_value(body["manual_flag"])
@@ -2455,30 +2565,94 @@ def qc_list(request):
                 return JsonResponse({"message": "Wrong manual flag value type."},
                                     status=status.HTTP_400_BAD_REQUEST)
 
-        if "consisted" in body:
+        if "proposed_value" in body:
             try:
-                updates["consisted"] = parse_float_value(body["consisted"])
+                updates["proposed_value"] = parse_float_value(body["proposed_value"])
             except ValueError:
-                return JsonResponse({"message": "Wrong consisted value type. Please enter a float value."},
+                return JsonResponse({"message": "Wrong proposed value value type. Please enter a float value."},
                                     status=status.HTTP_400_BAD_REQUEST)
 
         if "remarks" in body:
             updates["remarks"] = body["remarks"]
 
+        # validation options:
+        if "validated_flag" in body:
+            try:
+                updates["validated_flag"] = parse_int_value(body["validated_flag"])
+            except ValueError:
+                return JsonResponse({"message": "Wrong validated flag value type."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+        if "consisted" in body:
+            try:
+                updates["consisted"] = parse_float_value(body["consisted"])
+            except ValueError:
+                return JsonResponse({"message": "Wrong validated value (consisted) value type. Please enter a float value."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+        if "validated_remarks" in body:
+            updates["validated_remarks"] = body["validated_remarks"]
+
+        if "is_validated" in body:
+            if type(body["is_validated"]) is not bool:
+                return JsonResponse(
+                    {"message": "is_validated must be true or false."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            updates["is_validated"] = body["is_validated"]
+
+
+        if "validated_flag" in updates:
+            flag = updates["validated_flag"]
+            if flag is not None and (
+                type(flag) is not int or flag not in tasks.QC_VALIDATED_FLAG_IDS
+            ):
+                return JsonResponse(
+                    {"message": "Validated Flag must be Not Checked, Good, or Missing."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        for field in ("proposed_value", "consisted"):
+            if field in updates and updates[field] is not None:
+                if not math.isfinite(updates[field]):
+                    return JsonResponse(
+                        {"message": f"{field} must be a finite number."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        for field in ("remarks", "validated_remarks"):
+            if field in updates and updates[field] is not None:
+                if not isinstance(updates[field], str) or len(updates[field]) > 120:
+                    return JsonResponse(
+                        {"message": f"{field} must be text of at most 120 characters."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                    
+        # Single view, after parsing manual_flag and before enqueueing:
+        flag = updates.get("manual_flag")
+        if flag is not None and not QualityFlag.objects.filter(pk=flag).exists():
+            return JsonResponse(
+                {"message": "Invalid manual flag."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # updates must be populated
         if not updates:
-            return JsonResponse({"message": "You must send 'manual_flag', 'consisted' or 'remarks' data to update."},
+            return JsonResponse({"message": "Send at least one QC field to update."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        task = tasks.qc_manual_checks.delay(
+        task = tasks.qc_validation_save.delay(
             station_id=station_id,
             variable_id=variable_id,
             req_datetime=req_datetime.strftime("%Y-%m-%dT%H:%M:%SZ"),
             updates=updates,
+            can_validate=can_validate,
         )
 
         return JsonResponse({"task_id": task.id})
 
-    return JsonResponse({'message': 'Only the GET and PATCH methods is allowed.'}, status=status.HTTP_400_BAD_REQUEST)
+    return JsonResponse({'message': 'Only the PATCH method is allowed.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET'])
@@ -2568,11 +2742,97 @@ def get_qc_description(request):
     )
 
 
+@require_POST
+@wx_mapped_permission_required
+def qc_validate_fill_missing(request):
+    ALLOWED_INTERVALS = {60, 300, 600, 900, 1800, 3600}
+    
+    try:
+        data = json.loads(request.body)
+
+        station_id = data["station_id"]
+        variable_id = data["variable_id"]
+        interval = data["interval_seconds"]
+
+        # These are station-local naive datetimes.
+        start = datetime.datetime.strptime(
+            data["start_date"], "%Y-%m-%dT%H:%M:%S"
+        )
+        end = datetime.datetime.strptime(
+            data["end_date"], "%Y-%m-%dT%H:%M:%S"
+        )
+
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return JsonResponse(
+            {"message": "Invalid or missing request parameters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if (
+        type(station_id) is not int
+        or type(variable_id) is not int
+        or station_id <= 0
+        or variable_id <= 0
+        or type(interval) is not int
+        or interval not in ALLOWED_INTERVALS
+    ):
+        return JsonResponse(
+            {"message": "Invalid station, variable or interval."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if start >= end:
+        return JsonResponse(
+            {"message": "End date must be after start date."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    station = Station.objects.filter(pk=station_id).first()
+
+    if station is None:
+        return JsonResponse(
+            {"message": "Station not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not StationVariable.objects.filter(
+        station_id=station_id,
+        variable_id=variable_id,
+    ).exists():
+        return JsonResponse(
+            {"message": "Variable is not assigned to this station."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Pass strings to Celery rather than relying on datetime serialization.
+    # The station offset is also passed so the task does not need another DB lookup.
+    task = tasks.fill_missing_data.delay(
+        station_id,
+        variable_id,
+        start.isoformat(),
+        end.isoformat(),
+        interval,
+        station.utc_offset_minutes,
+    )
+
+    return JsonResponse(
+        {"task_id": task.id},
+        status=status.HTTP_200_OK,
+    )
+
+
 @wx_mapped_permission_required
 def qc_validate_bulk(request):
     if request.method != "PATCH":
         return JsonResponse({"message": "Only the PATCH method is allowed."},
                             status=status.HTTP_400_BAD_REQUEST)
+
+    can_write = bool(has_any_feature_permission(request, "quality-control:write"))
+    if not can_write:
+        return JsonResponse(
+            {"message": "You do not have permission to save quality-control changes."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     # get station and variable ids and check them
     station_id = request.GET.get("station_id")
@@ -2588,6 +2848,12 @@ def qc_validate_bulk(request):
     try:
         station_id = int(station_id)
         variable_id = int(variable_id)
+
+        if station_id <= 0 or variable_id < 0:
+            return JsonResponse(
+                {"message": "Station Id and Variable Id must be positive integers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
     except ValueError:
         return JsonResponse({"message": "Invalid Station Id or Variable Id."},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -2595,9 +2861,30 @@ def qc_validate_bulk(request):
     # Body JSON
     try:
         body = json.loads(request.body.decode("utf-8"))
-    except Exception:
-        return JsonResponse({"message": "Invalid JSON body."},
-                            status=status.HTTP_400_BAD_REQUEST)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse(
+            {"message": "Invalid JSON body."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(body, dict):
+        return JsonResponse(
+            {"message": "The request body must be a JSON object."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+    if tasks.QC_VALIDATION_FIELDS.intersection(body):
+        return JsonResponse(
+            {"message": "Validation fields cannot be changed through Bulk Update."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if set(body) - {"manual_flag", "remarks", "datetime_list"}:
+        return JsonResponse(
+            {"message": "Unsupported bulk update fields."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     manual_flag = body.get("manual_flag")
     remarks = body.get("remarks", "")
@@ -2606,16 +2893,28 @@ def qc_validate_bulk(request):
     if manual_flag is None:
         return JsonResponse({"message": "'Manual Flag' cannot be null."},
                             status=status.HTTP_400_BAD_REQUEST)
+                            
     if datetime_list is None or not isinstance(datetime_list, list) or len(datetime_list) == 0:
         return JsonResponse({"message": "'Datetime List' must be a non-empty list."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        manual_flag = int(manual_flag)
-        remarks = str(remarks)
-    except ValueError:
-        return JsonResponse({"message": "Invalid manual_flag or remarks."},
-                            status=status.HTTP_400_BAD_REQUEST)
+    if type(manual_flag) is not int:
+        return JsonResponse(
+            {"message": "manual_flag must be an integer."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not QualityFlag.objects.filter(pk=manual_flag).exists():
+        return JsonResponse(
+            {"message": "Invalid manual flag."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(remarks, str) or len(remarks) > 120:
+        return JsonResponse(
+            {"message": "Remarks must be text of at most 120 characters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     req_datetime_list = []
 
@@ -2804,7 +3103,9 @@ class StationDetailView(LoginRequiredMixin, DetailView):
                 ),
         Fieldset('Instrumentation and Maintenance'),
         Fieldset('Observing Practices'),
-        Fieldset('Data Processing'),
+        Fieldset('Data Processing',
+                 Row('reference_station'),
+                ),
         Fieldset('Historical Events'),
         Fieldset('Other Metadata',
                  Row('hydrology_station_type', 'ground_water_province'),
@@ -3014,7 +3315,7 @@ class StationUpdate(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
                 #  Row(''),
                 ),
         Fieldset('Data Processing',
-                #  Row(''),
+                 Row('reference_station'),
                 ),
         Fieldset('Historical Events',
                 #  Row(''),
@@ -3035,39 +3336,6 @@ class StationUpdate(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
                  Row('casing_type', 'datum'),
                  Row('zone')
                  )
-    #     Fieldset('Editing station',
-    #              Row('latitude', 'longitude'),
-    #              Row('name', 'is_active'),
-    #              Row('alias_name', 'is_automatic'),
-    #              Row('code', 'profile'),
-    #              Row('wmo', 'organization'),
-    #              Row('wigos', 'observer'),
-    #              Row('begin_date', 'data_source'),
-    #              Row('end_date', 'communication_type')
-    #              ),
-    #     Fieldset('Other information',
-    #              Row('elevation', 'watershed'),
-    #              Row('country', 'region'),
-    #              Row('utc_offset_minutes', 'local_land_use'),
-    #              Row('soil_type', 'station_details'),
-    #              Row('site_description', 'alternative_names')
-    #              ),
-    #     Fieldset('Hydrology information',
-    #              Row('hydrology_station_type', 'ground_water_province'),
-    #              Row('existing_gauges', 'flow_direction_at_station'),
-    #              Row('flow_direction_above_station', 'flow_direction_below_station'),
-    #              Row('bank_full_stage', 'bridge_level'),
-    #              Row('temporary_benchmark', 'mean_sea_level'),
-    #              Row('river_code', 'river_course'),
-    #              Row('catchment_area_station', 'river_origin'),
-    #              Row('easting', 'northing'),
-    #              Row('river_outlet', 'river_length'),
-    #              Row('z', 'land_surface_elevation'),
-    #              Row('top_casing_land_surface', 'casing_diameter'),
-    #              Row('screen_length', 'depth_midpoint'),
-    #              Row('casing_type', 'datum'),
-    #              Row('zone')
-    #              )
         )
 
        
@@ -5937,6 +6205,7 @@ def last24_summary_list(request):
     return JsonResponse(data={"message": "No data found."}, status=status.HTTP_404_NOT_FOUND)
 
 
+
 def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_type, datetime_picked):
     station = Station.objects.get(id=station_id)
     variable = Variable.objects.get(id=variable_id)
@@ -5992,6 +6261,8 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
 
     if data_type == 'Communication':
 
+        # hourly_summary contains QC-eligible data. This therefore counts
+        # hours with usable summaries, rather than proving data receipt.
         query = """
             WITH date_range AS (
                 SELECT
@@ -6121,6 +6392,7 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
             'suspicious': QualityFlag.objects.get(name='Suspicious').color,
             'bad': QualityFlag.objects.get(name='Bad').color,
             'not_checked': QualityFlag.objects.get(name='Not checked').color,
+            'missing': QualityFlag.objects.get(name='Missing').color,
         }
 
         query = """
@@ -6132,75 +6404,42 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
                         INTERVAL '1 day'
                     )::date AS date
             ),
-
-            hs AS (
+            record_flags AS (
                 SELECT
                     (
                         rd.datetime AT TIME ZONE %(timezone_name)s
                     )::date AS date,
-
-                    date_trunc(
-                        'hour',
-                        rd.datetime AT TIME ZONE %(timezone_name)s
-                    ) AS hour,
-
                     CASE
-                        WHEN COUNT(
-                            CASE WHEN name = 'Bad' THEN 1 END
-                        ) > 0
-                            THEN 'Bad'
-
-                        WHEN COUNT(
-                            CASE WHEN name = 'Suspicious' THEN 1 END
-                        ) > 0
-                            THEN 'Suspicious'
-
-                        WHEN COUNT(
-                            CASE WHEN name = 'Good' THEN 1 END
-                        ) > 0
-                            THEN 'Good'
-
+                        WHEN qf.name IN (
+                            'Good', 'Suspicious', 'Bad', 'Not checked', 'Missing'
+                        ) THEN qf.name
                         ELSE 'Not checked'
                     END AS quality_flag
-
                 FROM raw_data AS rd
 
-                LEFT JOIN wx_qualityflag qf
-                    ON COALESCE(rd.manual_flag, rd.quality_flag) = qf.id
-
+                -- Classify each reading independently. Multiple statuses in
+                -- the same hour each contribute their own reading counts.
+                LEFT JOIN wx_qualityflag AS qf
+                    ON qf.id = CASE
+                        WHEN rd.is_validated THEN rd.validated_flag
+                        WHEN NOT rd.is_validated THEN rd.quality_flag
+                        ELSE NULL
+                    END
                 WHERE rd.datetime >= %(query_start_datetime)s
                   AND rd.datetime < %(query_end_datetime)s
                   AND rd.station_id = %(station_id)s
                   AND rd.variable_id = %(variable_id)s
-
-                GROUP BY 1, 2
-                ORDER BY 1, 2
             )
-
             SELECT
                 date_range.date,
-
-                COUNT(
-                    CASE WHEN hs.quality_flag = 'Good' THEN 1 END
-                ) AS good,
-
-                COUNT(
-                    CASE WHEN hs.quality_flag = 'Suspicious' THEN 1 END
-                ) AS suspicious,
-
-                COUNT(
-                    CASE WHEN hs.quality_flag = 'Bad' THEN 1 END
-                ) AS bad,
-
-                COUNT(
-                    CASE WHEN hs.quality_flag = 'Not checked' THEN 1 END
-                ) AS not_checked
-
+                COUNT(CASE WHEN r.quality_flag = 'Good' THEN 1 END) AS good,
+                COUNT(CASE WHEN r.quality_flag = 'Suspicious' THEN 1 END) AS suspicious,
+                COUNT(CASE WHEN r.quality_flag = 'Bad' THEN 1 END) AS bad,
+                COUNT(CASE WHEN r.quality_flag = 'Not checked' THEN 1 END) AS not_checked,
+                COUNT(CASE WHEN r.quality_flag = 'Missing' THEN 1 END) AS missing
             FROM date_range
-
-            LEFT JOIN hs
-                ON date_range.date = hs.date
-
+            LEFT JOIN record_flags AS r
+                ON date_range.date = r.date
             GROUP BY date_range.date
             ORDER BY date_range.date
         """
@@ -6215,7 +6454,7 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
             data = [r[i + 1] for r in results]
 
             series.append({
-                'name': flag.capitalize(),
+                'name': flag.replace('_', ' ').capitalize(),
                 'data': data,
                 'color': flags[flag]
             })
@@ -6226,7 +6465,7 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
             },
             'title': {
                 'text': " ".join([
-                    'Amount of Flags -',
+                    'Readings by QC Status -',
                     date_start,
                     'to',
                     date_end
@@ -6244,23 +6483,95 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
                 'categories': [r[0] for r in results]
             },
             'yAxis': {
-                'title': None,
-                'categories': [str(i) + 'h' for i in range(25)],
-                'tickInterval': 2,
+                'title': {'text': 'Readings'},
+                'allowDecimals': False,
                 'min': 0,
-                'max': 24,
             },
             'series': series,
             'plotOptions': {
                 'column': {
-                    'minPointLength': 10,
+                    'minPointLength': 0,
                     'pointPadding': 0.01,
                     'groupPadding': 0.05
                 }
             }
         }
 
+    elif data_type == 'Validation':
+        query = """
+            WITH date_range AS (
+                SELECT generate_series(
+                    %(chart_start_date)s::date,
+                    %(chart_end_date)s::date,
+                    INTERVAL '1 day'
+                )::date AS date
+            ),
+            daily_counts AS (
+                SELECT
+                    (rd.datetime AT TIME ZONE %(timezone_name)s)::date AS date,
+                    COUNT(CASE WHEN rd.is_validated IS TRUE THEN 1 END) AS validated,
+                    COUNT(CASE WHEN rd.is_validated IS NOT TRUE THEN 1 END) AS unvalidated
+                FROM raw_data AS rd
+                WHERE rd.datetime >= %(query_start_datetime)s
+                  AND rd.datetime < %(query_end_datetime)s
+                  AND rd.station_id = %(station_id)s
+                  AND rd.variable_id = %(variable_id)s
+                GROUP BY 1
+            )
+            SELECT
+                date_range.date,
+                COALESCE(c.validated, 0) AS validated,
+                COALESCE(c.unvalidated, 0) AS unvalidated
+            FROM date_range
+            LEFT JOIN daily_counts AS c ON c.date = date_range.date
+            ORDER BY date_range.date
+        """
+
+        # Use the same validation-state definition as the station table.
+        # Empty days contribute zero readings, not one unvalidated LEFT JOIN row.
+        with connection.cursor() as cursor:
+            cursor.execute(query, query_params)
+            results = cursor.fetchall()
+
+        chart_options = {
+            'chart': {'type': 'column'},
+            'title': {
+                'text': f'Validation Counts - {date_start} to {date_end}'
+            },
+            'subtitle': {
+                'text': f'{station.name} {station.code} - {variable.name} ({chart_time_label})'
+            },
+            'xAxis': {'categories': [row[0] for row in results]},
+            'yAxis': {
+                'title': {'text': 'Readings'},
+                'allowDecimals': False,
+                'min': 0,
+            },
+            'series': [
+                {
+                    'name': 'Validated',
+                    'color': '#1976D2',
+                    'data': [row[1] for row in results],
+                },
+                {
+                    'name': 'Unvalidated',
+                    'color': '#78909C',
+                    'data': [row[2] for row in results],
+                },
+            ],
+            'tooltip': {'shared': True},
+            'plotOptions': {
+                'column': {
+                    'stacking': 'normal',
+                    'minPointLength': 0,
+                    'pointPadding': 0.01,
+                    'groupPadding': 0.05,
+                }
+            },
+        }
+
     return chart_options
+
 
 
 @require_http_methods(["GET"])   
@@ -6318,6 +6629,8 @@ def get_station_lastupdate(station_id):
     return lastupdate
 
 
+
+
 def query_stationsmonitoring_station(data_type, time_type, date_picked, station_id):
     if time_type == 'Last 24h':
         # True rolling 24-hour UTC window.
@@ -6356,6 +6669,9 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
     # Communication
     # ------------------------------------------------------------
     if data_type == 'Communication':
+        # These counts describe hours with summaries, not all data received.
+        # Historical counts also depend on those summaries being recalculated
+        # under the updated QC policy.
         query = """
             WITH hs AS (
                 SELECT
@@ -6419,9 +6735,37 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
                 ON sv.station_id = hs.station_id
                 AND sv.variable_id = hs.variable_id
 
-            LEFT JOIN last24h_summary AS ls
-                ON sv.station_id = ls.station_id
-                AND sv.variable_id = ls.variable_id
+            -- Select the latest QC-eligible value within this request's
+            -- period. A picked historical day must not use last24h_summary.
+            LEFT JOIN LATERAL (
+                SELECT eligible.value AS latest_value
+                FROM (
+                    SELECT
+                        rd.datetime,
+                        CASE
+                            WHEN rd.is_validated
+                                THEN COALESCE(rd.consisted, rd.measured)
+                            ELSE rd.measured
+                        END AS value
+                    FROM raw_data AS rd
+                    WHERE rd.station_id = sv.station_id
+                      AND rd.variable_id = sv.variable_id
+                      AND rd.datetime >= %s
+                      AND rd.datetime < %s
+                      AND rd.is_daily = false
+                      AND (
+                            (rd.is_validated AND rd.validated_flag = 4)
+                            OR (
+                                NOT rd.is_validated
+                                AND rd.quality_flag IN (1, 4)
+                            )
+                      )
+                ) AS eligible
+                WHERE eligible.value IS NOT NULL
+                  AND eligible.value <> %s
+                ORDER BY eligible.datetime DESC
+                LIMIT 1
+            ) AS ls ON TRUE
 
             LEFT JOIN wx_variable AS v
                 ON sv.variable_id = v.id
@@ -6443,6 +6787,9 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
                     query_start,
                     query_end,
                     station_id,
+                    query_start,
+                    query_end,
+                    settings.MISSING_VALUE,
                     station_id
                 )
             )
@@ -6454,7 +6801,10 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
                 'name': r[1],
                 'amount': r[2] if r[2] is not None else 0,
                 'latestvalue': (
-                    " ".join([str(r[3]), str(r[4])])
+                    " ".join(
+                        str(part) for part in (r[3], r[4])
+                        if part is not None and str(part) != ''
+                    )
                     if r[3] is not None
                     else '---'
                 ),
@@ -6468,128 +6818,59 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
     # ------------------------------------------------------------
     elif data_type == 'Quality Control':
         query = """
-            WITH h AS (
+            WITH record_flags AS (
                 SELECT
                     rd.station_id,
                     rd.variable_id,
 
-                    -- Anchor hourly buckets to the start of the requested
-                    -- period. A rolling 24h window therefore has 24 buckets.
-                    FLOOR(
-                        EXTRACT(
-                            EPOCH FROM (
-                                rd.datetime - %s
-                            )
-                        ) / 3600
-                    ) AS hour,
-
-                    -- Worst QC status inside each one-hour bucket.
+                    -- Unknown/null flags remain visible as Not checked.
                     CASE
-                        WHEN COUNT(
-                            CASE
-                                WHEN qf.name = 'Bad' THEN 1
-                            END
-                        ) > 0 THEN 'Bad'
-
-                        WHEN COUNT(
-                            CASE
-                                WHEN qf.name = 'Suspicious' THEN 1
-                            END
-                        ) > 0 THEN 'Suspicious'
-
-                        WHEN COUNT(
-                            CASE
-                                WHEN qf.name = 'Good' THEN 1
-                            END
-                        ) > 0 THEN 'Good'
-
+                        WHEN qf.name IN (
+                            'Good', 'Suspicious', 'Bad', 'Not checked', 'Missing'
+                        ) THEN qf.name
                         ELSE 'Not checked'
                     END AS quality_flag
-
                 FROM raw_data AS rd
 
-                -- Manual QC overrides the automatic QC flag.
+                -- Final validation overrides AQC. Manual review does not
+                -- change the effective flag used by monitoring.
                 LEFT JOIN wx_qualityflag AS qf
-                    ON COALESCE(
-                        rd.manual_flag,
-                        rd.quality_flag
-                    ) = qf.id
-
-                WHERE
-                    rd.datetime >= %s
-                    AND rd.datetime < %s
-                    AND rd.station_id = %s
-
-                GROUP BY
-                    rd.station_id,
-                    rd.variable_id,
-                    hour
-
-                ORDER BY
-                    rd.station_id,
-                    rd.variable_id,
-                    hour
+                    ON qf.id = CASE
+                        WHEN rd.is_validated THEN rd.validated_flag
+                        WHEN NOT rd.is_validated THEN rd.quality_flag
+                        ELSE NULL
+                    END
+                WHERE rd.datetime >= %s
+                  AND rd.datetime < %s
+                  AND rd.station_id = %s
             )
-
             SELECT
                 v.id,
                 v.name,
+                COUNT(CASE WHEN r.quality_flag = 'Good' THEN 1 END) AS good,
+                COUNT(CASE WHEN r.quality_flag = 'Suspicious' THEN 1 END) AS suspicious,
+                COUNT(CASE WHEN r.quality_flag = 'Bad' THEN 1 END) AS bad,
+                COUNT(CASE WHEN r.quality_flag = 'Not checked' THEN 1 END) AS not_checked,
+                COUNT(CASE WHEN r.quality_flag = 'Missing' THEN 1 END) AS missing,
 
-                COUNT(
-                    CASE
-                        WHEN h.quality_flag = 'Good' THEN 1
-                    END
-                ) AS good,
-
-                COUNT(
-                    CASE
-                        WHEN h.quality_flag = 'Suspicious' THEN 1
-                    END
-                ) AS suspicious,
-
-                COUNT(
-                    CASE
-                        WHEN h.quality_flag = 'Bad' THEN 1
-                    END
-                ) AS bad,
-
-                COUNT(
-                    CASE
-                        WHEN h.quality_flag = 'Not checked' THEN 1
-                    END
-                ) AS not_checked
-
+                -- Count matched raw records, not the empty LEFT JOIN row.
+                -- Explicit Missing records count; absent timestamps do not.
+                COUNT(r.variable_id) AS total
             FROM wx_stationvariable AS sv
-
             LEFT JOIN wx_variable AS v
                 ON sv.variable_id = v.id
-
-            LEFT JOIN h
-                ON sv.station_id = h.station_id
-                AND sv.variable_id = h.variable_id
-
-            WHERE
-                sv.station_id = %s
-
-            GROUP BY
-                v.id,
-                v.name
-
-            ORDER BY
-                v.id,
-                v.name
+            LEFT JOIN record_flags AS r
+                ON sv.station_id = r.station_id
+                AND sv.variable_id = r.variable_id
+            WHERE sv.station_id = %s
+            GROUP BY v.id, v.name
+            ORDER BY v.id, v.name
         """
 
         with connection.cursor() as cursor:
             cursor.execute(
                 query,
-                (
-                    query_start,  # origin of the hourly buckets
-                    query_start,  # requested period start
-                    query_end,    # requested period end
-                    station_id,
-                    station_id
-                )
+                (query_start, query_end, station_id, station_id)
             )
             results = cursor.fetchall()
 
@@ -6600,9 +6881,67 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
                 'good': r[2],
                 'suspicious': r[3],
                 'bad': r[4],
-                'not_checked': r[5]
+                'not_checked': r[5],
+                'missing': r[6],
+                'total': r[7],
             }
             for r in results
+        ]
+
+    # ------------------------------------------------------------
+    # Validation progress
+    # ------------------------------------------------------------
+    elif data_type == 'Validation':
+        query = """
+            WITH validation_counts AS (
+                SELECT
+                    rd.station_id,
+                    rd.variable_id,
+                    COUNT(*) AS total,
+                    COUNT(CASE WHEN rd.is_validated IS TRUE THEN 1 END) AS validated,
+                    COUNT(CASE WHEN rd.is_validated IS NOT TRUE THEN 1 END) AS unvalidated
+                FROM raw_data AS rd
+                WHERE rd.datetime >= %s
+                  AND rd.datetime < %s
+                  AND rd.station_id = %s
+                GROUP BY rd.station_id, rd.variable_id
+            )
+            SELECT
+                v.id,
+                v.name,
+                COALESCE(c.total, 0) AS total,
+                COALESCE(c.validated, 0) AS validated,
+                COALESCE(c.unvalidated, 0) AS unvalidated
+            FROM wx_stationvariable AS sv
+            JOIN wx_variable AS v ON v.id = sv.variable_id
+            LEFT JOIN validation_counts AS c
+                ON c.station_id = sv.station_id
+                AND c.variable_id = sv.variable_id
+            WHERE sv.station_id = %s
+            ORDER BY v.id
+        """
+
+        # Count all stored readings, including Bad/Suspicious/Missing readings.
+        # Validation completion is independent of numerical-summary eligibility.
+        # A legacy NULL state is pending; only TRUE counts as validated.
+        with connection.cursor() as cursor:
+            cursor.execute(query, (query_start, query_end, station_id, station_id))
+            results = cursor.fetchall()
+
+        station_data = [
+            {
+                'id': row[0],
+                'name': row[1],
+                'total': row[2],
+                'validated': row[3],
+                'unvalidated': row[4],
+                # No readings means no meaningful percentage, rather than 0%.
+                'validated_percentage': (
+                    round(100.0 * row[3] / row[2], 2)
+                    if row[2] else None
+                ),
+            }
+            for row in results
         ]
 
     # ------------------------------------------------------------
@@ -6788,6 +7127,7 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
         ]
 
     return station_data
+
 
 
 @require_http_methods(["GET"])
@@ -7210,15 +7550,15 @@ class stationsmonitoring_form(LoginRequiredMixin, TemplateView):
     template_name = "wx/stations/stations_monitoring.html"
 
     def get_context_data(self, **kwargs):
-        # call the base implementation to get a context dict
         context = super().get_context_data(**kwargs)
 
-        # add flags
+        # Expose all five QC colors to the table and the map legend.
         context['flags'] = {
             'good': QualityFlag.objects.get(name='Good').color,
             'suspicious': QualityFlag.objects.get(name='Suspicious').color,
             'bad': QualityFlag.objects.get(name='Bad').color,
             'not_checked': QualityFlag.objects.get(name='Not checked').color,
+            'missing': QualityFlag.objects.get(name='Missing').color,
         }
         return context
 
@@ -11988,7 +12328,7 @@ class SynopCaptureView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateVi
         context = super().get_context_data(**kwargs)
 
         # get synop station information
-        context['station_list'] = Station.objects.filter(is_synoptic=True, is_reference=False).values('id', 'name', 'code')
+        context['station_list'] = Station.objects.filter(is_active=True, is_synoptic=True, is_automatic=False, is_reference=False).values('id', 'name', 'code')
         # retrieves the ag_grid_config, the id's of columns which should be numbers and a dict of col id's mapped to wmocodevalues
         context['ag_grid_config'], context['num_validate_ids'], context['variable_ids'] = get_synop_capture_config()
 

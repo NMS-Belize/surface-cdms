@@ -11,11 +11,21 @@ from datetime import datetime, timedelta, timezone, date
 def get_connection():
     return psycopg2.connect(settings.SURFACE_CONNECTION_STRING)
 
-
+# Expanded sentinel check handling float precision, None, and strings
+MISSING_SENTINELS = {settings.MISSING_VALUE, -999, -9999, -99.9, -999.0, -9999.0}
 
 # ---------------------------------------------------------------------
 # HELPER FXN's
 # ---------------------------------------------------------------------
+def is_missing(val):
+    if val is None or val == "":
+        return True
+    try:
+        # Cast to float to catch precision quirks (e.g., -999.00 vs -999)
+        return float(val) in MISSING_SENTINELS
+    except (ValueError, TypeError):
+        return False
+
 def convert_records_to_utc(records, utc_offset_minutes):
     """
     records: list of dicts with keys:
