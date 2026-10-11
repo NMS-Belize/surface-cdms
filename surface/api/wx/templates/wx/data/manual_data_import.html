@@ -68,8 +68,8 @@
                   <v-col cols="3">
                     <v-switch
                         v-if="selectedDecoder==='default'"
-                        v-model="manuallyValidatedData"
-                        label="Manually Validated Data"
+                        v-model="manuallyReviewedData"
+                        label="Manually Reviewed Data"
                         inset
                     ></v-switch>
                   </v-col>
@@ -306,7 +306,7 @@
           utcOffset: null,
           utcOffsets: ["UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5", "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC", "UTC+1", "UTC+2", "UTC+3", "UTC+4", "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12"],
           overrideData: true,
-          manuallyValidatedData: false,
+          manuallyReviewedData: false,
           timezone: "{{ TIMEZONE_NAME|escapejs }}",
           surface_offset_hrs: "{{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }}",
           stations: [
@@ -356,10 +356,10 @@
             this.loading = true; // set loading to true
             this.showBtn = false; // disable the buttons
 
-            console.log(`This is the manual validated value: ${this.manuallyValidatedData}`);
+            console.log(`This is the manual validated value: ${this.manuallyReviewedData}`);
 
             // Handle the file upload logic here
-            axios.post('upload-files/', {override_on_conflict: this.overrideData, is_manually_validated: this.manuallyValidatedData, selected_decoder: this.selectedDecoder})
+            axios.post('upload-files/', {override_on_conflict: this.overrideData, is_manually_reviewed: this.manuallyReviewedData, selected_decoder: this.selectedDecoder})
             .then(response => {
               // 
 

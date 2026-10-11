@@ -968,30 +968,43 @@ class Document(BaseModel):
         return self.file.name
 
 
+DATA_EXPORT_MODE_CHOICES = [
+    ("legacy", "Legacy AQC/MQC settings"),
+    ("validated", "Validated data"),
+    ("aqc_good", "Good data - AQC only"),
+    ("all", "All data"),
+    ("summary", "Stored summary"),
+]
+
+
 class CombineDataFile(BaseModel):
     ready_at = models.DateTimeField(null=True, blank=True)
     ready = models.BooleanField(default=False)
     initial_date = models.DateTimeField(null=True, blank=True)
     final_date = models.DateTimeField(null=True, blank=True)
-    aqc_checks = models.BooleanField(null=False, blank=False, default=False) # automatic quality control (aqc)
-    mqc_checks = models.BooleanField(null=False, blank=False, default=False) # manual quality control (mqc)
+    aqc_checks = models.BooleanField(null=False, blank=False, default=False)  # Legacy AQC filter.
+    mqc_checks = models.BooleanField(null=False, blank=False, default=False)  # Legacy manual-flag filter.
+    # New exports set this explicitly; existing history keeps its original meaning.
+    export_mode = models.CharField(max_length=16, choices=DATA_EXPORT_MODE_CHOICES, default="legacy")
     source = models.CharField(max_length=30, null=False, blank=False, default="Raw data")
     lines = models.IntegerField(null=True, blank=True, default=None)
     prepared_by = models.CharField(max_length=256, null=True, blank=True)
     stations_ids = models.TextField(null=False, blank=False)
-    variable_ids= models.TextField(null=True, blank=True)
+    variable_ids = models.TextField(null=True, blank=True)
     aggregation = models.CharField(max_length=256, null=True, blank=False, default="N/A")
 
     def __str__(self):
         return 'file ' + str(self.id)
-    
+
+
 class DataFile(BaseModel):
     ready_at = models.DateTimeField(null=True, blank=True)
     ready = models.BooleanField(default=False)
     initial_date = models.DateTimeField(null=True, blank=True)
     final_date = models.DateTimeField(null=True, blank=True)
-    aqc_checks = models.BooleanField(null=False, blank=False, default=False) # automatic quality control (aqc)
-    mqc_checks = models.BooleanField(null=False, blank=False, default=False) # manual quality control (mqc)
+    aqc_checks = models.BooleanField(null=False, blank=False, default=False)  # Legacy AQC filter.
+    mqc_checks = models.BooleanField(null=False, blank=False, default=False)  # Legacy manual-flag filter.
+    export_mode = models.CharField(max_length=16, choices=DATA_EXPORT_MODE_CHOICES, default="legacy")
     source = models.CharField(max_length=30, null=False, blank=False, default="Raw data")
     lines = models.IntegerField(null=True, blank=True, default=None)
     prepared_by = models.CharField(max_length=256, null=True, blank=True)
@@ -1329,7 +1342,7 @@ class ManualStationDataFile(BaseModel):
     month = models.CharField(max_length=128, default="Not Found")
     observation = models.TextField(null=True, blank=True)
     override_data_on_conflict = models.BooleanField(default=False)
-    is_manually_validated = models.BooleanField(default=False)
+    is_manually_reviewed = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.filepath}'

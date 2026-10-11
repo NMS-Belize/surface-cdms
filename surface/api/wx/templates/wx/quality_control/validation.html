@@ -828,12 +828,14 @@
                     <template v-slot:item.is_validated="{ item }">
                       <v-tooltip bottom>
                         <template v-slot:activator="{ on, attrs }">
+                          <!-- optional green validation btn -->
+                          <!-- :color="item.is_validated ? 'success' : 'grey'" -->
                           <v-btn
                             x-large
                             icon
                             v-bind="attrs"
                             v-on="on"
-                            :color="item.is_validated ? 'success' : 'grey'"
+                            :color="item.is_validated ? '#1976D2' : 'grey'"
                                       
                             {% if request|has_any_group_access:"5,7" and request|has_any_feature_permission:"quality-control:write" %}
                               @click="onValidateClick(item)"
@@ -1568,6 +1570,7 @@
 
         onValidateClick(item) {
             // Force is_validated to false if validated_flag is 1. Validation unavailable if the validated flag is "Not Checked"
+            // if (item.validated_flag === 1 || item.validated_flag == null) {
             if (item.validated_flag === 1) {
               item.is_validated = false;
 
@@ -1764,10 +1767,15 @@
               this.fillMissingLoading = false;
 
               this.request_error = true;
-              this.request_error_message =
-                "An error occurred while checking task status.";
 
-              console.error(err);
+              if(err.response.data.error){
+                this.request_error_message = err.response.data.error;
+              }
+              else {
+                this.request_error_message = "An error occurred while checking task status.";
+              }
+
+              console.log("This is error response:", err.response);
             });
         },
 

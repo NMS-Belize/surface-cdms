@@ -12,7 +12,10 @@
             <span class="headline font-weight-thin" v-if="loading_chart">Loading Chart...</span><br>
             <v-progress-circular indeterminate ></v-progress-circular>
           </v-layout>
-          <highcharts v-if="!loading_chart" :options="chartOptions"></highcharts>
+          <v-alert v-if="chart_error" type="error" dense outlined>
+            [[ chart_error ]]
+          </v-alert>
+          <highcharts v-if="!loading_chart && !chart_error && chartOptions" :options="chartOptions"></highcharts>
         </v-card-text>
         <v-card-actions>
           <v-btn color="primary" @click="dialog_chart = false">Close</v-btn>
@@ -39,7 +42,10 @@
               <span class="headline font-weight-thin" v-if="loading_map">Loading Map...</span><br>
               <v-progress-circular indeterminate ></v-progress-circular>
             </v-layout>
-            <l-map v-if="!loading_map" ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom = "false">
+            <v-alert v-if="map_error && !loading_map" type="error" dense outlined class="ma-2">
+              [[ map_error ]]
+            </v-alert>
+            <l-map v-if="!loading_map && !map_error" ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom = "false">
               <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
               <l-control position="bottomleft">
                   <v-text-field
@@ -56,7 +62,7 @@
 
                   <!-- Info Card -->
                   <v-card
-                    v-if="['Communication', 'Quality Control'].includes(data_type)"
+                    v-if="['Communication', 'Quality Control', 'Validation'].includes(data_type)"
                     style="max-width: 200px;"
                     class="mb-2"
                   >
@@ -97,15 +103,19 @@
                         v-else-if="data_type === 'Quality Control'"
                         style="display: block; white-space: normal;"
                       >
-                        Station color is based on the worst QC status detected.
-                        Bad takes priority over Suspicious, followed by Good.
-                        Not Checked is used when no QC status is available.
+                        Select a station to inspect its reading counts by QC status.
+                        The legend includes all five QC statuses.
+                      </span>
+                      <span v-else-if="data_type === 'Validation'" style="display: block; white-space: normal;">
+                        Select a station to inspect its validation progress.
+                        Map markers identify stations; the counts appear in the station panel.
                       </span>
                     </v-card-text>
                   </v-card>
 
+                  <!-- Validation uses the map as a station selector. -->
                   <!-- map observations -->
-                  <v-card>
+                  <v-card v-if="data_type !== 'Validation'">
                     <!-- title -->
                     <v-card-title class="px-2 pt-1 pb-1" style="font-size: 12px; line-height: 1.2; color: #444;">
                       <v-btn class="mr-1" x-small icon @click="dialog_info=true" :disabled=true>
@@ -120,46 +130,21 @@
                     <!-- text -->
                     <v-card-text class="px-2 pb-2">
                       <hr class="my-0 mb-1">
-                      <div class="legend-item" style="display: flex; justify-content: space-between;">
+                      <div
+                        v-for="entry in legendItems"
+                        :key="entry.key"
+                        class="legend-item"
+                        style="display: flex; justify-content: space-between;"
+                      >
                         <span style="display: flex; align-items: center;">
-                        <span
-                          class="legend-color circle-lg"
-                          :style="{ 'background-color': flags.good, 'border-color': flags.good }">
+                          <span
+                            class="legend-color circle-lg"
+                            :style="{ 'background-color': entry.color, 'border-color': entry.color }"
+                          ></span>
+                          <span>[[ entry.label ]]</span>
                         </span>
-                        <span> [[legend_data.flags.good]] </span>
-                        </span>
-                        <span style="padding-left: 10px"> [[getPercentageColor(flags.good)]]% </span>
+                        <span style="padding-left: 10px">[[ getPercentageColor(entry.color) ]]%</span>
                       </div>
-                      <div class="legend-item" style="display: flex; justify-content: space-between;">
-                        <span style="display: flex; align-items: center;">
-                        <span
-                          class="legend-color circle-lg"
-                          :style="{ 'background-color': flags.suspicious, 'border-color': flags.suspicious }">
-                        </span>
-                        <span> [[legend_data.flags.suspicious]] </span>
-                        </span>
-                        <span style="padding-left: 10px"> [[getPercentageColor(flags.suspicious)]]% </span>
-                      </div>
-                      <div class="legend-item" style="display: flex; justify-content: space-between;">
-                        <span style="display: flex; align-items: center;">
-                        <span
-                          class="legend-color circle-lg"
-                          :style="{ 'background-color': flags.bad, 'border-color': flags.bad }">
-                        </span>
-                        <span> [[legend_data.flags.bad]]</span>
-                        </span>
-                        <span style="padding-left: 10px"> [[getPercentageColor(flags.bad)]]%</span>
-                      </div>
-                      <div class="legend-item" style="display: flex; justify-content: space-between;">
-                        <span style="display: flex; align-items: center;">
-                        <span
-                          class="legend-color circle-lg"
-                          :style="{ 'background-color': flags.not_checked, 'border-color': flags.not_checked }">
-                        </span>
-                        <span> [[legend_data.flags.not_checked]] </span>
-                        </span>
-                        <span style="padding-left: 10px"> [[getPercentageColor(flags.not_checked)]]% </span>
-                      </div>                                                    
                     </v-card-text>
                   </v-card>
                 </template>
@@ -256,11 +241,11 @@
 
                                 <v-radio label="Communication" value="Communication"></v-radio>
                                 <v-radio label="Quality Control" value="Quality Control"></v-radio>
+                                <v-radio label="Validation" value="Validation"></v-radio>
 
                                 <span class="mb-1"> Maintenance </span>
                                 <v-radio class="ml-5" label="Visits" value="Visits"></v-radio>
                                 <v-radio class="ml-5" label="Equipment" value="Equipment"></v-radio>
-                                
                               </v-radio-group>
 
                             </v-layout>
@@ -294,7 +279,6 @@
               </l-circle-marker>             
             </l-map>
         </v-flex>
-        
         <!-- Side bar container -->
         <v-flex md5 class="sidebar-panel d-flex flex-column">
           <!-- heading -->
@@ -307,7 +291,10 @@
             <v-progress-circular indeterminate ></v-progress-circular>
           </v-layout>
 
-          <div v-if="!loading_station" class="station-content"> 
+          <v-alert v-if="station_error && !loading_station" type="error" dense outlined class="ma-2">
+            [[ station_error ]]
+          </v-alert>
+          <div v-if="!loading_station && !station_error" class="station-content"> 
 
             <!-- displaying the date of the current data being displayed -->
             <div class="mt-2 ml-2 mr-2">
@@ -321,11 +308,18 @@
                     text
                     color="purple"
                 >
-                    All records displayed below are filtered for the
-                    
+                    Reporting period:
                     <span v-if="time_type == 'Last 24h'"><b>Last 24 Hours</b></span>
-                    
-                    <span v-else><b>default timezone ([[surface_offset_hrs]])</b></span>
+                    <span v-else><b>[[ date ]] in [[ timezone ]] ([[surface_offset_hrs]])</b></span>
+                    <div v-if="data_type === 'Quality Control'" class="mt-1">
+                      Each reading is counted once under its QC status, including readings marked Missing.
+                    </div>
+                    <div v-if="data_type === 'Communication'" class="mt-1">
+                      Summary hours and Latest Values are based on QC-accepted data.
+                    </div>
+                    <div v-if="data_type === 'Validation'" class="mt-1">
+                      Progress counts completed validation for all readings, including those marked Missing.
+                    </div>
 
                 </v-alert>
 
@@ -339,10 +333,20 @@
                   color="purple"
                 >
                   All time records displayed below are the selected station's timezone
-            
                   <span><b>([[selected.station.offset_hr_string]])</b></span>
 
                 </v-alert>
+
+                <!-- Selected station name -->
+                <v-btn
+                  v-if="selected.station.name"
+                  class="ma-1"
+                  medium
+                  depressed
+                  color="primary"
+                >
+                  [[ selected.station.name ]] - [[ selected.station.code ]]
+                </v-btn>
 
             </div>
 
@@ -407,7 +411,6 @@
                       </template>
                     </v-data-table>
                   </v-layout>
-                  
                 </v-layout>
               </v-tab-item>
 
@@ -466,12 +469,11 @@
               class="sidebar-tabs"
             >
               <v-tab>
-                Flag Amount
+                QC Readings
               </v-tab>
 
               <v-tab-item class="tab-item-fill">
                 <v-layout column class="ma-2 fill-height">
-                  
                   <!-- station metadata -->
                   <!-- <v-layout class="ma-2" shrink>
                     <span v-if="selected.station.lastupdate">
@@ -494,22 +496,24 @@
                       :items="selected.data"
                       item-key="name"
                       :items-per-page="-1"
-                      class="elevation-1"
+                      class="elevation-1 monitoring-qc-table"
                     >
                       <template v-slot:item.amount="{ item }">
-                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.good}}">
-                          [[item.good]]
-                        </v-chip>
-                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.suspicious}}">
-                          [[item.suspicious]]
-                        </v-chip>
-                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.bad}}">
-                          [[item.bad]]
-                        </v-chip>
-                        <v-chip @click="goTo(selected.station.id, item.id)" class="px-5" style="color: white;" color="{{flags.not_checked}}">
-                          [[item.not_checked]]
-                        </v-chip>                                                                        
-                      </template>                               
+                        <div class="qc-reading-counts">
+                          <v-chip
+                            v-for="flag in qcFlags"
+                            :key="flag.key"
+                            @click="goTo(selected.station.id, item.id)"
+                            :title="flag.label + ': ' + item[flag.key] + ' readings'"
+                            :color="flags[flag.key]"
+                            class="px-3"
+                            style="color: white;"
+                            small
+                          >
+                            [[ item[flag.key] ]]
+                          </v-chip>
+                        </div>
+                      </template>
                       <template v-slot:item.chart="{ item }">
                         <v-tooltip bottom>
                           <template v-slot:activator="{ on }">
@@ -521,7 +525,94 @@
                         </v-tooltip>
                       </template>
                     </v-data-table>
-                  
+                  </v-layout>
+                </v-layout>
+              </v-tab-item>
+            </v-tabs>
+
+            <!-- validation progress tab -->
+            <v-tabs
+              v-if="data_type === 'Validation'"
+              fixed-tabs
+              class="sidebar-tabs"
+            >
+              <v-tab>Validation Progress</v-tab>
+              <v-tab-item class="tab-item-fill">
+                <v-layout column class="ma-2 fill-height">
+                  <div v-if="selected.station.id !== null" class="validation-summary ma-2">
+                    <div class="validation-summary-counts mt-1">
+                      <span>Total: <b>[[ validationSummary.total ]]</b></span>
+                      <span>Validated: <b>[[ validationSummary.validated ]]</b></span>
+                      <span>Unvalidated: <b>[[ validationSummary.unvalidated ]]</b></span>
+                    </div>
+                    <div class="caption mt-1">
+                      Validated: [[ formatPercentage(validationSummary.validated_percentage) ]]
+                    </div>
+                    <v-progress-linear
+                      :value="validationSummary.validated_percentage === null ? 0 : validationSummary.validated_percentage"
+                      :color="validationColors.validated"
+                      background-color="grey lighten-3"
+                      height="6"
+                      rounded
+                      class="mt-1"
+                      :aria-label="'Station validation progress: ' + formatPercentage(validationSummary.validated_percentage)"
+                    ></v-progress-linear>
+                  </div>
+                  <div class="validation-key caption mx-2 mb-2">
+                    <span><span class="validation-dot" :style="{ backgroundColor: validationColors.validated }"></span>Validated</span>
+                    <span><span class="validation-dot" :style="{ backgroundColor: validationColors.unvalidated }"></span>Unvalidated</span>
+                  </div>
+                  <v-layout class="ma-2 table-area">
+                    <v-data-table
+                      style="width: 100%;"
+                      height="100%"
+                      fixed-header
+                      :headers="headers()"
+                      :items="selected.data"
+                      item-key="id"
+                      :items-per-page="-1"
+                      class="elevation-1 monitoring-qc-table validation-table"
+                    >
+                      <template v-slot:item.validation_counts="{ item }">
+                        <div class="qc-reading-counts">
+                          <v-chip
+                            v-for="state in ['validated', 'unvalidated']"
+                            :key="state"
+                            :color="validationColors[state]"
+                            :title="(state === 'validated' ? 'Validated: ' : 'Unvalidated: ') + item[state] + ' readings'"
+                            @click="goTo(selected.station.id, item.id)"
+                            class="px-3"
+                            style="color: white;"
+                            small
+                          >[[ item[state] ]]</v-chip>
+                        </div>
+                      </template>
+                      <template v-slot:item.validated_percentage="{ item }">
+                        <div class="validation-percentage">
+                          <span>[[ formatPercentage(item.validated_percentage) ]]</span>
+                          <v-progress-linear
+                            v-if="item.total > 0"
+                            :value="item.validated_percentage"
+                            :color="validationColors.validated"
+                            background-color="grey lighten-3"
+                            height="4"
+                            rounded
+                            class="mt-1"
+                            :aria-label="item.name + ': ' + formatPercentage(item.validated_percentage) + ' validated'"
+                          ></v-progress-linear>
+                        </div>
+                      </template>
+                      <template v-slot:item.chart="{ item }">
+                        <v-tooltip bottom>
+                          <template v-slot:activator="{ on }">
+                            <v-btn v-on="on" @click="dialog_chart = true; getChartData(selected.station, item)" icon>
+                              <v-icon color="blue">mdi-chart-bar</v-icon>
+                            </v-btn>
+                          </template>
+                          <span>Open validation history</span>
+                        </v-tooltip>
+                      </template>
+                    </v-data-table>
                   </v-layout>
                 </v-layout>
               </v-tab-item>
@@ -651,29 +742,23 @@
         loading_chart: false,
         loading_station: false,
         loading_map: false,
-        chartOptions: {
-          chart: {
-            type: 'column'
-          },
-          title: {
-            text: 'My Chart'
-          },
-          xAxis: {
-            categories: ['Category 1', 'Category 2', 'Category 3']
-          },
-          yAxis: {
-            title: {
-              text: 'Y-Axis Label'
-            }
-          },
-          series: [{
-            name: 'Series 1',
-            data: [1, 2, 3]
-          }, {
-            name: 'Series 2',
-            data: [4, 5, 6]
-          }]
-        },        
+        chartOptions: null,
+        map_error: null,
+        station_error: null,
+        chart_error: null,
+        // Each response may update the page only while its request is current.
+        map_request_id: 0,
+        station_request_id: 0,
+        chart_request_id: 0,
+        qcFlags: [
+          { key: 'good', label: 'Good' },
+          { key: 'suspicious', label: 'Suspicious' },
+          { key: 'bad', label: 'Bad' },
+          { key: 'not_checked', label: 'Not Checked' },
+          { key: 'missing', label: 'Missing' },
+        ],
+        // These colors describe validation completion, not QC quality.
+        validationColors: { validated: '#00C853', unvalidated: '#ADB5BD' },
         timezone: "{{ TIMEZONE_NAME|escapejs }}",
         surface_offset_hrs: "{{ DEFAULT_TIMEZONE_OFFSET_HRS_String|escapejs }}",
         date: null,
@@ -685,14 +770,15 @@
         dialog_chart: false,
         dialog_info: false,
         selected: {
-          station: {name: null, lastupdate: null, color: null, offset_hr_string: null, offset_min: null},
+          station: {id: null, name: null, lastupdate: null, color: null, offset_hr_string: null, offset_min: null},
+          color: null,
           data: [],
         },
         station_list: [],
         zoom: {{ MAP_ZOOM|safe }},
         center: L.latLng("{{ MAP_LATITUDE|safe }}", "{{ MAP_LONGITUDE|safe }}"),
         url: "https://{s}.tile.osm.org/{z}/{x}/{y}.png",
-        attribution: '&copy, <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+        attribution: '©, <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
         options: { zoomControl: false, doubleClickZoom: false },      
         flags: {{flags | safe}},
         legend_data: {
@@ -720,6 +806,33 @@
     },
 
     computed: {
+      legendItems() {
+        if (this.data_type === 'Validation') return [];
+        // Missing is a QC category; the other modes retain four categories.
+        const keys = this.data_type === 'Quality Control'
+          ? this.qcFlags.map(flag => flag.key)
+          : ['good', 'suspicious', 'bad', 'not_checked'];
+        return keys.map(key => ({
+          key: key,
+          label: this.legend_data.flags[key],
+          color: this.flags[key],
+        }));
+      },
+      validationSummary() {
+        const totals = { total: 0, validated: 0, unvalidated: 0, validated_percentage: null };
+        if (this.data_type !== 'Validation' || !Array.isArray(this.selected.data)) return totals;
+        this.selected.data.forEach(item => {
+          totals.total += item.total;
+          totals.validated += item.validated;
+          totals.unvalidated += item.unvalidated;
+        });
+        // Weight by reading counts; averaging variable percentages is incorrect
+        // when variables have different numbers of readings.
+        if (totals.total > 0) {
+          totals.validated_percentage = 100 * totals.validated / totals.total;
+        }
+        return totals;
+      },
       filteredStations() {
         return this.station_list.filter(station =>
           this.input_search === "" || station.name.toUpperCase().includes(this.input_search.toUpperCase())
@@ -730,7 +843,7 @@
     watch: {
       data_type: function (val) {
         // reset selected tab to zero when Quality control radio btn is selected
-        if (val=='Quality Control') {
+        if (['Quality Control', 'Validation'].includes(val)) {
           this.selectedTab = 0;
         }
       }
@@ -741,7 +854,7 @@
         if (this.data_type=="Communication"){
           this.goToDataInventory();
         }
-        else if (this.data_type=="Quality Control"){
+        else if (['Quality Control', 'Validation'].includes(this.data_type)){
           this.goToDataValidation(selected_station_id, item_var_id, this.selected.station.offset_min);
         }
         else if (this.data_type=="Visits"){
@@ -796,28 +909,23 @@
 
           window.open(url, '_blank');
       },
-                  
       goToDataInventory(){
         const url = `/wx/data/inventory`;
         window.open(url, '_blank');
       },
-      
       goToEquipmentInventory(){
         const url = `/wx/maintenance_reports/equipment_inventory/`;
         window.open(url, '_blank');
       },
-      
       goToMaintenanceReports(){
         const url = `/wx/maintenance_report/`;
         window.open(url, '_blank');
       },          
-      
       changeTimeType(){
         // this.getGlobalData();
 
         this.changeRadio();
       },
-      
       updateLegendData(){
         if (this.data_type === 'Communication'){
           this.legend_data.information = 'Information of communication'
@@ -835,8 +943,13 @@
             suspicious: 'Suspicious',
             bad: 'Bad',
             not_checked: 'Not Checked',
+            missing: 'Missing',
           }
         }        
+        else if (this.data_type === 'Validation') {
+          this.legend_data.information = 'Select a station to inspect validation progress';
+          this.legend_data.flags = {};
+        }
         else if (this.data_type === 'Visits'){
           this.legend_data.information = 'Information of visits'
           this.legend_data.flags = {
@@ -866,6 +979,23 @@
             { text: 'Serial Number', align: 'center', sortable: false, value: 'serial_number'},
           ]             
         }
+        else if (this.data_type === 'Validation') {
+          return [
+            { text: 'Variable', align: 'start', sortable: false, value: 'name', width: '27%' },
+            { text: 'Total', align: 'center', sortable: false, value: 'total', width: '56px' },
+            { text: 'Counts', align: 'center', sortable: false, value: 'validation_counts' },
+            { text: 'Validated %', align: 'center', sortable: false, value: 'validated_percentage', width: '92px' },
+            { text: 'Chart', align: 'center', sortable: false, value: 'chart', width: '48px' },
+          ];
+        }
+        else if (this.data_type === 'Quality Control') {
+          return [
+            { text: 'Variable', align: 'start', sortable: false, value: 'name', width: '30%' },
+            { text: 'Total', align: 'center', sortable: false, value: 'total', width: '56px' },
+            { text: 'QC Counts', align: 'center', sortable: false, value: 'amount' },
+            { text: 'Chart', align: 'center', sortable: false, value: 'chart', width: '48px' },
+          ];
+        }
         else{
           if (this.selectedTab==1){
             return [
@@ -876,13 +1006,17 @@
           else{
             return [
               { text: 'Variable', align: 'start', sortable: false, value: 'name'},
-              { text: 'Amount', align: 'center', sortable: false, value: 'amount'},
+              { text: 'Summary Hours', align: 'center', sortable: false, value: 'amount'},
               { text: 'Chart', align: 'center', sortable: false, value: 'chart'}
             ]  
           }
         }
       },
-      
+      formatPercentage(value) {
+        return value === null || value === undefined
+          ? 'No data'
+          : Number(value).toFixed(2) + '%';
+      },
       formatDatetime(datetime){
         return datetime ? moment.utc(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
       },
@@ -898,82 +1032,118 @@
 
         return p.toFixed(2)
       },
-      
       getGlobalData(){
-        this.loading_map = true
-        axios({
+        const requestId = ++this.map_request_id;
+        this.loading_map = true;
+        this.map_error = null;
+        const isValidationMode = this.data_type === 'Validation';
+        return axios({
           method: 'get',
           url: '/wx/stations/stations_monitoring/get/',
           params: {
-            'data_type': this.data_type,
-            'time_type': this.time_type,
-            'date_picked': this.date
+            // Reuse the working station-list endpoint without requiring a
+            // new map query. Neutral markers only select a station here.
+            data_type: isValidationMode ? 'Communication' : this.data_type,
+            time_type: this.time_type,
+            date_picked: this.date,
           },
-        }) 
+        })
         .then(response => {
-          this.loading_map = false;
-          this.station_list = response.data['stations'];
+          if (requestId !== this.map_request_id) return;
+          this.station_list = isValidationMode
+            ? response.data.stations.map(station => Object.assign({}, station, {
+                color: '#1976D2',
+              }))
+            : response.data.stations;
+
+          // Refresh the selected marker's color after a period/mode change.
+          const currentStation = this.station_list.find(
+            station => station.id === this.selected.station.id
+          );
+          if (currentStation) {
+            this.selected.station = Object.assign({}, this.selected.station, currentStation);
+            this.selected.color = currentStation.color;
+          }
         })
         .catch(error => {
-          console.log(error);
-        });        
+          if (requestId !== this.map_request_id) return;
+          this.station_list = [];
+          this.map_error = 'Unable to load the map. Change the period or mode to try again.';
+          console.error(error);
+        })
+        .finally(() => {
+          if (requestId === this.map_request_id) this.loading_map = false;
+        });
       },
-      
       getStationData(station){
-        this.loading_station = true        
-        axios({
+        const requestId = ++this.station_request_id;
+        this.loading_station = true;
+        this.station_error = null;
+        this.selected.data = [];
+        return axios({
           method: 'get',
           url: `/wx/stations/stations_monitoring/get/${station.id}/`,
           params: {
-            'data_type': this.data_type,
-            'time_type': this.time_type,
-            'date_picked': this.date            
+            data_type: this.data_type,
+            time_type: this.time_type,
+            date_picked: this.date,
           },
-        }) 
+        })
         .then(response => {
-          this.loading_station = false;          
-          this.selected.station.lastupdate = this.formatDatetime(response.data['lastupdate']);
-          this.selected.station.offset_hr_string = response.data['station_hr_offset_str'];
-          this.selected.station.offset_min = response.data['station_min_offset'];
-          this.selected.data = response.data['station_data'];
-          this.selected.color = station.color
+          if (requestId !== this.station_request_id) return;
+          this.selected.station.lastupdate = this.formatDatetime(response.data.lastupdate);
+          this.selected.station.offset_hr_string = response.data.station_hr_offset_str;
+          this.selected.station.offset_min = response.data.station_min_offset;
+          this.selected.data = response.data.station_data;
+          this.selected.color = this.selected.station.color;
         })
         .catch(error => {
-          console.log(error);
-        });           
+          if (requestId !== this.station_request_id) return;
+          this.station_error = 'Unable to load this station. Select a station to try again.';
+          console.error(error);
+        })
+        .finally(() => {
+          if (requestId === this.station_request_id) this.loading_station = false;
+        });
       },
-      
       getChartData(station, variable){
+        const requestId = ++this.chart_request_id;
         this.loading_chart = true;
-        axios({
+        this.chart_error = null;
+        this.chartOptions = null;
+        return axios({
           method: 'get',
           url: `/wx/stations/stations_monitoring/get/${station.id}/${variable.id}/`,
           params: {
-            'data_type': this.data_type,
-            'time_type': this.time_type,
-            'date_picked': this.date            
+            data_type: this.data_type,
+            time_type: this.time_type,
+            date_picked: this.date,
           },
-        }) 
+        })
         .then(response => {
-          this.loading_chart = false;          
-          this.chartOptions = response.data['chartOptions']
-          // this.chartOptions.chart = response.data['chartOptions']['chart']
-          // this.chartOptions.title = response.data['chartOptions']['title']
-          // this.chartOptions.xAxis = response.data['chartOptions']['xAxis']
-          // this.chartOptions.yAxis = response.data['chartOptions']['yAxis']
-          // this.chartOptions.title = response.data['chartOptions']['title']
-          // this.chartOptions.series = response.data['chartOptions']['series']
+          if (requestId !== this.chart_request_id) return;
+          this.chartOptions = response.data.chartOptions;
         })
         .catch(error => {
-          console.log(error);
-        });           
-      },      
-      
+          if (requestId !== this.chart_request_id) return;
+          this.chart_error = 'Unable to load the chart. Close it and open it again to retry.';
+          console.error(error);
+        })
+        .finally(() => {
+          if (requestId === this.chart_request_id) this.loading_chart = false;
+        });
+      },
       isMaintenance(data_type){
         return ['Visits', 'Equipment'].includes(data_type)
       },
-      
       changeRadio(){
+        // A chart from the previous period/mode must not appear in this one.
+        this.dialog_chart = false;
+        this.chart_request_id += 1;
+        this.loading_chart = false;
+        this.chart_error = null;
+        this.chartOptions = null;
+
         if (this.isMaintenance(this.data_type)){
           // for maintenance and equipment this is overridden and 'Latest' is show instead
           this.time_type = 'Last 24h';
@@ -983,16 +1153,19 @@
 
         this.getGlobalData();
 
-        if (this.selected.station.name !== null){
+        if (this.selected.station.id !== null){
           this.getStationData(this.selected.station);
         }
       },
-      
       selectStation(station){
-        this.selected.station = station;
-        this.getStationData(station);
+        // Declare the metadata on each new object so Vue 2 observes it.
+        this.selected.station = Object.assign({
+          id: null, name: null, lastupdate: null, color: null,
+          offset_hr_string: null, offset_min: null,
+        }, station);
+        this.selected.color = station.color;
+        this.getStationData(this.selected.station);
       },
-    
     },
   });
 </script>
@@ -1119,6 +1292,55 @@
 
   .current-date-list {
     min-height: auto;
+  }
+
+  .validation-summary {
+    flex: 0 0 auto;
+  }
+
+  .validation-summary-counts,
+  .validation-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+
+  .validation-key {
+    flex: 0 0 auto;
+  }
+
+  .validation-key > span {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .validation-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 5px;
+    border-radius: 50%;
+  }
+
+  .validation-percentage {
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .qc-reading-counts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .monitoring-qc-table th,
+  .monitoring-qc-table td {
+    padding: 0 8px !important;
+  }
+
+  .monitoring-qc-table.v-data-table .v-data-table-header th {
+    font-size: 14px !important;
   }
 
   .legend-item {
