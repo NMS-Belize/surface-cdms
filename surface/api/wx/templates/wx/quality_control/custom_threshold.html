@@ -890,7 +890,8 @@
             watershed: '{{ station.watershed|default_if_none:""|escapejs }}',
             profile: '{{ station.profile.id|default_if_none:"" }}',
             is_automatic: {{ station.is_automatic|yesno:"true,false" }},
-            is_active: {{ station.is_active|yesno:"true,false" }}
+            is_active: {{ station.is_active|yesno:"true,false" }},
+            is_reference: {{ station.is_reference|yesno:"true,false" }}
           },
           {% endfor %}
         ],
@@ -965,7 +966,8 @@
           (!this.filter.watershed || station.watershed === this.filter.watershed) &&
           (this.filter.profile == null || String(station.profile) === String(this.filter.profile)) &&
           station.is_active === this.filter.isActive &&
-          station.is_automatic === this.filter.isAutomatic
+          station.is_automatic === this.filter.isAutomatic &&
+          !station.is_reference // Strict check: must not be a reference station
         );
       },
 
@@ -1010,10 +1012,13 @@
 
         if (!target) return [];
 
-        return this.stations.filter(station =>
-          station.id !== target.id &&
-          station.is_automatic === target.is_automatic
-        );
+        return this.stations.filter(station => {
+          const isNotTarget = station.id !== target.id;
+          const matchesAutomation = station.is_automatic === target.is_automatic;
+          const isDefaultReferenceStation = station.id === 0; // Using strict equality
+
+          return (isNotTarget && matchesAutomation) || isDefaultReferenceStation;
+        });
       },
     },
 

@@ -1,0 +1,1522 @@
+[
+    {
+        "model": "wx.StationVariable",
+        "pk": 90000,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 0
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90001,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90002,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 2
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90003,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 3
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90004,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90005,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 5
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90006,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 6
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90007,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 7
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90008,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 8
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90009,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 9
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90010,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 10
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90011,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 11
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90012,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 12
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90013,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 13
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90014,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 14
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90015,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 15
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90016,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 16
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90017,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 17
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90018,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 18
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90019,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 19
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90020,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 20
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90021,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 21
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90022,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 22
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90023,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 23
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90024,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 24
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90025,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 25
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90026,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 26
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90027,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 27
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90028,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 28
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90029,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 30
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90030,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 31
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90031,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 32
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90032,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 33
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90033,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 34
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90034,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 35
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90035,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 40
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90036,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 41
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90037,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 50
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90038,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 51
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90039,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 52
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90040,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 53
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90041,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 54
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90042,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 55
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90043,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 56
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90044,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 57
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90045,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 58
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90046,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 59
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90047,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 60
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90048,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 61
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90049,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 62
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90050,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 63
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90051,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 70
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90052,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 71
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90053,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 72
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90054,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 73
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90055,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 74
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90056,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 75
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90057,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 76
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90058,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 77
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90059,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 78
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90060,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 79
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90061,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 80
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90062,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 81
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90063,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 82
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90064,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 100
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90065,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 101
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90066,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 102
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90067,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 103
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90068,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 104
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90069,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 105
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90070,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 106
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90071,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 107
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90072,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 200
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90073,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 201
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90074,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1000
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90075,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1001
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90076,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1002
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90077,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1003
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90078,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1004
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90079,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1005
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90080,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1006
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90081,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1007
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90082,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1008
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90083,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1009
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90084,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1010
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90085,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1011
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90086,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1012
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90087,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1013
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90088,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1014
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90089,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1015
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90090,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1016
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90091,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1017
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90092,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1018
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90093,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1019
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90094,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 1020
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90095,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4005
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90096,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4006
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90097,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4007
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90098,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4008
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90099,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4009
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90100,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4010
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90101,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4011
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90102,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4013
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90103,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4014
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90104,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4015
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90105,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4016
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90106,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4017
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90107,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4018
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90108,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4019
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90109,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4020
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90110,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4021
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90111,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4022
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90112,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4023
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90113,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4024
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90114,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4025
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90115,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4026
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90116,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4027
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90117,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4028
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90118,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4029
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90119,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4030
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90120,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4031
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90121,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4032
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90122,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4033
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90123,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4034
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90124,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4035
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90125,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4036
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90126,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4037
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90127,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4038
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90128,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4039
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90129,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4040
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90130,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4041
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90131,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4042
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90132,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4043
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90133,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4044
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90134,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4045
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90135,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4046
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90136,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4047
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90137,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4048
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90138,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4049
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90139,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4050
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90140,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4052
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90141,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4053
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90142,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4054
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90143,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4055
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90144,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4056
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90145,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4057
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90146,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4058
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90147,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4059
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90148,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4060
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90149,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4061
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90150,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4062
+        }
+    },
+    {
+        "model": "wx.StationVariable",
+        "pk": 90151,
+        "fields": {
+            "created_at": "2026-10-12T05:33:39.837Z",
+            "updated_at": "2026-10-12T05:33:39.837Z",
+            "station": 0,
+            "variable": 4063
+        }
+    }
+]

@@ -27,6 +27,7 @@ from openpyxl import Workbook
 import tempfile
 import psycopg2
 import pytz
+from django.db.models import Q
 from wx.decorators import wx_permission_required, wx_mapped_permission_required
 from django.contrib import messages
 from django.core.files.base import ContentFile
@@ -5896,7 +5897,12 @@ class customThresholdView(WxPermissionRequiredMixin, LoginRequiredMixin, Templat
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
+        # context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
+        # Explicitly forces station 0 (Default Reference Station) to be included, bypassing the reference check.
+        context['station_list'] = Station.objects.select_related('profile').filter(
+            ~Q(is_reference=True) | Q(id=0)
+        )
+
         context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
         context['station_profile_list'] = StationProfile.objects.all()
         context['station_watershed_list'] = Watershed.objects.all()
@@ -5915,7 +5921,8 @@ def copy_custom_thresholds(request):
         target_id = int(data["target_station_id"])
         overwrite = data.get("overwrite", False)
 
-        if source_id <= 0 or target_id <= 0:
+        # source is just set to "< 0"
+        if source_id < 0 or target_id <= 0:
             raise ValueError("Invalid station ID.")
 
         if not isinstance(overwrite, bool):
@@ -5944,11 +5951,12 @@ def copy_custom_thresholds(request):
         )
 
     # Keep automatic and manual configurations separate.
-    if source.is_automatic != target.is_automatic:
-        return JsonResponse(
-            {"detail": "Stations must be of the same type."},
-            status=400
-        )
+    if source.id != 0: # don't run the check below if copying from the SURFACE Default Reference
+        if source.is_automatic != target.is_automatic:
+            return JsonResponse(
+                {"detail": "Stations must be of the same type."},
+                status=400
+            )
 
     # Only copy variables configured at BOTH stations.
     source_variables = set(
@@ -9739,7 +9747,7 @@ def get_range_threshold(request):
     variable_ids = [int(variable_id) for variable_id in variable_ids.split(",")]
 
     reference_station_id = station.reference_station_id
-    if reference_station_id:
+    if reference_station_id is not None:
         reference_station = Station.objects.get(id=station.reference_station_id)
         reference_station_name = reference_station.name+' - '+reference_station.code
     else:
@@ -9953,7 +9961,7 @@ def get_step_threshold(request):
     variable_ids = [int(variable_id) for variable_id in variable_ids.split(",")]
 
     reference_station_id = station.reference_station_id
-    if reference_station_id:
+    if reference_station_id is not None:
         reference_station = Station.objects.get(id=station.reference_station_id)
         reference_station_name = reference_station.name+' - '+reference_station.code
     else:
@@ -10149,7 +10157,7 @@ def get_persist_threshold(request):
     variable_ids = [int(variable_id) for variable_id in variable_ids.split(",")]
 
     reference_station_id = station.reference_station_id
-    if reference_station_id:
+    if reference_station_id is not None:
         reference_station = Station.objects.get(id=station.reference_station_id)
         reference_station_name = reference_station.name+' - '+reference_station.code
     else:

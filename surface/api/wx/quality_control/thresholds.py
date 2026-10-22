@@ -72,7 +72,7 @@ def resolve_step_thresholds(thresholds: dict, station_id: int, variable_id: int)
     # ------------------------------------------------------------
     # Reference station threshold
     # ------------------------------------------------------------
-    if station.reference_station_id:
+    if station.reference_station_id is not None:
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
         step_obj = (
             QcStepThreshold.objects
@@ -197,7 +197,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
     # ------------------------------------------------------------
     # Reference station threshold
     # ------------------------------------------------------------
-    if station.reference_station_id:
+    if station.reference_station_id is not None:
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
         range_obj = (
             QcRangeThreshold.objects
@@ -315,7 +315,7 @@ def resolve_persist_thresholds(thresholds: dict, station_id: int, variable_id: i
     # ------------------------------------------------------------
     # Reference station threshold
     # ------------------------------------------------------------
-    if station.reference_station_id:
+    if station.reference_station_id is not None:
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
         persist_obj = (
             QcPersistThreshold.objects

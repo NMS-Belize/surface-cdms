@@ -449,7 +449,7 @@ def evaluate_persist_qc(
         # rounding the calc variance as some calculation noise may throw off the checks.
         calc_variance = round(max(values) - min(values), 3)
 
-        if calc_variance <= p_min_var:
+        if calc_variance < p_min_var:
             # descriptions.append(f"\n\nFailed {prefix} Threshold, persist check failed!")
             descriptions.append(f"\n\nFailed {prefix} Threshold, persist check failed!\n\nCalculated Variance: {round(calc_variance, 3)} || max: {max(values)} || min: {min(values)}")
 

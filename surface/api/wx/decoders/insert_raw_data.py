@@ -387,7 +387,7 @@ def get_data(raw_data_list):
 
 
 
-def insert_query(reads, override_data_on_conflict, is_manually_validated):
+def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
     """
     Bulk insert prepared rows into raw_data.
 
@@ -407,7 +407,7 @@ def insert_query(reads, override_data_on_conflict, is_manually_validated):
             # Existing rows are handled separately in the ON CONFLICT DO UPDATE clause below.
             # This block handles brand-new rows, because INSERT uses the manual_flag value
             # that is already inside each row in `reads`.
-            if is_manually_validated:
+            if is_manually_reviewed:
                 manual_flag_index = insert_columns.index("manual_flag")
 
                 for row in reads:
@@ -415,7 +415,7 @@ def insert_query(reads, override_data_on_conflict, is_manually_validated):
 
             if override_data_on_conflict:
 
-                if is_manually_validated:
+                if is_manually_reviewed:
                     # Manual validation locks in manual_flag = 4 when overwriting conflicts.
                     on_conflict_sql = """
                         ON CONFLICT (station_id, variable_id, datetime)
@@ -685,7 +685,7 @@ def update_stationvariable(reads):
 
 ############################# Main #############################
 
-def insert(raw_data_list, override_data_on_conflict=False, is_manually_validated=False):
+def insert(raw_data_list, override_data_on_conflict=False, is_manually_reviewed=False):
     """
     Main entrypoint used by decoders such as TOA5.
 
@@ -707,7 +707,7 @@ def insert(raw_data_list, override_data_on_conflict=False, is_manually_validated
         )
         return
 
-    insert_query(reads, override_data_on_conflict, is_manually_validated)
+    insert_query(reads, override_data_on_conflict, is_manually_reviewed)
     after_insert = time.perf_counter()
 
     update_stationvariable(reads)
