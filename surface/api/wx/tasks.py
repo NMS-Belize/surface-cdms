@@ -3973,54 +3973,90 @@ def process_single_staged_raw_data_task(staged_task_id):
 # modify manual station data file object with the Month and Station_List
 @shared_task
 def ingest_manual_station_files(data_file_id_list, selected_decoder="default"):
-    """
-    Process station data files for Month and Station Names.
-    """
+    """Extract metadata and process each uploaded file once."""
 
-    try:
+    for entry_id in data_file_id_list:
+        try:
+            manual_file = ManualStationDataFile.objects.get(id=entry_id)
 
-        for entry_id in data_file_id_list:
-            manual_station_data_file = ManualStationDataFile.objects.get(id=entry_id)
+            logger.info(
+                "Processing Manual Datafile: %s",
+                manual_file.filepath,
+            )
 
-            filepath = manual_station_data_file.filepath
+            if selected_decoder == "default":
+                # Reuse this workbook during decoding instead of reopening it.
+                with pandas.ExcelFile(manual_file.filepath) as source:
+                    sheet_month = None
 
-            logger.info(f'Processing Manual Datafile: {filepath}')
+                    header_block = source.parse(
+                        source.sheet_names[0],
+                        header=None,
+                        nrows=5,
+                        na_filter=False,
+                    )
 
-            sheet_month = None
+                    for value in header_block.to_numpy().ravel():
+                        if isinstance(value, str):
+                            match = re.search(
+                                r"MONTH:\s*([A-Za-z]+)",
+                                value,
+                            )
+                            if match:
+                                sheet_month = match.group(1)
+                                break
 
-            if selected_decoder == 'default':
-                source = pandas.ExcelFile(filepath)
+                    manual_file.stations_list = "       ".join(
+                        source.sheet_names
+                    )
+                    manual_file.month = sheet_month
+                    manual_file.save()
 
-                stations_list = '       '.join(source.sheet_names) # combining stations list into a long sting
+                    process_manual_station_data_files(
+                        [entry_id],
+                        selected_decoder,
+                        manual_file,
+                        excel_source=source,
+                    )
 
-                header_block = source.parse(source.sheet_names[0], header=None, nrows=5, na_filter=False)
-
-                for v in header_block.to_numpy().ravel():
-                    if isinstance(v, str) and "MONTH:" in v:
-                        m = re.search(r"MONTH:\s*([A-Za-z]+)", v)
-                        if m:
-                            sheet_month = m.group(1)
-                            break
             else:
-                sheet_month = "---"
-                stations_list = "---"
+                manual_file.stations_list = "---"
+                manual_file.month = "---"
+                manual_file.save()
 
-            
-            # update the manual station data file object
-            manual_station_data_file.stations_list = stations_list
-            manual_station_data_file.month = sheet_month
-            manual_station_data_file.save()
+                process_manual_station_data_files(
+                    [entry_id],
+                    selected_decoder,
+                    manual_file,
+                )
 
-            # process manual station data files
-            process_manual_station_data_files(data_file_id_list, selected_decoder, manual_station_data_file)
+        except Exception as err:
+            # One failed file should not stop the remaining uploads.
+            ManualStationDataFile.objects.filter(
+                id=entry_id,
+            ).update(
+                status_id=4,
+                observation=str(err),
+            )
 
-    except Exception as e:
-        logger.error('OS error. ' + repr(e))
-        db_logger.error('OS error. ' + repr(e))
+            logger.exception(
+                "Failed processing manual file id=%s",
+                entry_id,
+            )
+            db_logger.error(
+                "Failed processing manual file id=%s: %r",
+                entry_id,
+                err,
+            )
 
 
 # process manual station data files
-def process_manual_station_data_files(data_file_id_list, selected_decoder="default", manual_station_data_file=None):
+def process_manual_station_data_files(
+    data_file_id_list,
+    selected_decoder="default",
+    manual_station_data_file=None,
+    excel_source=None,
+):
     """
     Process manual station data files
 
@@ -4057,9 +4093,12 @@ def process_manual_station_data_files(data_file_id_list, selected_decoder="defau
             logger.info('Processing file "{0}" with "{1}" decoder.'.format(station_data_file.filepath, current_decoder))
 
             if selected_decoder == "default":
-                current_decoder(filename=station_data_file.filepath
-                                , override_data_on_conflict=station_data_file.override_data_on_conflict
-                                , is_manually_reviewed=station_data_file.is_manually_reviewed)
+                current_decoder(
+                    filename=station_data_file.filepath,
+                    override_data_on_conflict=station_data_file.override_data_on_conflict,
+                    is_manually_reviewed=station_data_file.is_manually_reviewed,
+                    excel_source=excel_source,
+                )
                 
             elif selected_decoder == "davis":
                 current_decoder(filename=station_data_file.filepath

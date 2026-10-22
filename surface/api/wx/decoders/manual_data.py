@@ -9,6 +9,7 @@ from celery import shared_task
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db.models import Value
 from django.db.models.functions import Concat
+from contextlib import nullcontext
 
 from tempestas_api import settings
 from wx.decoders.insert_raw_data import insert
@@ -123,82 +124,185 @@ def find_station_by_name(station_name):
 
     return station
 
+
 @shared_task
-def read_file(filename, highfrequency_data=False, process_in_chunks=False, station_data_file=None, station_object=None, utc_offset=settings.TIMEZONE_OFFSET, override_data_on_conflict=False, is_manually_validated=False):
-    """Read a manual data file and return a seq of records or nil in case of error"""
+def read_file(
+    filename,
+    highfrequency_data=False,
+    process_in_chunks=False,
+    station_data_file=None,
+    station_object=None,
+    utc_offset=settings.TIMEZONE_OFFSET,
+    override_data_on_conflict=False,
+    is_manually_reviewed=False,
+    excel_source=None,
+):
+    """Decode a manual workbook and insert its observations."""
 
-    logger.info('processing %s' % filename)
+    logger.info("Processing manual data file: %s", filename)
 
-    start = time.time()
+    start = time.perf_counter()
     reads = []
-    date_info = None
+    month_datetime = None
+    last_month_day = None
+
+    # Resolve column positions once rather than looking up names per observation.
+    variable_columns = tuple(
+        (column_names.index(name), variable_id)
+        for name, variable_id in variable_dict.items()
+    )
+
+    # Preserve the existing use of the supplied decoder timezone offset.
+    station_timezone = pytz.FixedOffset(utc_offset)
+
     try:
-        source = pd.ExcelFile(filename)
+        # The caller closes a supplied workbook; otherwise we close it here.
+        workbook_context = (
+            nullcontext(excel_source)
+            if excel_source is not None
+            else pd.ExcelFile(filename)
+        )
 
-        # iterate over the sheets
-        for sheet_name in source.sheet_names:
-            sheet_raw_data = source.parse(
-                sheet_name,
-                skipfooter=2,
-                na_filter=False,
-                names=column_names,
-                usecols='A:W'
-            )
+        with workbook_context as source:
+            for sheet_name in source.sheet_names:
+                sheet_raw_data = source.parse(
+                    sheet_name,
+                    skipfooter=2,
+                    na_filter=False,
+                    names=column_names,
+                    usecols="A:W",
+                )
 
-            if not sheet_raw_data.empty:
-                header = sheet_raw_data[0:1]
-                sheet_data = sheet_raw_data[7:]
+                if sheet_raw_data.empty:
+                    continue
 
-                # get the sheet station info
-                station_name = sheet_name.strip()
-                station = find_station_by_name(station_name)
+                station = find_station_by_name(sheet_name.strip())
                 station_id = station.id
 
-                # get the sheet data info 
-                if date_info is None:
-                    sheet_month = header['WINDRUN'][0].replace('MONTH: ', '').strip()
-                    sheet_year = header['EVAPRES'][0].replace('YEAR: ', '').strip()
-                    date_info = {'month': sheet_month, 'year': sheet_year}
-                else:
-                    sheet_month = date_info['month']
-                    sheet_year = date_info['year']
+                # Preserve the workbook-wide month/year from the first nonempty sheet.
+                if month_datetime is None:
+                    header = sheet_raw_data.iloc[0]
 
-                print(sheet_month)
-                print(sheet_year)
+                    sheet_month = (
+                        header["WINDRUN"]
+                        .replace("MONTH: ", "")
+                        .strip()
+                    )
+                    sheet_year = (
+                        header["EVAPRES"]
+                        .replace("YEAR: ", "")
+                        .strip()
+                    )
 
-                # filter the sheet day
-                month_datetime = datetime.datetime.strptime(f'{sheet_month} {sheet_year}', '%B %Y')
-                first_month_day, last_month_day = calendar.monthrange(month_datetime.year, month_datetime.month)
-                
-                sheet_data = sheet_data[pd.to_numeric(sheet_data['day'], errors='coerce').notnull()]
-                for index, row in sheet_data[sheet_data['day'] <= last_month_day].iterrows():
-                    for line_data in parse_line(row, station_id, month_datetime, utc_offset):
-                        reads.append(line_data)
+                    month_datetime = datetime.datetime.strptime(
+                        f"{sheet_month} {sheet_year}",
+                        "%B %Y",
+                    )
 
-    except FileNotFoundError as fnf:
-        logger.error(repr(fnf))
-        print('No such file or directory {}.'.format(filename))
+                    _, last_month_day = calendar.monthrange(
+                        month_datetime.year,
+                        month_datetime.month,
+                    )
+
+                sheet_data = sheet_raw_data.iloc[7:]
+
+                day_numbers = pd.to_numeric(
+                    sheet_data["day"],
+                    errors="coerce",
+                )
+
+                # Keep only whole-number days that exist in this month.
+                valid_days = (
+                    day_numbers.between(1, last_month_day)
+                    & day_numbers.mod(1).eq(0)
+                )
+
+                valid_rows = sheet_data.loc[valid_days, column_names]
+                days = day_numbers.loc[valid_days].astype(int)
+
+                # Tuples avoid constructing a pandas Series for every row.
+                for day, row in zip(
+                    days,
+                    valid_rows.itertuples(index=False, name=None),
+                ):
+                    parsed_date = station_timezone.localize(
+                        month_datetime.replace(day=int(day))
+                    )
+
+                    for column_index, variable_id in variable_columns:
+                        measurement = row[column_index]
+
+                        # Text and empty numeric cells represent missing data.
+                        if (
+                            isinstance(measurement, str)
+                            or pd.isna(measurement)
+                        ):
+                            measurement = settings.MISSING_VALUE
+
+                        reads.append((
+                            station_id,
+                            variable_id,
+                            86400,
+                            parsed_date,
+                            measurement,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            True,
+                        ))
+
+    except Exception:
+        logger.exception(
+            "Failed decoding manual data file: %s",
+            filename,
+        )
         raise
-    except Exception as e:
-        logger.error(repr(e))
-        raise
 
-    # insert data based on the type (high frequency, staged, standard)
+    decode_finished = time.perf_counter()
+
+    logger.info(
+        "Manual decoder | file=%s | records=%s | decode=%.2fs",
+        filename,
+        len(reads),
+        decode_finished - start,
+    )
+
+    # Keep the existing insertion routes and their arguments.
     if highfrequency_data:
-        insert_hf(reads, override_data_on_conflict)
+        insert_hf(
+            reads,
+            override_data_on_conflict,
+        )
 
     elif process_in_chunks:
         insert_staged(
             reads,
-            station_data_file
+            station_data_file,
         )
 
     else:
-        insert(reads, override_data_on_conflict, is_manually_validated)
+        insert(
+            reads,
+            override_data_on_conflict,
+            is_manually_reviewed,
+        )
 
-    end = time.time()
+    finished = time.perf_counter()
 
-    logger.info(f'Processing file {filename} in {end - start} seconds, '
-                f'returning #reads={len(reads)}.')
+    logger.info(
+        "Manual decoder | file=%s | records=%s | "
+        "decode=%.2fs | insert_pipeline=%.2fs | total=%.2fs",
+        filename,
+        len(reads),
+        decode_finished - start,
+        finished - decode_finished,
+        finished - start,
+    )
 
     return reads
