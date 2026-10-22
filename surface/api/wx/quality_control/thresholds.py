@@ -2,6 +2,123 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from wx.models import QcRangeThreshold, QcStepThreshold, QcPersistThreshold, Station, Variable
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+import logging
+import time
+
+# Cache only within an explicitly wrapped import; never across Celery tasks.
+_threshold_cache = ContextVar("manual_qc_threshold_cache", default=None)
+_cache_logger = logging.getLogger("surface")
+
+
+def _first_rows_by_key(queryset, fields):
+    # Match .first(): honor model ordering, or use primary-key order.
+    if not queryset.ordered:
+        queryset = queryset.order_by("pk")
+    result = {}
+    for row in queryset:
+        key = tuple(getattr(row, field) for field in fields)
+        result.setdefault(key, row)
+    return result
+
+
+@contextmanager
+def preload_qc_thresholds(station_ids, variable_ids):
+    """Load thresholds once for a synchronous import and release them on exit."""
+    start = time.perf_counter()
+    station_ids = set(station_ids)
+    variable_ids = set(variable_ids)
+    stations = {
+        row.pk: row
+        for row in Station.objects.filter(pk__in=station_ids)
+    }
+    variables = {
+        row.pk: row
+        for row in Variable.objects.filter(pk__in=variable_ids)
+    }
+    threshold_station_ids = station_ids | {
+        row.reference_station_id
+        for row in stations.values()
+        if row.reference_station_id is not None
+    }
+    filters = {
+        "station_id__in": threshold_station_ids,
+        "variable_id__in": variable_ids,
+    }
+    cache = {
+        "station_ids": station_ids,
+        "variable_ids": variable_ids,
+        "threshold_station_ids": threshold_station_ids,
+        "stations": stations,
+        "variables": variables,
+        "step": _first_rows_by_key(
+            QcStepThreshold.objects.filter(**filters),
+            ("station_id", "variable_id"),
+        ),
+        # Load all months so cross-month imports use the correct seasonal row.
+        "range": _first_rows_by_key(
+            QcRangeThreshold.objects.filter(**filters),
+            ("station_id", "variable_id", "month"),
+        ),
+        "persist": _first_rows_by_key(
+            QcPersistThreshold.objects.filter(**filters),
+            ("station_id", "variable_id"),
+        ),
+    }
+    _cache_logger.info(
+        "QC threshold preload | stations=%s | variables=%s | total=%.3fs",
+        len(stations), len(variables), time.perf_counter() - start,
+    )
+    token = _threshold_cache.set(cache)
+    try:
+        yield
+    finally:
+        # Also reset on decode/insert failures and restore any outer scope.
+        _threshold_cache.reset(token)
+
+
+def _get_station(station_id):
+    cache = _threshold_cache.get()
+    if cache is not None and station_id in cache["station_ids"]:
+        if station_id not in cache["stations"]:
+            raise Station.DoesNotExist()
+        return cache["stations"][station_id]
+    return Station.objects.get(pk=station_id)
+
+
+def _get_variable(variable_id):
+    cache = _threshold_cache.get()
+    if cache is not None and variable_id in cache["variable_ids"]:
+        if variable_id not in cache["variables"]:
+            raise Variable.DoesNotExist()
+        return cache["variables"][variable_id]
+    return Variable.objects.get(pk=variable_id)
+
+
+def _get_threshold(kind, station_id, variable_id, month=None):
+    cache = _threshold_cache.get()
+    key = (station_id, variable_id)
+    if kind == "range":
+        key += (month,)
+    if (
+        cache is not None
+        and station_id in cache["threshold_station_ids"]
+        and variable_id in cache["variable_ids"]
+    ):
+        # Missing thresholds are cached too: do not query again for absent rows.
+        return cache[kind].get(key)
+    model = {
+        "step": QcStepThreshold,
+        "range": QcRangeThreshold,
+        "persist": QcPersistThreshold,
+    }[kind]
+    filters = {"station_id": station_id, "variable_id": variable_id}
+    if kind == "range":
+        filters["month"] = month
+    return model.objects.filter(**filters).first()
+
+
 # ---------------------------------------------------------------------
 # STEP THRESHOLD RESOLUTION
 # ---------------------------------------------------------------------
@@ -46,7 +163,7 @@ def resolve_step_thresholds(thresholds: dict, station_id: int, variable_id: int)
 
     # Fetch station once to avoid repeated DB queries
     try:
-        station = Station.objects.get(pk=station_id)
+        station = _get_station(station_id)
     except ObjectDoesNotExist:
         # If station does not exist, we cannot resolve thresholds
         return thresholds
@@ -55,11 +172,7 @@ def resolve_step_thresholds(thresholds: dict, station_id: int, variable_id: int)
     # Custom station threshold
     # ------------------------------------------------------------
     # There should only every be one return or less objs return. However using .filter & .first just to be safe
-    step_obj = (
-        QcStepThreshold.objects
-        .filter(station_id=station_id, variable_id=variable_id)
-        .first()
-    )
+    step_obj = _get_threshold("step", station_id, variable_id)
 
     if (step_obj and step_obj.step_min is not None and step_obj.step_max is not None):
         thresholds["cus_step_min"] = step_obj.step_min
@@ -74,11 +187,7 @@ def resolve_step_thresholds(thresholds: dict, station_id: int, variable_id: int)
     # ------------------------------------------------------------
     if station.reference_station_id is not None:
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
-        step_obj = (
-            QcStepThreshold.objects
-            .filter(station_id=station.reference_station_id, variable_id=variable_id)
-            .first()
-        )
+        step_obj = _get_threshold("step", station.reference_station_id, variable_id)
 
         if (step_obj and step_obj.step_min is not None and step_obj.step_max is not None):
             thresholds["ref_step_min"] = step_obj.step_min
@@ -94,7 +203,7 @@ def resolve_step_thresholds(thresholds: dict, station_id: int, variable_id: int)
     # Global threshold from Variable
     # ------------------------------------------------------------
     try:
-        variable = Variable.objects.get(pk=variable_id)
+        variable = _get_variable(variable_id)
 
         if station.is_automatic:
             if (variable and variable.step_hourly is not None):
@@ -172,7 +281,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
 
     # Fetch station once to avoid repeated DB queries
     try:
-        station = Station.objects.get(pk=station_id)
+        station = _get_station(station_id)
     except ObjectDoesNotExist:
         return thresholds
 
@@ -180,11 +289,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
     # Custom station range threshold
     # ------------------------------------------------------------
     # There should only every be one return or less objs return. However using .filter & .first just to be safe
-    range_obj = (
-        QcRangeThreshold.objects
-        .filter(station_id=station_id, variable_id=variable_id, month=month)
-        .first()
-    )
+    range_obj = _get_threshold("range", station_id, variable_id, month=month)
 
     if (range_obj and range_obj.range_min is not None and range_obj.range_max is not None):
         thresholds["cus_range_min"] = range_obj.range_min
@@ -199,11 +304,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
     # ------------------------------------------------------------
     if station.reference_station_id is not None:
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
-        range_obj = (
-            QcRangeThreshold.objects
-            .filter(station_id=station.reference_station_id, variable_id=variable_id, month=month)
-            .first()
-        )
+        range_obj = _get_threshold("range", station.reference_station_id, variable_id, month=month)
 
         if (range_obj and range_obj.range_min is not None and range_obj.range_max is not None):
             thresholds["ref_range_min"] = range_obj.range_min
@@ -219,7 +320,7 @@ def resolve_range_thresholds(thresholds: dict, station_id: int, variable_id: int
     # Global variable threshold
     # ------------------------------------------------------------
     try:
-        variable = Variable.objects.get(pk=variable_id)
+        variable = _get_variable(variable_id)
 
         if station.is_automatic:
             if (variable and variable.range_min_hourly is not None and variable.range_max_hourly is not None):
@@ -289,7 +390,7 @@ def resolve_persist_thresholds(thresholds: dict, station_id: int, variable_id: i
 
     # Fetch station once to avoid repeated DB queries
     try:
-        station = Station.objects.get(pk=station_id)
+        station = _get_station(station_id)
     except ObjectDoesNotExist:
         # If station does not exist, we cannot resolve thresholds
         return thresholds
@@ -298,11 +399,7 @@ def resolve_persist_thresholds(thresholds: dict, station_id: int, variable_id: i
     # Custom station threshold
     # ------------------------------------------------------------
     # There should only every be one return or less objs return. However using .filter & .first just to be safe
-    persist_obj = (
-        QcPersistThreshold.objects
-        .filter(station_id=station_id, variable_id=variable_id)
-        .first()
-    )
+    persist_obj = _get_threshold("persist", station_id, variable_id)
 
     if (persist_obj and persist_obj.window is not None and persist_obj.minimum_variance is not None):
         thresholds["cus_persist_wnd"] = persist_obj.window
@@ -317,11 +414,7 @@ def resolve_persist_thresholds(thresholds: dict, station_id: int, variable_id: i
     # ------------------------------------------------------------
     if station.reference_station_id is not None:
         # There should only every be one return or less objs return. However using .filter & .first just to be safe
-        persist_obj = (
-            QcPersistThreshold.objects
-            .filter(station_id=station.reference_station_id, variable_id=variable_id)
-            .first()
-        )            
+        persist_obj = _get_threshold("persist", station.reference_station_id, variable_id)            
 
         if (persist_obj and persist_obj.window is not None and persist_obj.minimum_variance is not None):
             thresholds["ref_persist_wnd"] = persist_obj.window
@@ -338,7 +431,7 @@ def resolve_persist_thresholds(thresholds: dict, station_id: int, variable_id: i
     # Global threshold from Variable
     # ------------------------------------------------------------
     try:
-        variable = Variable.objects.get(pk=variable_id)
+        variable = _get_variable(variable_id)
 
         if station.is_automatic:
             if (variable and variable.persistence_hourly is not None):

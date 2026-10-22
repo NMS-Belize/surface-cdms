@@ -11,6 +11,9 @@ from django.db.models import Value
 from django.db.models.functions import Concat
 from contextlib import nullcontext
 
+from wx.quality_control.thresholds import preload_qc_thresholds
+from wx.quality_control.helpers import reuse_qc_connection
+
 from tempestas_api import settings
 from wx.decoders.insert_raw_data import insert
 from wx.decoders.insert_hf_data import insert as insert_hf
@@ -273,7 +276,7 @@ def read_file(
         decode_finished - start,
     )
 
-    # Keep the existing insertion routes and their arguments.
+    # Keep the existing high-frequency and staged insertion routes.
     if highfrequency_data:
         insert_hf(
             reads,
@@ -287,11 +290,25 @@ def read_file(
         )
 
     else:
-        insert(
-            reads,
-            override_data_on_conflict,
-            is_manually_reviewed,
-        )
+        station_ids = {record[0] for record in reads}
+        variable_ids = {record[1] for record in reads}
+
+        if reads:
+            # Preload thresholds and reuse the QC lookup connection.
+            with preload_qc_thresholds(station_ids, variable_ids):
+                with reuse_qc_connection():
+                    insert(
+                        reads,
+                        override_data_on_conflict,
+                        is_manually_reviewed,
+                        insert_page_size=1000,
+                    )
+        else:
+            insert(
+                reads,
+                override_data_on_conflict,
+                is_manually_reviewed,
+            )
 
     finished = time.perf_counter()
 

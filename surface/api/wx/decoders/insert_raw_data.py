@@ -1,3 +1,4 @@
+from contextlib import closing
 import datetime
 import logging
 import time
@@ -387,7 +388,7 @@ def get_data(raw_data_list):
 
 
 
-def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
+def insert_query(reads, override_data_on_conflict, is_manually_reviewed, page_size=100):
     """
     Bulk insert prepared rows into raw_data.
 
@@ -396,8 +397,26 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
     """
 
     start = time.perf_counter()
+    if type(page_size) is not int or page_size <= 0:
+        raise ValueError("page_size must be a positive integer.")
 
-    with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
+    raw_page_size = page_size
+    if page_size != 100:
+        seen = set()
+        for row in reads:
+            key = (row[0], row[1], row[2])
+            if key in seen:
+                # Preserve the original statement boundaries for duplicate keys.
+                # Larger upsert pages can otherwise update one row twice.
+                raw_page_size = 100
+                logger.info("Duplicate input keys: retaining raw_data page_size=100.")
+                break
+            seen.add(key)
+
+    raw_seconds = hourly_seconds = daily_seconds = summary_prepare_seconds = 0.0
+    connect_start = time.perf_counter()
+    with closing(psycopg2.connect(settings.SURFACE_CONNECTION_STRING)) as conn, conn:
+        connect_seconds = time.perf_counter() - connect_start
         with conn.cursor() as cursor:
 
             logger.info(f"Inserting into database #{len(reads)} records.")
@@ -454,6 +473,7 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
             else:
                 on_conflict_sql = " ON CONFLICT DO NOTHING "
 
+            query_start = time.perf_counter()
             inserted_raw_data = execute_values(cursor, f"""
                 INSERT INTO raw_data (
                     station_id,
@@ -476,7 +496,9 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
                 VALUES %s
                 {on_conflict_sql}
                 RETURNING station_id, date_trunc('hour', datetime), now(), now(), is_daily
-            """, reads, fetch=True)
+            """, reads, fetch=True, page_size=raw_page_size)
+            raw_seconds = time.perf_counter() - query_start
+            summary_start = time.perf_counter()
 
             if inserted_raw_data:
                 distinct_raw_data = set(inserted_raw_data)
@@ -495,6 +517,8 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
                 )
 
                 if filtered_raw_data:
+                    summary_prepare_seconds += time.perf_counter() - summary_start
+                    query_start = time.perf_counter()
                     execute_values(cursor, """
                         INSERT INTO wx_hourlysummarytask (
                             station_id,
@@ -504,7 +528,9 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
                         )
                         VALUES %s
                         ON CONFLICT DO NOTHING
-                    """, filtered_raw_data)
+                    """, filtered_raw_data, page_size=page_size)
+                    hourly_seconds = time.perf_counter() - query_start
+                    summary_start = time.perf_counter()
 
                     # Daily summary dates must be based on station local time.
                     station_id = reads[0][0]
@@ -524,6 +550,8 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
 
                     filtered_raw_data = set(filtered_raw_data)
 
+                    summary_prepare_seconds += time.perf_counter() - summary_start
+                    query_start = time.perf_counter()
                     execute_values(cursor, """
                         INSERT INTO wx_dailysummarytask (
                             station_id,
@@ -533,9 +561,21 @@ def insert_query(reads, override_data_on_conflict, is_manually_reviewed):
                         )
                         VALUES %s
                         ON CONFLICT DO NOTHING
-                    """, filtered_raw_data)
+                    """, filtered_raw_data, page_size=page_size)
+                    daily_seconds = time.perf_counter() - query_start
 
+        commit_start = time.perf_counter()
         conn.commit()
+        commit_seconds = time.perf_counter() - commit_start
+
+    logger.info(
+        "insert_raw_data insert_query breakdown | raw_page_size=%s | "
+        "summary_page_size=%s | affected_rows=%s | connect=%.3fs | raw=%.3fs | "
+        "summary_prepare=%.3fs | hourly_tasks=%.3fs | daily_tasks=%.3fs | commit=%.3fs",
+        raw_page_size, page_size, len(inserted_raw_data), connect_seconds,
+        raw_seconds, summary_prepare_seconds, hourly_seconds, daily_seconds,
+        commit_seconds,
+    )
 
     logger.info(
         "insert_raw_data insert_query timing | records=%s | total=%.2fs",
@@ -685,7 +725,7 @@ def update_stationvariable(reads):
 
 ############################# Main #############################
 
-def insert(raw_data_list, override_data_on_conflict=False, is_manually_reviewed=False):
+def insert(raw_data_list, override_data_on_conflict=False, is_manually_reviewed=False, insert_page_size=100):
     """
     Main entrypoint used by decoders such as TOA5.
 
@@ -707,7 +747,10 @@ def insert(raw_data_list, override_data_on_conflict=False, is_manually_reviewed=
         )
         return
 
-    insert_query(reads, override_data_on_conflict, is_manually_reviewed)
+    insert_query(
+        reads, override_data_on_conflict, is_manually_reviewed,
+        page_size=insert_page_size,
+    )
     after_insert = time.perf_counter()
 
     update_stationvariable(reads)

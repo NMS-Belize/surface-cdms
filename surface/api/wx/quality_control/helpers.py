@@ -8,6 +8,92 @@ from psycopg2.extras import execute_values
 from datetime import datetime, timedelta, timezone, date
 
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+import logging
+import time
+
+_qc_scope = ContextVar("qc_connection_scope", default=None)
+_qc_logger = logging.getLogger("surface")
+
+
+@contextmanager
+def reuse_qc_connection():
+    """Reuse one lazy QC connection during a synchronous import only."""
+    if _qc_scope.get() is not None:
+        # Nested scopes borrow the outer scope; only its owner closes it.
+        yield
+        return
+
+    state = {
+        "connection": None,
+        "connect_seconds": 0.0,
+        "calls": {},
+        "seconds": {},
+        "evaluation_seconds": {},
+    }
+    token = _qc_scope.set(state)
+    try:
+        yield
+    finally:
+        _qc_scope.reset(token)
+        conn = state["connection"]
+        try:
+            if conn is not None:
+                conn.close()
+        finally:
+            _qc_logger.info(
+                "QC database scope | connections=%s | connect=%.3fs | "
+                "calls=%s | lookup_seconds=%s",
+                int(conn is not None), state["connect_seconds"],
+                state["calls"],
+                {key: round(value, 3) for key, value in state["seconds"].items()},
+            )
+            _qc_logger.info(
+                "QC evaluation totals | step=%.3fs | range=%.3fs | persist=%.3fs",
+                state["evaluation_seconds"].get("step", 0.0),
+                state["evaluation_seconds"].get("range", 0.0),
+                state["evaluation_seconds"].get("persist", 0.0),
+            )
+
+
+def record_qc_timing(kind, seconds):
+    """Accumulate timings without logging once per observation."""
+    state = _qc_scope.get()
+    if state is not None:
+        totals = state["evaluation_seconds"]
+        totals[kind] = totals.get(kind, 0.0) + seconds
+
+
+@contextmanager
+def _qc_connection(kind):
+    state = _qc_scope.get()
+    start = time.perf_counter()
+    conn = None
+    try:
+        if state is None:
+            conn = get_connection()
+        else:
+            state["calls"][kind] = state["calls"].get(kind, 0) + 1
+            conn = state["connection"]
+            if conn is None:
+                connect_start = time.perf_counter()
+                conn = get_connection()
+                state["connection"] = conn
+                state["connect_seconds"] += time.perf_counter() - connect_start
+
+        # Keep each helper's own commit/rollback boundary, as before.
+        with conn:
+            yield conn
+    finally:
+        if state is None:
+            if conn is not None:
+                conn.close()
+        else:
+            totals = state["seconds"]
+            totals[kind] = totals.get(kind, 0.0) + time.perf_counter() - start
+
+
 def get_connection():
     return psycopg2.connect(settings.SURFACE_CONNECTION_STRING)
 
@@ -84,7 +170,7 @@ def get_min_max_measured(window_start, window_end, station_id, variable_id):
         variable_id,
     )
 
-    with get_connection() as conn:
+    with _qc_connection("min_max") as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             result = cur.fetchone()
@@ -121,7 +207,7 @@ def get_prev_measured(datetime, station_id, variable_id):
         variable_id,
     )
 
-    with get_connection() as conn:
+    with _qc_connection("previous") as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             result = cur.fetchone()
@@ -157,7 +243,7 @@ def get_historical_measured_records(window_start, window_end, station_id, variab
         variable_id,
     )
 
-    with get_connection() as conn:
+    with _qc_connection("history") as conn:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             results = cur.fetchall()
@@ -216,7 +302,7 @@ def get_prev_measured_bulk(requests, lookback_days=7):
     batch_start = min(before_datetimes) - timedelta(days=lookback_days)
     batch_end = max(before_datetimes)
 
-    with get_connection() as conn:
+    with _qc_connection("previous_bulk") as conn:
         with conn.cursor() as cur:
             # Safely quote the datetime constants for the SQL string.
             # execute_values requires the main SQL to contain only one %s placeholder,
@@ -261,13 +347,12 @@ def get_prev_measured_bulk(requests, lookback_days=7):
                 ) prev ON TRUE
             """
 
-            # Collect results from every page, not just the final query.
+            # Keep the earlier fix: collect results from every page.
             results = execute_values(
                 cur,
                 sql,
                 values,
                 template="(%s, %s, %s, %s)",
-                page_size=100,
                 fetch=True,
             )
 

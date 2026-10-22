@@ -15,7 +15,11 @@ from wx.quality_control.evaluators import (
     determine_final_qc,
 )
 
-from wx.quality_control.helpers import convert_records_to_utc, get_historical_measured_records
+from wx.quality_control.helpers import (
+    convert_records_to_utc,
+    get_historical_measured_records,
+    record_qc_timing,
+)
 
 
 logger = logging.getLogger("surface")
@@ -57,6 +61,8 @@ def build_qc_context(
             Reusable QC context for evaluate_qc_row().
     """
 
+    context_start = time.perf_counter()
+
     thresholds = {
         "suspicious_step_threshold": False,
         "suspicious_range_threshold": False,
@@ -82,7 +88,9 @@ def build_qc_context(
         variable_id=variable_id,
     )
 
+    thresholds_finished = time.perf_counter()
     data_batch_utc = convert_records_to_utc(data_batch, station_offset)
+    conversion_finished = time.perf_counter()
 
     persist_windows = []
 
@@ -116,6 +124,16 @@ def build_qc_context(
             variable_id=variable_id,
         )
 
+    history_finished = time.perf_counter()
+    logger.debug(
+        "QC context | station=%s | variable=%s | month=%s | "
+        "thresholds=%.3fs | utc=%.3fs | history=%.3fs | history_rows=%s",
+        station_id, variable_id, month,
+        thresholds_finished - context_start,
+        conversion_finished - thresholds_finished,
+        history_finished - conversion_finished,
+        len(historical_records_utc),
+    )
     offset = pytz.FixedOffset(station_offset)
 
     return {
@@ -159,6 +177,7 @@ def evaluate_qc_row(row, station_id, variable_id, qc_context):
     else:
         row_datetime_utc = offset.localize(dt).astimezone(pytz.UTC)
 
+    check_start = time.perf_counter()
     result_step, msg_step = evaluate_step_qc(
         value=value,
         thresholds=thresholds,
@@ -169,11 +188,17 @@ def evaluate_qc_row(row, station_id, variable_id, qc_context):
         previous_db_record=qc_context.get("previous_db_record"),
     )
 
+    record_qc_timing("step", time.perf_counter() - check_start)
+
+    check_start = time.perf_counter()
     result_range, msg_range = evaluate_range_qc(
         value,
         thresholds,
     )
 
+    record_qc_timing("range", time.perf_counter() - check_start)
+
+    check_start = time.perf_counter()
     result_persist, msg_persist = evaluate_persist_qc(
         value=value,
         station_id=station_id,
@@ -183,6 +208,8 @@ def evaluate_qc_row(row, station_id, variable_id, qc_context):
         row_datetime_utc=row_datetime_utc,
         historical_records=qc_context.get("historical_records_utc"),
     )
+
+    record_qc_timing("persist", time.perf_counter() - check_start)
 
     result_final = determine_final_qc(
         result_step,

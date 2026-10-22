@@ -356,8 +356,6 @@
             this.loading = true; // set loading to true
             this.showBtn = false; // disable the buttons
 
-            console.log(`This is the manual validated value: ${this.manuallyReviewedData}`);
-
             // Handle the file upload logic here
             axios.post('upload-files/', {override_on_conflict: this.overrideData, is_manually_reviewed: this.manuallyReviewedData, selected_decoder: this.selectedDecoder})
             .then(response => {
