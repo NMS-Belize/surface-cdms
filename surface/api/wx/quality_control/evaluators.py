@@ -65,22 +65,23 @@ def evaluate_step_qc(
     # confirm that there is a valid previous number
     if prev_measured is not None:
         diff_value = float(value) - float(prev_measured)
-    # retrieve required number to calculate diff_value from the DB
+    # retrieve required number to calculate diff_value from the DB    
     else:
-        # Optimized path: use preloaded previous value if provided.
-        # Backwards-compatible path: query DB only if nothing was preloaded.
+        diff_value_date = None
+
+        # Use the preloaded result when available.
         if previous_db_record is not None:
             diff_value_date, prev_measured = previous_db_record
-        else:
+
+        # Fall back when the preload contains no usable measurement.
+        if is_missing(prev_measured):
             diff_value_date, prev_measured = get_prev_measured(
                 row_datetime_utc,
                 station_id,
                 variable_id,
             )
 
-        if is_missing(prev_measured):
-            diff_value = None
-        elif prev_measured is not None:
+        if not is_missing(prev_measured):
             diff_value = round(float(value) - float(prev_measured), 3)
 
     # Get the threshold rande
@@ -439,9 +440,13 @@ def evaluate_persist_qc(
             values.extend([batch_wnd_min, batch_wnd_max])
 
         if not values:
-            descriptions.append(f"\n\nPersist Not Checked. Could not find a valid max and/or min within the persistence window.")
+            # descriptions.append(f"\n\nPersist Not Checked. Could not find a valid max and/or min within the persistence window.")
 
-            return NOT_CHECKED, " || ".join(descriptions)
+            # return NOT_CHECKED, " || ".join(descriptions)
+
+            descriptions.append(f"\n\nNo previous max and/or min within the persistence window. Persist check passed!")
+
+            return GOOD, " || ".join(descriptions)
 
         # CURRENT VALUE — always include
         values.append(value)
@@ -475,8 +480,9 @@ def determine_final_qc(step_flag: int, range_flag: int, persist_flag: int) -> in
         The final flag is derived hierarchically: 
         1. BAD: If any individual check is BAD.
         2. SUSPICIOUS: If no BAD exists, but at least one check is SUSPICIOUS.
-        3. GOOD: If no higher severity exists and at least one check is GOOD.
-        4. NOT_CHECKED: Default fallback if no flags are set.
+        3. MISSING: If no SUSPICIOUS exists, but at least one check is MISSING.
+        4. GOOD: If no higher severity exists and at least one check is GOOD.
+        5. NOT_CHECKED: Default fallback if no flags are set.
 
         Args:
             step_flag (int): Result of the step-test analysis.
@@ -494,18 +500,14 @@ def determine_final_qc(step_flag: int, range_flag: int, persist_flag: int) -> in
     # Case 2: There is a SUSPICIOUS flag in list
     if SUSPICIOUS in [range_flag, persist_flag, step_flag]:
         return SUSPICIOUS
-    
-    # Case 3: There is a NOT CHECKED flag in list
-    if NOT_CHECKED in [range_flag, persist_flag, step_flag]:
-        return SUSPICIOUS
 
-    # Case 4: There is a NOT CHECKED flag in list
+    # Case 3: There is a NOT CHECKED flag in list
     if MISSING in [range_flag, persist_flag, step_flag]:
         return MISSING
     
-    # Case 5: There is a GOOD flag in list
+    # Case 4: There is a GOOD flag in list
     if GOOD in [range_flag, persist_flag, step_flag]:
         return GOOD
 
-    # Case 6: Everything else
+    # Case 5: Everything else
     return NOT_CHECKED

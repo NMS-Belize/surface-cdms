@@ -261,14 +261,15 @@ def get_prev_measured_bulk(requests, lookback_days=7):
                 ) prev ON TRUE
             """
 
-            execute_values(
+            # Collect results from every page, not just the final query.
+            results = execute_values(
                 cur,
                 sql,
                 values,
                 template="(%s, %s, %s, %s)",
+                page_size=100,
+                fetch=True,
             )
-
-            results = cur.fetchall()
 
     return {
         row[0]: (row[1], row[2])
