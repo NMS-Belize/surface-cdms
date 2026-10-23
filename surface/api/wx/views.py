@@ -2352,8 +2352,8 @@ def get_qc_list(request):
                                 status=status.HTTP_400_BAD_REQUEST)
 
         # Automatic stations (AWS) → max 7 days
-        # Manual stations → max 30 days
-        limit_days = 7 if is_automatic == "true" else 30
+        # Manual stations → max 31 days
+        limit_days = 7 if is_automatic == "true" else 31
 
         station_type = "Automatic" if is_automatic == "true" else "Manual"
 
@@ -5898,10 +5898,15 @@ class customThresholdView(WxPermissionRequiredMixin, LoginRequiredMixin, Templat
         context = super().get_context_data(**kwargs)
 
         # context['station_list'] = Station.objects.select_related('profile').exclude(is_reference=True)
+
+        # use the code below if you only want to include the default reference station
         # Explicitly forces station 0 (Default Reference Station) to be included, bypassing the reference check.
-        context['station_list'] = Station.objects.select_related('profile').filter(
-            ~Q(is_reference=True) | Q(id=0)
-        )
+        # context['station_list'] = Station.objects.select_related('profile').filter(
+        #     ~Q(is_reference=True) | Q(id=0)
+        # )
+
+        # Explicitly get all Stations to be included, bypassing the reference check.
+        context['station_list'] = Station.objects.select_related('profile')
 
         context['reference_station_list'] = Station.objects.filter(is_reference=True).order_by('name')
         context['station_profile_list'] = StationProfile.objects.all()

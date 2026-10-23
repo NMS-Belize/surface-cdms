@@ -1015,9 +1015,14 @@
         return this.stations.filter(station => {
           const isNotTarget = station.id !== target.id;
           const matchesAutomation = station.is_automatic === target.is_automatic;
-          const isDefaultReferenceStation = station.id === 0; // Using strict equality
+          // only the default reference station is allowed
+          // const isDefaultReferenceStation = station.id === 0; // Using strict equality
+          // return (isNotTarget && matchesAutomation) || isDefaultReferenceStation;
 
-          return (isNotTarget && matchesAutomation) || isDefaultReferenceStation;
+          // allow all reference stations
+          const isReferenceStation = station.is_reference === true;
+
+          return (isNotTarget && matchesAutomation) || isReferenceStation;
         });
       },
     },
