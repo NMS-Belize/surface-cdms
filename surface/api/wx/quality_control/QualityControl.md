@@ -177,6 +177,70 @@ Then:
 
 ---
 
+# Previous-value lookup for STEP QC
+
+STEP QC needs the previous valid measured value.
+
+During bulk ingestion, `insert_raw_data.get_data()` collects one request per station/variable group and calls:
+
+```python
+get_prev_measured_bulk(prev_requests, lookback_days=30)
+```
+
+The optimized manual-data import therefore searches up to 30 days before the first observation in each group.
+
+The helper's default is seven days:
+
+```python
+def get_prev_measured_bulk(requests, lookback_days=7):
+```
+
+The manual-data import explicitly overrides that default with `lookback_days=30`.
+
+The bulk lookup returns:
+
+```python
+(previous_datetime, previous_measured)
+```
+
+or:
+
+```python
+(None, None)
+```
+
+`(None, None)` means that no valid measured value was found within the requested lookback window. It is an intentional result and must not trigger one database query for every observation.
+
+When `previous_db_record` is supplied to `evaluate_step_qc()`:
+
+- Use the supplied tuple, including `(None, None)`.
+- Call `get_prev_measured()` only when `previous_db_record` was not supplied.
+- Avoid per-observation fallback queries during bulk imports. Under database load, those queries can become very slow and can block the entire import task.
+
+The intended logic is:
+
+```python
+# Use the bulk result whenever the caller supplied one.
+if previous_db_record is not None:
+    diff_value_date, prev_measured = previous_db_record
+else:
+    # This path is for older callers that do not preload the value.
+    diff_value_date, prev_measured = get_prev_measured(
+        row_datetime_utc,
+        station_id,
+        variable_id,
+    )
+
+if is_missing(prev_measured):
+    diff_value = None
+elif prev_measured is not None:
+    diff_value = round(float(value) - float(prev_measured), 3)
+```
+
+If the lookback period changes, update both the call in `insert_raw_data.py` and this documentation.
+
+---
+
 # RANGE Check
 
 **File:** `evaluators.py`

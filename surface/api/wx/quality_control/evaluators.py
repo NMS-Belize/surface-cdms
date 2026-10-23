@@ -69,20 +69,22 @@ def evaluate_step_qc(
     else:
         diff_value_date = None
 
-        # Use the preloaded result when available.
+        # Use the bulk result when it was supplied, even when it is (None, None).
+        # Only query individually for older callers that did not preload a result.
         if previous_db_record is not None:
             diff_value_date, prev_measured = previous_db_record
-
-        # Fall back when the preload contains no usable measurement.
-        if is_missing(prev_measured):
+        else:
             diff_value_date, prev_measured = get_prev_measured(
                 row_datetime_utc,
                 station_id,
                 variable_id,
             )
 
-        if not is_missing(prev_measured):
+        if is_missing(prev_measured):
+            diff_value = None
+        elif prev_measured is not None:
             diff_value = round(float(value) - float(prev_measured), 3)
+
 
     # Get the threshold rande
     def get_step(prefix):

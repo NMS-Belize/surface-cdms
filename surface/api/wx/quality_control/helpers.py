@@ -261,6 +261,9 @@ def get_prev_measured_bulk(requests, lookback_days=7):
     """
     Bulk fetch previous measured values for many station/variable/datetime groups.
 
+    The caller may override the lookback window. The default is 7 days,
+    while the default manual-data import currently passes 30 days.
+
     This uses:
       1. A batch-wide fixed datetime range so Timescale can exclude old chunks.
       2. A per-request datetime range so each row still gets the correct previous value.
@@ -274,12 +277,20 @@ def get_prev_measured_bulk(requests, lookback_days=7):
             "before_datetime": datetime_obj,
         }
 
-    Returns:
+    Return value:
         {
             "4|4062|3600|5": (datetime, measured),
             ...
         }
-    }
+
+    A value of (None, None) means no valid measured value was found
+    within the requested lookback window.
+
+    Important:
+        Callers that provide this result should treat (None, None) as
+        an intentional "not found" result. They should not issue one
+        fallback query per observation, because that can cause severe
+        delays when the database is under load.
     """
 
     if not requests:

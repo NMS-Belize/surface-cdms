@@ -250,6 +250,12 @@ def get_data(raw_data_list):
         "insert_raw_data prev_requests | count=%s",
         len(prev_requests),
     )
+
+    # The bulk STEP lookup searches up to 30 days before each group's
+    # first observation. A result of (None, None) means no valid measured
+    # value was found within that 30-day window. Do not fall back to one
+    # database query per observation, because that can become extremely slow
+    # when the database is under load. Note the default is 7
     previous_measured_lookup = get_prev_measured_bulk(
         prev_requests,
         lookback_days=30,
