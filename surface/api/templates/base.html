@@ -85,6 +85,9 @@
         bottom: 20px;
         z-index: 100000;
         font-family: "Encode Sans", sans-serif;
+
+        /* Makes dragging feel natural */
+        touch-action: none;
       }
 
       /* BUTTON (SURFACE STYLE) */
@@ -94,6 +97,9 @@
         display: flex;
         align-items: center;
         justify-content: center;
+
+        user-select: none;
+        cursor: grab;
 
         width: 48px;
         height: 48px;
@@ -156,6 +162,11 @@
 
         transform: none !important;
         outline: none;
+        
+      }
+
+      .wx-utc-widget__trigger:active {
+        cursor: grabbing;
       }
 
       /* DISABLE RIPPLE EFFECTS */
@@ -1762,18 +1773,125 @@
         updateUtcWidget();
         setInterval(updateUtcWidget, 1000);
 
-        if (widget && trigger) {
-          trigger.addEventListener('click', function (e) {
-            e.stopPropagation();
-            widget.classList.toggle('wx-utc-widget--open');
-          });
+        if (!widget || !trigger) return;
 
-          document.addEventListener('click', function (e) {
-            if (!widget.contains(e.target)) {
-              widget.classList.remove('wx-utc-widget--open');
-            }
-          });
+        let isDragging = false;
+        let hasMoved = false;
+
+        let startX = 0;
+        let startLeft = 0;
+
+        const STORAGE_KEY = 'wxUtcWidgetPosition';
+
+        // Restore the user's previous horizontal position.
+        const savedPosition = localStorage.getItem(STORAGE_KEY);
+
+        if (savedPosition !== null) {
+          const savedLeft = Number(savedPosition);
+
+          const maxLeft = window.innerWidth - widget.offsetWidth - 20;
+
+          const safeLeft = Math.max(
+            20,
+            Math.min(savedLeft, maxLeft)
+          );
+
+          widget.style.left = `${safeLeft}px`;
+          widget.style.right = 'auto';
         }
+
+        trigger.addEventListener('pointerdown', function (e) {
+          isDragging = true;
+          hasMoved = false;
+
+          startX = e.clientX;
+
+          const rect = widget.getBoundingClientRect();
+          startLeft = rect.left;
+
+          trigger.setPointerCapture(e.pointerId);
+        });
+
+
+        trigger.addEventListener('pointermove', function (e) {
+          if (!isDragging) return;
+
+          const deltaX = e.clientX - startX;
+
+          // Prevent tiny mouse movements from being treated as a drag.
+          if (Math.abs(deltaX) > 4) {
+            hasMoved = true;
+          }
+
+          if (!hasMoved) return;
+
+          const widgetWidth = widget.offsetWidth;
+
+          const minLeft = 20;
+          const maxLeft = window.innerWidth - widgetWidth - 20;
+
+          let newLeft = startLeft + deltaX;
+
+          // Keep the widget inside the viewport.
+          newLeft = Math.max(
+            minLeft,
+            Math.min(newLeft, maxLeft)
+          );
+
+          widget.style.left = `${newLeft}px`;
+          widget.style.right = 'auto';
+        });
+
+
+        trigger.addEventListener('pointerup', function (e) {
+          if (!isDragging) return;
+
+          isDragging = false;
+
+          trigger.releasePointerCapture(e.pointerId);
+
+          if (hasMoved) {
+            const left = widget.getBoundingClientRect().left;
+
+            // Remember the user's chosen position.
+            localStorage.setItem(STORAGE_KEY, left);
+
+            return;
+          }
+
+          // Normal click: open/close the clock.
+          widget.classList.toggle('wx-utc-widget--open');
+        });
+
+
+        document.addEventListener('click', function (e) {
+          if (!widget.contains(e.target)) {
+            widget.classList.remove('wx-utc-widget--open');
+          }
+        });
+
+
+        // Keep the widget visible if the browser is resized.
+        window.addEventListener('resize', function () {
+          const rect = widget.getBoundingClientRect();
+
+          const minLeft = 20;
+          const maxLeft = window.innerWidth - widget.offsetWidth - 20;
+
+          if (rect.left > maxLeft) {
+            widget.style.left = `${maxLeft}px`;
+            widget.style.right = 'auto';
+
+            localStorage.setItem(STORAGE_KEY, maxLeft);
+          }
+
+          if (rect.left < minLeft) {
+            widget.style.left = `${minLeft}px`;
+            widget.style.right = 'auto';
+
+            localStorage.setItem(STORAGE_KEY, minLeft);
+          }
+        });
       });
 
     </script>

@@ -36,15 +36,26 @@
 
     <!-- page container -->
     <v-layout column class="page-container">
-      <v-layout class="monitoring-layout"> 
-        <v-flex md7 class="align-center map-panel">
-            <v-layout v-if="loading_map" class="align-center justify-center" column>
-              <span class="headline font-weight-thin" v-if="loading_map">Loading Map...</span><br>
-              <v-progress-circular indeterminate ></v-progress-circular>
+      <!-- Three panel states: hidden (map only), split, and fullscreen. -->
+      <v-layout class="monitoring-layout" :class="'sidebar-' + sidebarMode">
+        <!-- Keep the map mounted so its width can animate all the way to zero. -->
+        <v-flex class="align-center map-panel">
+
+            <v-layout
+                v-if="loading_map"
+                class="map-loading align-center justify-center"
+                column
+            >
+                <span class="headline font-weight-thin">
+                    Loading Map...
+                </span>
+                <v-progress-circular indeterminate></v-progress-circular>
             </v-layout>
+
             <v-alert v-if="map_error && !loading_map" type="error" dense outlined class="ma-2">
               [[ map_error ]]
             </v-alert>
+
             <l-map v-if="!loading_map && !map_error" ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom = "false">
               <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
               <l-control position="bottomleft">
@@ -152,6 +163,20 @@
               </l-control>      
 
               <l-control-zoom position="topleft"></l-control-zoom>
+
+              <!-- Map control to open or close the monitoring panel. -->
+              <l-control position="topleft">
+                <v-btn
+                  small
+                  color="white"
+                  class="map-sidebar-toggle"
+                  :title="sidebarMode === 'hidden' ? 'Show monitoring panel' : 'Hide monitoring panel'"
+                  :aria-label="sidebarMode === 'hidden' ? 'Show monitoring panel' : 'Hide monitoring panel'"
+                  @click.stop="toggleSidebar"
+                >
+                  <v-icon>[[ sidebarMode === 'hidden' ? 'mdi-table-eye' : 'mdi-table-eye-off' ]]</v-icon>
+                </v-btn>
+              </l-control>
 
               <l-control position="topright">
 
@@ -279,11 +304,53 @@
               </l-circle-marker>             
             </l-map>
         </v-flex>
-        <!-- Side bar container -->
-        <v-flex md5 class="sidebar-panel d-flex flex-column">
-          <!-- heading -->
+        <!-- Monitoring panel: same content in split and fullscreen views. -->
+        <!-- Keep this panel mounted too; v-show would abruptly remove it and skip CSS transitions. -->
+        <div
+          class="sidebar-panel"
+          @transitionend="onSidebarTransitionEnd"
+        >
           <div class="sidebar-heading">
-            <h4>STATIONS MONITORING</h4>
+            <span class="srf-display-2 text-uppercase" style="font-weight: bold;">Stations Monitoring</span>
+
+            <div class="sidebar-actions">
+              <!-- Expand within the content area; restoring returns to the split layout. -->
+              <v-btn
+                icon
+                small
+                :title="sidebarMode === 'fullscreen' ? 'Restore split view' : 'Expand monitoring panel'"
+                :aria-label="sidebarMode === 'fullscreen' ? 'Restore split view' : 'Expand monitoring panel'"
+                @click="toggleSidebarFullscreen"
+              >
+                <v-icon small>
+                  [[ sidebarMode === 'fullscreen' ? 'mdi-arrow-collapse-all' : 'mdi-arrow-expand-all' ]]
+                </v-icon>
+              </v-btn>
+              <v-btn icon small title="Hide monitoring panel" aria-label="Hide monitoring panel" @click="hideSidebar">
+                <v-icon small>mdi-close</v-icon>
+              </v-btn>
+            </div>
+          </div>
+
+          <!-- This option only refreshes the selected station, never the map. -->
+          <div v-if="selected.station.id !== null" class="station-history-toggle">
+            <v-switch
+              v-model="retrieveLast30Days"
+              label="Retrieve last 30 days of data"
+              inset
+              color="primary"
+              hide-details
+              dense
+              class="mt-0 pt-0"
+              @click="toggleSidebarFullscreen"
+              @change="getStationData(selected.station)"
+            ></v-switch>
+            <span class="station-history-hint">Relative to the selected reporting period</span>
+          </div>
+
+          <div v-if="selected.station.id === null" class="sidebar-empty-state">
+            <v-icon size="92" color="blue lighten-2">mdi-map-marker-radius</v-icon>
+            <p class="mt-3 mb-0" style="font-size: larger;">Select a station on the map to view its monitoring information.</p>
           </div>
 
           <v-layout v-if="loading_station" class="align-center justify-center flex-grow-1" column>
@@ -294,7 +361,7 @@
           <v-alert v-if="station_error && !loading_station" type="error" dense outlined class="ma-2">
             [[ station_error ]]
           </v-alert>
-          <div v-if="!loading_station && !station_error" class="station-content"> 
+          <div v-if="selected.station.id !== null && !loading_station && !station_error" class="station-content"> 
 
             <!-- displaying the date of the current data being displayed -->
             <div class="mt-2 ml-2 mr-2">
@@ -354,6 +421,7 @@
             <v-tabs
               v-if="data_type=='Communication'"
               v-model="selectedTab"
+              ref="monitoringTabs"
               fixed-tabs
               class="sidebar-tabs"
             >
@@ -465,6 +533,7 @@
             <!-- quality control tab -->
             <v-tabs
               v-if="data_type=='Quality Control'"
+              ref="monitoringTabs"
               fixed-tabs
               class="sidebar-tabs"
             >
@@ -533,6 +602,7 @@
             <!-- validation progress tab -->
             <v-tabs
               v-if="data_type === 'Validation'"
+              ref="monitoringTabs"
               fixed-tabs
               class="sidebar-tabs"
             >
@@ -621,6 +691,7 @@
             <!-- vists tab -->
             <v-tabs
               v-if="data_type=='Visits'"
+              ref="monitoringTabs"
               fixed-tabs
               class="sidebar-tabs"
             >
@@ -658,6 +729,7 @@
             <!-- equipments tab -->
             <v-tabs
               v-if="data_type=='Equipment'"
+              ref="monitoringTabs"
               fixed-tabs
               class="sidebar-tabs"
             >
@@ -691,7 +763,7 @@
             </v-tabs>               
           </div>  
 
-        </v-flex> 
+        </div>
 
       </v-layout>
     </v-layout>
@@ -766,6 +838,9 @@
         data_type: 'Communication',
         time_type: "Last 24h",
         selectedTab: 0,
+        // Start with the map at full width; opening a station switches to split view.
+        sidebarMode: 'hidden', // 'hidden' | 'split' | 'fullscreen'
+        retrieveLast30Days: false, // Station-only option; backend hookup can use this value.
         reveal: false,
         dialog_chart: false,
         dialog_info: false,
@@ -1075,11 +1150,16 @@
           if (requestId === this.map_request_id) this.loading_map = false;
         });
       },
-      getStationData(station){
+      getStationData(station, days=1){
         const requestId = ++this.station_request_id;
         this.loading_station = true;
         this.station_error = null;
         this.selected.data = [];
+
+        if (this.retrieveLast30Days) {
+          days = 30;
+        }
+
         return axios({
           method: 'get',
           url: `/wx/stations/stations_monitoring/get/${station.id}/`,
@@ -1087,6 +1167,7 @@
             data_type: this.data_type,
             time_type: this.time_type,
             date_picked: this.date,
+            retrieval_days: days,
           },
         })
         .then(response => {
@@ -1149,6 +1230,8 @@
           this.time_type = 'Last 24h';
         }
 
+        this.retrieveLast30Days = false; // making sure that we do not pull for 30 days when not needed
+
         this.updateLegendData();
 
         this.getGlobalData();
@@ -1157,13 +1240,47 @@
           this.getStationData(this.selected.station);
         }
       },
+      refreshMapSize(){
+        // Leaflet needs its dimensions recalculated after its container finishes resizing.
+        if (this.sidebarMode === 'fullscreen') return;
+        this.$nextTick(() => {
+          const map = this.$refs.myMap && this.$refs.myMap.mapObject;
+          if (map) map.invalidateSize({ pan: false });
+        });
+      },
+      onSidebarTransitionEnd(event){
+        // Ignore transitions from nested elements and other CSS properties.
+        if (event.target !== event.currentTarget || event.propertyName !== 'flex-basis') return;
+
+        this.$nextTick(() => {
+          // Vuetify 2 caches the active tab's position; update its underline
+          // after the panel has reached its new width.
+          const tabs = this.$refs.monitoringTabs;
+          if (tabs && typeof tabs.callSlider === 'function' && this.sidebarMode !== 'hidden') {
+            tabs.callSlider();
+          }
+          this.refreshMapSize();
+        });
+      },
+      toggleSidebar(){
+        this.sidebarMode = this.sidebarMode === 'hidden' ? 'split' : 'hidden';
+      },
+      hideSidebar(){
+        this.sidebarMode = 'hidden';
+      },
+      toggleSidebarFullscreen(){
+        this.sidebarMode = this.sidebarMode === 'fullscreen' ? 'split' : 'fullscreen';
+      },
       selectStation(station){
+        // Open the panel immediately, while the station request loads.
+        this.sidebarMode = 'split';
         // Declare the metadata on each new object so Vue 2 observes it.
         this.selected.station = Object.assign({
           id: null, name: null, lastupdate: null, color: null,
           offset_hr_string: null, offset_min: null,
         }, station);
         this.selected.color = station.color;
+        this.retrieveLast30Days = false; // making sure that we do not pull for 30 days when not needed
         this.getStationData(this.selected.station);
       },
     },
@@ -1185,27 +1302,139 @@
   }
 
   .monitoring-layout {
+    width: 100%;
     height: calc(100vh - 120px);
     min-height: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
   }
 
+  /* The split layout retains the original md7 / md5 proportions. */
   .map-panel {
+    flex: 0 0 58.333333%;
+    max-width: 58.333333%;
     height: 100%;
+    min-width: 0;
     min-height: 0;
+    overflow: hidden;
+    transition: flex-basis 480ms cubic-bezier(0.22, 1, 0.36, 1),
+                max-width 480ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .sidebar-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 41.666667%;
+    max-width: 41.666667%;
     height: 100%;
+    min-width: 0;
     min-height: 0;
     border-left: 2px solid #BBB;
+    background: #fff;
+    overflow: hidden;
+    transition: flex-basis 480ms cubic-bezier(0.22, 1, 0.36, 1),
+                max-width 480ms cubic-bezier(0.22, 1, 0.36, 1),
+                border-color 250ms ease;
+  }
+
+  /* Animate both sides of the split so neither panel jumps or overlays the navbar. */
+  .monitoring-layout.sidebar-hidden .map-panel {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+
+  .monitoring-layout.sidebar-hidden .sidebar-panel {
+    flex-basis: 0;
+    max-width: 0;
+    border-left-color: transparent;
+    pointer-events: none;
+  }
+
+  .monitoring-layout.sidebar-fullscreen .map-panel {
+    flex-basis: 0;
+    max-width: 0;
+    pointer-events: none;
+  }
+
+  .monitoring-layout.sidebar-fullscreen .sidebar-panel {
+    flex-basis: 100%;
+    max-width: 100%;
+    border-left-color: transparent;
+  }
+
+  .map-sidebar-toggle {
+    margin-top: 6px;
   }
 
   .sidebar-heading {
-    background-color: #CCC;
+    background: #f3f5f8;
+    border-bottom: 1px solid #d9dee6;
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
+    padding: 5px 10px 5px 16px;
+    min-height: 44px;
     flex: 0 0 auto;
+  }
+
+  .sidebar-heading h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+  }
+
+  .sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .station-history-toggle {
+    flex: 0 0 auto;
+    padding: 10px 16px 9px;
+    border-bottom: 1px solid #e5e9ef;
+    background: #fafbfc;
+  }
+
+  .station-history-hint {
+    display: block;
+    padding-left: 2px;
+    margin-top: 3px;
+    font-size: 12px;
+    color: red;
+  }
+
+  .sidebar-empty-state {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    color: #697586;
+  }
+
+  /* Keep the monitoring information readable on narrow screens. */
+  @media (max-width: 900px) {
+    .monitoring-layout.sidebar-split .map-panel {
+      flex-basis: 0;
+      max-width: 0;
+      overflow: hidden;
+    }
+
+    .monitoring-layout.sidebar-split .sidebar-panel {
+      flex-basis: 100%;
+      max-width: 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .map-panel,
+    .sidebar-panel {
+      transition-duration: 0.01ms;
+    }
   }
 
   .station-content {
@@ -1363,6 +1592,11 @@
     border-radius: 50%;
     margin-right: 5px;
     border: 2px solid white;
+  }
+  /* Center the loader within the full map area. */
+  .map-loading {
+      width: 100%;
+      height: 100%;
   }
 </style>
 

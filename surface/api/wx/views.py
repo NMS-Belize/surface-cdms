@@ -6292,9 +6292,7 @@ def query_stationsmonintoring_chart(station_id, variable_id, data_type, time_typ
                         datetime AT TIME ZONE %(timezone_name)s
                     )::date AS date,
 
-                    COUNT(
-                        DISTINCT date_trunc('hour', datetime)
-                    ) AS amount
+                    COUNT(*) AS amount
 
                 FROM hourly_summary
 
@@ -6644,14 +6642,16 @@ def get_station_lastupdate(station_id):
 
 
 
-def query_stationsmonitoring_station(data_type, time_type, date_picked, station_id):
+def query_stationsmonitoring_station(data_type, time_type, date_picked, station_id, retrieval_days):
+    days = int(retrieval_days) if retrieval_days else 1
+
     if time_type == 'Last 24h':
-        # True rolling 24-hour UTC window.
+        # Rolling window ending at the current UTC time.
         query_end = datetime.datetime.now(pytz.UTC)
-        query_start = query_end - datetime.timedelta(hours=24)
+        query_start = query_end - datetime.timedelta(days=days)
 
     else:
-        # Pick-a-day represents a calendar day in the SURFACE timezone.
+        # Pick-a-day uses calendar days in the SURFACE timezone.
         selected_date = datetime.datetime.strptime(
             date_picked,
             '%Y-%m-%d'
@@ -6659,9 +6659,12 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
 
         default_timezone = pytz.timezone(settings.TIMEZONE_NAME)
 
+        # Include the selected date as the final day of the period.
+        start_date = selected_date - datetime.timedelta(days=days - 1)
+
         local_start = default_timezone.localize(
             datetime.datetime.combine(
-                selected_date,
+                start_date,
                 datetime.time.min
             )
         )
@@ -6675,6 +6678,7 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
 
         query_start = local_start.astimezone(pytz.UTC)
         query_end = local_end.astimezone(pytz.UTC)
+
 
     station_data = []
 
@@ -6691,9 +6695,7 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
                     station_id,
                     variable_id,
 
-                    COUNT(
-                        DISTINCT date_trunc('hour', datetime)
-                    ) AS number_hours
+                    COUNT(*) AS number_hours
 
                 FROM hourly_summary
 
@@ -7149,6 +7151,7 @@ def get_stationsmonitoring_station_data(request, id):
     data_type = request.GET.get('data_type', 'Communication')
     time_type = request.GET.get('time_type', 'Last 24h')
     date_picked = request.GET.get('date_picked', None)
+    retrieval_days = request.GET.get('retrieval_days', None)
 
     station = Station.objects.get(id=id)
     station_offset = station.utc_offset_minutes
@@ -7157,7 +7160,7 @@ def get_stationsmonitoring_station_data(request, id):
         'lastupdate': tasks.convert_utc_to_offset(get_station_lastupdate(id), station_offset),
         'station_hr_offset_str': tasks.convert_offset_min_to_hrs(station_offset),
         'station_min_offset': station_offset,
-        'station_data': query_stationsmonitoring_station(data_type, time_type, date_picked, id),
+        'station_data': query_stationsmonitoring_station(data_type, time_type, date_picked, id, retrieval_days),
     }
 
     return JsonResponse(response, status=status.HTTP_200_OK)
@@ -7221,9 +7224,7 @@ def query_stationsmonitoring_map(data_type, time_type, date_picked):
                 SELECT
                     station_id,
                     variable_id,
-                    COUNT(
-                        DISTINCT date_trunc('hour', datetime)
-                    ) AS number_hours
+                    COUNT(*) AS number_hours
                 FROM hourly_summary
                 WHERE
                     datetime >= %s

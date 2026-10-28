@@ -593,6 +593,21 @@
       </v-btn>
     </div>
 
+    <!-- Station Monitoring navigation -->
+    <div
+        class="station-monitoring-btn"
+        :class="{ 'options-menu-opened': drawer === true }"
+    >
+        <v-btn
+            color="white"
+            light
+            href="{% url 'stations-monitoring' %}"
+            title="Station Monitoring"
+        >
+          <i class="material-icons">monitor</i>
+        </v-btn>
+    </div>
+
     <!-- alerts -->
     <v-alert
       v-model="alertVisible"
@@ -2207,6 +2222,15 @@
       max-width: 300px !important;
     }
   }
+  /* Station Monitoring navigation button */
+  .station-monitoring-btn {
+      position: absolute;
+      top: 120px;
+      right: 16px;
+      z-index: 995;
+      transition: 0.15s;
+  }
+
   .options-menu-opened {
     right: 272px !important;
     transition: 0.15s;
