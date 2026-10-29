@@ -58,6 +58,8 @@
 
             <l-map v-if="!loading_map && !map_error" ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom = "false">
               <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
+
+              <!-- search function -->
               <l-control position="bottomleft">
                   <v-text-field
                     v-model="input_search"
@@ -68,6 +70,7 @@
                   ></v-text-field>
               </l-control>    
 
+              <!-- info cards -->
               <l-control position="bottomright">
                 <template>
 
@@ -162,12 +165,24 @@
 
               </l-control>      
 
+              <!-- zoom control -->
               <l-control-zoom position="topleft"></l-control-zoom>
 
-              <!-- Map control to open or close the monitoring panel. -->
-              <l-control position="topleft">
+              <!-- Map control to go to the station map page. -->
+              <l-control position="topright">
                 <v-btn
-                  small
+                  color="white"
+                  class="map-sidebar-toggle"
+                  title="Go to Main Map"
+                  href="{% url 'stations-map' %}"
+                >
+                  <v-icon>mdi-map</v-icon>
+                </v-btn>
+              </l-control>
+
+              <!-- Map control to open or close the monitoring panel. -->
+              <l-control position="topright">
+                <v-btn
                   color="white"
                   class="map-sidebar-toggle"
                   :title="sidebarMode === 'hidden' ? 'Show monitoring panel' : 'Hide monitoring panel'"
@@ -178,8 +193,8 @@
                 </v-btn>
               </l-control>
 
-              <l-control position="topright">
-
+              <!-- main control box -->
+              <l-control position="topleft">
                 <div class="data-type-box">
 
                   <template>
@@ -286,7 +301,6 @@
                   </template>
 
                 </div>  
-
               </l-control>    
 
               <l-circle-marker
@@ -304,6 +318,8 @@
               </l-circle-marker>             
             </l-map>
         </v-flex>
+
+
         <!-- Monitoring panel: same content in split and fullscreen views. -->
         <!-- Keep this panel mounted too; v-show would abruptly remove it and skip CSS transitions. -->
         <div
@@ -335,8 +351,8 @@
           <!-- This option only refreshes the selected station, never the map. -->
           <div v-if="selected.station.id !== null" class="station-history-toggle">
             <v-switch
-              v-model="retrieveLast30Days"
-              label="Retrieve last 30 days of data"
+              v-model="retrieveLast31Days"
+              label="Retrieve last 31 days of data"
               inset
               color="primary"
               hide-details
@@ -840,7 +856,7 @@
         selectedTab: 0,
         // Start with the map at full width; opening a station switches to split view.
         sidebarMode: 'hidden', // 'hidden' | 'split' | 'fullscreen'
-        retrieveLast30Days: false, // Station-only option; backend hookup can use this value.
+        retrieveLast31Days: false, // Station-only option; backend hookup can use this value.
         reveal: false,
         dialog_chart: false,
         dialog_info: false,
@@ -867,6 +883,7 @@
         },
       };
     },
+
     mounted(){
         axios.defaults.xsrfHeaderName = "X-CSRFToken";
         axios.defaults.xsrfCookieName = "csrftoken";      
@@ -893,6 +910,7 @@
           color: this.flags[key],
         }));
       },
+      
       validationSummary() {
         const totals = { total: 0, validated: 0, unvalidated: 0, validated_percentage: null };
         if (this.data_type !== 'Validation' || !Array.isArray(this.selected.data)) return totals;
@@ -908,6 +926,7 @@
         }
         return totals;
       },
+      
       filteredStations() {
         return this.station_list.filter(station =>
           this.input_search === "" || station.name.toUpperCase().includes(this.input_search.toUpperCase())
@@ -984,23 +1003,28 @@
 
           window.open(url, '_blank');
       },
+      
       goToDataInventory(){
         const url = `/wx/data/inventory`;
         window.open(url, '_blank');
       },
+      
       goToEquipmentInventory(){
         const url = `/wx/maintenance_reports/equipment_inventory/`;
         window.open(url, '_blank');
       },
+      
       goToMaintenanceReports(){
         const url = `/wx/maintenance_report/`;
         window.open(url, '_blank');
       },          
+      
       changeTimeType(){
         // this.getGlobalData();
 
         this.changeRadio();
       },
+      
       updateLegendData(){
         if (this.data_type === 'Communication'){
           this.legend_data.information = 'Information of communication'
@@ -1045,6 +1069,8 @@
         } 
       },
 
+
+      
       headers(){
         if (this.isMaintenance(this.data_type)){
           return [
@@ -1087,15 +1113,19 @@
           }
         }
       },
+      
       formatPercentage(value) {
         return value === null || value === undefined
           ? 'No data'
           : Number(value).toFixed(2) + '%';
       },
+      
       formatDatetime(datetime){
         return datetime ? moment.utc(datetime).format('YYYY-MM-DD HH:mm:ss'): 'Not available'
       },
 
+
+      
       getPercentageColor(color){
         if (this.station_list.length == 0){
           return 0
@@ -1107,6 +1137,7 @@
 
         return p.toFixed(2)
       },
+      
       getGlobalData(){
         const requestId = ++this.map_request_id;
         this.loading_map = true;
@@ -1150,14 +1181,15 @@
           if (requestId === this.map_request_id) this.loading_map = false;
         });
       },
+      
       getStationData(station, days=1){
         const requestId = ++this.station_request_id;
         this.loading_station = true;
         this.station_error = null;
         this.selected.data = [];
 
-        if (this.retrieveLast30Days) {
-          days = 30;
+        if (this.retrieveLast31Days) {
+          days = 31;
         }
 
         return axios({
@@ -1187,6 +1219,7 @@
           if (requestId === this.station_request_id) this.loading_station = false;
         });
       },
+      
       getChartData(station, variable){
         const requestId = ++this.chart_request_id;
         this.loading_chart = true;
@@ -1214,9 +1247,11 @@
           if (requestId === this.chart_request_id) this.loading_chart = false;
         });
       },
+      
       isMaintenance(data_type){
         return ['Visits', 'Equipment'].includes(data_type)
       },
+      
       changeRadio(){
         // A chart from the previous period/mode must not appear in this one.
         this.dialog_chart = false;
@@ -1230,7 +1265,7 @@
           this.time_type = 'Last 24h';
         }
 
-        this.retrieveLast30Days = false; // making sure that we do not pull for 30 days when not needed
+        this.retrieveLast31Days = false; // making sure that we do not pull for 31 days when not needed
 
         this.updateLegendData();
 
@@ -1240,6 +1275,7 @@
           this.getStationData(this.selected.station);
         }
       },
+      
       refreshMapSize(){
         // Leaflet needs its dimensions recalculated after its container finishes resizing.
         if (this.sidebarMode === 'fullscreen') return;
@@ -1248,6 +1284,7 @@
           if (map) map.invalidateSize({ pan: false });
         });
       },
+      
       onSidebarTransitionEnd(event){
         // Ignore transitions from nested elements and other CSS properties.
         if (event.target !== event.currentTarget || event.propertyName !== 'flex-basis') return;
@@ -1262,15 +1299,19 @@
           this.refreshMapSize();
         });
       },
+      
       toggleSidebar(){
         this.sidebarMode = this.sidebarMode === 'hidden' ? 'split' : 'hidden';
       },
+      
       hideSidebar(){
         this.sidebarMode = 'hidden';
       },
+      
       toggleSidebarFullscreen(){
         this.sidebarMode = this.sidebarMode === 'fullscreen' ? 'split' : 'fullscreen';
       },
+      
       selectStation(station){
         // Open the panel immediately, while the station request loads.
         this.sidebarMode = 'split';
@@ -1280,7 +1321,7 @@
           offset_hr_string: null, offset_min: null,
         }, station);
         this.selected.color = station.color;
-        this.retrieveLast30Days = false; // making sure that we do not pull for 30 days when not needed
+        this.retrieveLast31Days = false; // making sure that we do not pull for 31 days when not needed
         this.getStationData(this.selected.station);
       },
     },
@@ -1593,11 +1634,29 @@
     margin-right: 5px;
     border: 2px solid white;
   }
+
   /* Center the loader within the full map area. */
   .map-loading {
       width: 100%;
       height: 100%;
   }
+
+  /* 1. Force the top-left container to align items horizontally */
+  .leaflet-top.leaflet-left {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 8px; /* Adds space between the zoom control and your l-control */
+  }
+
+  /* 2. Reset Leaflet's default vertical margins so elements align cleanly */
+  .leaflet-top.leaflet-left .leaflet-control {
+      margin-top: 10px;
+      margin-left: 10px;
+      margin-bottom: 0;
+      margin-right: 0;
+  }
+
 </style>
 
 {% endblock %}

@@ -230,6 +230,8 @@
         style="height: 100vh; width: 100%"
       >
         <l-tile-layer :url="Url" :attribution="Attribution"></l-tile-layer>
+
+        <!--  -->
         <div v-if="!showWindBarbs">
           <l-marker
             v-for="marker in filteredMarkers"
@@ -253,6 +255,8 @@
             <l-tooltip>[[ marker.tooltip ]]</l-tooltip>
           </l-marker>
         </div>
+
+        <!--  -->
         <div v-show="showWindBarbs">
           <l-marker
             v-for="marker in filteredMarkers"
@@ -287,39 +291,49 @@
             </l-popup>
 
           </l-marker>
-
         </div>
 
+        <!-- ground water -->
         <l-geo-json
           v-if="Groundwater"
           :options="geoOptionsGroundwater"
           :geojson="Groundwater_geojson"
           :options-style="styleFunctionGroundwater"
         ></l-geo-json>
+
+        <!-- watershed -->
         <l-geo-json
           v-if="showWatershed"
           :geojson="Watersheds_geojson"
           :options="geoOptionsWatershed"
           :options-style="styleFunctionWatershed"
         ></l-geo-json>
+
+        <!-- basemap -->
         <l-geo-json
           v-if="Basemap"
           :geojson="Basemap_geojson"
           :options="geoOptionsBasemap"
           :options-style="styleFunctionBasemap"
         ></l-geo-json>
+
+        <!-- rivers -->
         <l-geo-json
           v-if="River"
           :geojson="River_geojson"
           :options="geoOptionsRivers"
           :options-style="styleFunctionRiver"
         ></l-geo-json>
+
+        <!-- national waters -->
         <l-geo-json
           v-if="NationalWaters"
           :geojson="NationalWaters_geojson"
           :options="geoOptionsNationalWaters"
           :options-style="styleFunctionNationalWaters"
         ></l-geo-json>
+
+        <!-- zoom control -->
         <l-control-zoom :position="zoomPosition"></l-control-zoom>
       </l-map>
     </div>
@@ -2318,7 +2332,7 @@
   }
   .variables-box {
     position: absolute;
-    top: 16px;
+    top: 10px;
     left: 56px;
     display: flex;
     width: 100%;

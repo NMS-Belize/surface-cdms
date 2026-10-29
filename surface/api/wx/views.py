@@ -17,6 +17,9 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 from itertools import islice
 
+from functools import wraps
+from time import perf_counter
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -134,6 +137,26 @@ User = get_user_model()
 
 # CONSTANT to be used in datetime to milliseconds conversion
 EPOCH = datetime_constructor(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def time_monitoring_query(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = perf_counter()
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            duration = perf_counter() - start
+
+            logger.info(
+                "MONITORING | %s | %.3fs | args=%s",
+                func.__name__,
+                duration,
+                args
+            )
+
+    return wrapper
 
 # ######################################################################################
 def parse_export_selection(body, source):
@@ -6641,7 +6664,7 @@ def get_station_lastupdate(station_id):
 
 
 
-
+@time_monitoring_query
 def query_stationsmonitoring_station(data_type, time_type, date_picked, station_id, retrieval_days):
     days = int(retrieval_days) if retrieval_days else 1
 
@@ -7166,6 +7189,7 @@ def get_stationsmonitoring_station_data(request, id):
     return JsonResponse(response, status=status.HTTP_200_OK)
 
 
+@time_monitoring_query
 def query_stationsmonitoring_map(data_type, time_type, date_picked):
 
     selected_date = None
@@ -7331,11 +7355,14 @@ def query_stationsmonitoring_map(data_type, time_type, date_picked):
                     ON sv.station_id = rd.station_id
                     AND sv.variable_id = rd.variable_id
 
+                -- Final validation takes precedence over automatic QC.
+                -- Manual flags do not affect monitoring status.
                 LEFT JOIN wx_qualityflag AS qf
-                    ON COALESCE(
-                        rd.manual_flag,
-                        rd.quality_flag
-                    ) = qf.id
+                    ON qf.id = CASE
+                        WHEN rd.is_validated IS TRUE
+                            THEN rd.validated_flag
+                        ELSE rd.quality_flag
+                    END
 
                 WHERE
                     rd.datetime >= %s
