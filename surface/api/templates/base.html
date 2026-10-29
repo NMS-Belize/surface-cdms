@@ -76,8 +76,7 @@
 
     {% include 'material/includes/material_css.html' %}
 
-    <style>
-      
+    <style>      
       /* Floating UTC clock start */
       .wx-utc-widget {
         position: fixed;
@@ -1781,25 +1780,6 @@
         let startX = 0;
         let startLeft = 0;
 
-        const STORAGE_KEY = 'wxUtcWidgetPosition';
-
-        // Restore the user's previous horizontal position.
-        const savedPosition = localStorage.getItem(STORAGE_KEY);
-
-        if (savedPosition !== null) {
-          const savedLeft = Number(savedPosition);
-
-          const maxLeft = window.innerWidth - widget.offsetWidth - 20;
-
-          const safeLeft = Math.max(
-            20,
-            Math.min(savedLeft, maxLeft)
-          );
-
-          widget.style.left = `${safeLeft}px`;
-          widget.style.right = 'auto';
-        }
-
         trigger.addEventListener('pointerdown', function (e) {
           isDragging = true;
           hasMoved = false;
@@ -1812,27 +1792,24 @@
           trigger.setPointerCapture(e.pointerId);
         });
 
-
         trigger.addEventListener('pointermove', function (e) {
           if (!isDragging) return;
 
           const deltaX = e.clientX - startX;
 
-          // Prevent tiny mouse movements from being treated as a drag.
+          // Ignore very small mouse movements so normal clicks still work.
           if (Math.abs(deltaX) > 4) {
             hasMoved = true;
           }
 
           if (!hasMoved) return;
 
-          const widgetWidth = widget.offsetWidth;
-
           const minLeft = 20;
-          const maxLeft = window.innerWidth - widgetWidth - 20;
+          const maxLeft = window.innerWidth - widget.offsetWidth - 20;
 
           let newLeft = startLeft + deltaX;
 
-          // Keep the widget inside the viewport.
+          // Keep the widget within the screen.
           newLeft = Math.max(
             minLeft,
             Math.min(newLeft, maxLeft)
@@ -1842,27 +1819,17 @@
           widget.style.right = 'auto';
         });
 
-
         trigger.addEventListener('pointerup', function (e) {
           if (!isDragging) return;
 
           isDragging = false;
-
           trigger.releasePointerCapture(e.pointerId);
 
-          if (hasMoved) {
-            const left = widget.getBoundingClientRect().left;
-
-            // Remember the user's chosen position.
-            localStorage.setItem(STORAGE_KEY, left);
-
-            return;
+          // If there was no drag, treat it as a normal click.
+          if (!hasMoved) {
+            widget.classList.toggle('wx-utc-widget--open');
           }
-
-          // Normal click: open/close the clock.
-          widget.classList.toggle('wx-utc-widget--open');
         });
-
 
         document.addEventListener('click', function (e) {
           if (!widget.contains(e.target)) {
@@ -1870,8 +1837,7 @@
           }
         });
 
-
-        // Keep the widget visible if the browser is resized.
+        // Keep it inside the viewport if the browser is resized.
         window.addEventListener('resize', function () {
           const rect = widget.getBoundingClientRect();
 
@@ -1881,15 +1847,11 @@
           if (rect.left > maxLeft) {
             widget.style.left = `${maxLeft}px`;
             widget.style.right = 'auto';
-
-            localStorage.setItem(STORAGE_KEY, maxLeft);
           }
 
           if (rect.left < minLeft) {
             widget.style.left = `${minLeft}px`;
             widget.style.right = 'auto';
-
-            localStorage.setItem(STORAGE_KEY, minLeft);
           }
         });
       });
