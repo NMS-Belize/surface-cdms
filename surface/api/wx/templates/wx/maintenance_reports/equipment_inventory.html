@@ -1,440 +1,313 @@
-{% extends "base.html" %} {% block content %} {% load static %} {% load wx_filters %}
-<div class="srf-container">
+{% extends "base.html" %}
+{% load static %}
+{% load wx_filters %}
+{% block content %}
+<div class="srf-container ei-page">
   <div id="app" v-cloak>
-    <v-app>
+    <v-app class="ei-app">
+      <v-main class="ei-main">
+        <main class="ei-shell">
+          <!-- Match the clean SURFACE Data Inventory heading. -->
+          <header class="ei-heading">
+            <span class="srf-display-1 text-uppercase">Equipment Inventory</span>
+            <p class="grey--text text--darken-1">
+              Browse and manage equipment, deployment history, and calibration details.
+            </p>
+          </header>
 
-      <v-alert v-model="request_error" dismissible type="error">
-        [[ request_error_message ]]
-      </v-alert>
-
-      <v-overlay :value="loading">
-        <v-progress-circular
-          indeterminate
-          size="64"
-        ></v-progress-circular>
-      </v-overlay>
-
-      <v-dialog v-model="dialog_new" width="50%">
-        <v-card>
-          <v-card-title v-if="is_new_equipment" class="text-h5">
-            Creating a new equipment
-          </v-card-title>
-          <v-card-title v-if="!is_new_equipment" class="text-h5">
-            Updating equipment
-          </v-card-title>  
-
-          <v-layout column>
-            <v-layout ma-2>
-              <v-flex mr-2>
-                <v-autocomplete
-                  :items="equipment_types"
-                  item-text="name"
-                  item-value="id"
-                  v-model="equipment.equipment_type_id"
-                  label="Type of the equipment"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  autocomplete="off"
-                ></v-autocomplete>                
-              </v-flex>
-              <v-flex>
-                <v-autocomplete
-                  :items="manufacturers"
-                  item-text="name"
-                  item-value="id"
-                  v-model="equipment.manufacturer_id"
-                  label="Manufacturer"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  autocomplete="off"
-                ></v-autocomplete>    
-              </v-flex>
-            </v-layout>
-
-            <v-layout mx-2 mb-2>
-              <v-flex mr-2>
-                  <!-- models option -->
-                  <v-autocomplete
-                    :items="equipment_models"
-                    item-text="name"
-                    item-value="id"
-                    v-model="equipment.equipment_model_id"
-                    label="Model"
-                    required
-                    hint="*Required"
-                    persistent-hint
-                    autocomplete="off"
-                  ></v-autocomplete>     
-                </v-flex>
-              <v-flex>
-                <v-text-field
-                  label="Serial Number"
-                  v-model="equipment.serial_number"
-                  required
-                  hint="*Required"
-                  persistent-hint   
-                  single-line
-                  type="text"
-                ></v-text-field>
-              </v-flex>
-            </v-layout>
-
-            <!-- add the location option which is the either the station or "Office" -->
-            <v-layout ma-2>
-              <v-flex mr-2>
-                <v-autocomplete
-                  :items="stations"
-                  item-text="name"
-                  item-value="id"
-                  v-model="equipment.location_id"
-                  label="Location of the equipment"
-                  hint="*The default location is office"
-                  persistent-hint
-                  autocomplete="off"
-                  disabled
-                ></v-autocomplete>                
-              </v-flex>
-            </v-layout>
-
-            <v-layout ma-2 mb-2>
-              <v-flex mr-2>
-                <v-autocomplete
-                  :items="funding_sources"
-                  item-text="name"
-                  item-value="id"
-                  v-model="equipment.funding_source_id"
-                  label="Funding Source"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  autocomplete="off"
-                ></v-autocomplete>                
-              </v-flex>
-              <v-flex>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="equipment.acquisition_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="equipment.acquisition_date"
-                    label="Aquistion Date"
-                    v-on="on"
-                    required
-                    hint="*Required"
-                    persistent-hint
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="equipment.acquisition_date"
-                    @input="equipment.acquisition_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-            </v-layout>
-
-            <v-layout mx-2 mb-2>
-              <v-flex mr-2>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="equipment.first_deploy_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="equipment.first_deploy_date"
-                    label="Date of First Deployment"
-                    v-on="on"
-                    clearable
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="equipment.first_deploy_date"
-                    @input="equipment.first_deploy_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-              <v-flex>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="equipment.decommission_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="equipment.decommission_date"
-                    label="Date of Decomission"
-                    v-on="on"
-                    clearable
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="equipment.decommission_date"
-                    @input="equipment.decommission_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-            </v-layout>
-
-            <v-layout mx-2 mb-2>
-              <v-flex mr-2>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="equipment.last_calibration_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="equipment.last_calibration_date"
-                    label="Date of Last Calibration"
-                    v-on="on"
-                    clearable
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="equipment.last_calibration_date"
-                    @input="equipment.last_calibration_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-              <v-flex>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="equipment.next_calibration_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="equipment.next_calibration_date"
-                    label="Date of Next Calibration"
-                    v-on="on"
-                    clearable
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="equipment.next_calibration_date"
-                    @input="equipment.next_calibration_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-            </v-layout>
-
-            <v-layout mx-2 mb-2>
-              <v-flex mr-2>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="equipment.last_deploy_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="equipment.last_deploy_date"
-                    label="Date of Last Calibration"
-                    v-on="on"
-                    clearable
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="equipment.last_deploy_date"
-                    @input="equipment.last_deploy_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-              <v-flex>
-                <v-autocomplete
-                  :items="equipment_classifications"
-                  item-text="name"
-                  item-value="id"
-                  v-model="equipment.classification_id"
-                  label="Classification of the equipment"
-                  autocomplete="off"
-                  clearable
-                ></v-autocomplete>                           
-              </v-flex>
-            </v-layout>
-
-          </v-layout>            
-          </v-layout>
-
-          <v-card-actions>
-            <!-- cancel button -->
-            <v-btn width="50%" color="error" @click="dialog_new = false">
-              Cancel
-            </v-btn>
-
-            <!-- create equipment -->
-            <v-btn
-              v-if="is_new_equipment"
-              width="50%"
-              color="success"
-              @click="dialog_new = false; createEquipment()"
-              :disabled="$v.equipment.$invalid"
-            >
-              Create Equipment
-            </v-btn>
-
-            <!-- update equipment -->
-            <v-btn
-              v-if="!is_new_equipment"
-              width="50%"
-              color="success"
-              @click="dialog_new = false; updateEquipment()"
-              :disabled="$v.equipment.$invalid"
-            >
-              Update Equipment
-            </v-btn>            
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
-
-      <v-dialog v-model="dialog_del" width="50%">
-        <v-card>
-          <v-card-title class="text-h5">
-            Do you want to delete this equipment?
-          </v-card-title>
-          <v-layout mx-6 mb-2 class="srf-display-2" column>
-            <v-layout>
-              Equipment Type: [[equipment.equipment_type]]
-            </v-layout>
-            <v-layout>
-              Manufacturer: [[equipment.manufacturer]]
-            </v-layout>                
-            <v-layout>
-              Model: [[equipment.equipment_model]]
-            </v-layout>
-            <v-layout>
-              Serial Number: [[equipment.serial_number]]
-            </v-layout>
-          </v-layout>
-          <v-card-actions>
-            <v-btn
-              width="50%"
-              color="error"
-              @click="dialog_del = false; deleteEquipment(equipment.equipment_id)"
-            >
-              Delete Equipment
-            </v-btn>
-            <v-btn width="50%" color="success" @click="dialog_del = false">
-              Cancel
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
-
-      <v-main fluid fill-height style="background: white">
-        <v-layout column>
-          <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-            <span class="srf-display-1 text-uppercase">Equipment Inventory</span
-            ><br/>
-          </div>
-        </v-layout>
-
-        <v-layout>
-          <v-flex lg3 mr-5>
+          <section class="ei-toolbar" aria-label="Equipment inventory tools">
             <v-text-field
               v-model="search"
-              label="General Search"
-              append-icon="search">
-            </v-text-field>
-          </v-flex>
+              label="Search equipment"
+              placeholder="Type, manufacturer, model, serial number..."
+              prepend-inner-icon="mdi-magnify"
+              outlined dense clearable hide-details
+              class="ei-search"
+            ></v-text-field>
 
-          {% if request|has_any_feature_permission:"equipment-inventory:write" %}
-          <v-flex lg1 mt-5>
-            <v-btn label color="primary" @click="getEquipmentData(); is_new_equipment=true; dialog_new = true">
-              New Equipment
-            </v-btn>       
-          </v-flex>
-          {% endif %}
-        </v-layout>
+            {% if request|has_any_feature_permission:"equipment-inventory:write" %}
+            <v-btn color="primary" depressed height="40" class="ei-new-button"
+              @click="getEquipmentData(); is_new_equipment = true; dialog_new = true">
+              <v-icon left small>mdi-plus</v-icon> New Equipment
+            </v-btn>
+            {% endif %}
+          </section>
 
-        <v-layout>
-          <v-flex lg12 mr-5>
-            <v-data-table
-              :headers="headers"
-              :items="equipments"
-              class="elevation-4"
-              :search="search"
-              :loading="loading"
-            >
+          <v-alert v-model="request_error" type="error" dismissible dense class="ei-alert">
+            [[ request_error_message ]]
+          </v-alert>
 
-              <template #no-data>
-                <div class="pa-4 text-center">
-                  No equipment found
-                </div>
-              </template>
+          <section class="ei-results" aria-label="Equipment records">
+            <div class="ei-results-heading">
+              <div>
+                <h2>Equipment records</h2>
+                <p>Search the inventory or select a record to view its editing actions.</p>
+              </div>
+              <span class="ei-record-count"><strong>[[ equipments.length ]]</strong> items</span>
+            </div>
+            <div class="ei-table-frame">
+              <v-data-table
+                :headers="headers"
+                :items="equipments"
+                :search="search"
+                :loading="loading"
+                :items-per-page="10"
+                class="ei-table"
+                :footer-props="{ 'items-per-page-options': [10, 25, 50, -1] }"
+              >
+                <template v-slot:no-data>
+                  <div class="ei-empty">
+                    <v-icon size="36" color="blue-grey lighten-2">mdi-database-off-outline</v-icon>
+                    <h3>No equipment found</h3>
+                    <p>New equipment records will appear here.</p>
+                  </div>
+                </template>
+                <template v-slot:no-results>
+                  <div class="ei-empty">
+                    <v-icon size="34" color="blue-grey lighten-2">mdi-magnify</v-icon>
+                    <h3>No matching equipment</h3>
+                    <p>Try a different search term.</p>
+                  </div>
+                </template>
 
-              <template v-slot:item.actions="{ item }">
-                {% if request|has_any_feature_permission:"equipment-inventory:write" %}
-                <!-- edit btn -->
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on }">
-                    <v-btn 
-                      icon 
-                      v-on="on" 
-                      @click="dialog_new=true; is_new_equipment=false; equipment=item"
-                    >
-                      <v-icon small>edit</v-icon>
-                    </v-btn>
+                <!-- Preserve the original edit and delete permissions/actions. -->
+                <template v-slot:item.actions="{ item }">
+                  <div class="ei-row-actions">
+                    {% if request|has_any_feature_permission:"equipment-inventory:write" %}
+                    <v-tooltip bottom>
+                      <template v-slot:activator="{ on }">
+                        <v-btn icon small v-on="on" color="primary"
+                          aria-label="Edit equipment"
+                          @click="openEquipmentEdit(item)">
+                          <v-icon small>mdi-pencil-outline</v-icon>
+                        </v-btn>
+                      </template>
+                      <span>Edit equipment</span>
+                    </v-tooltip>
+                    {% endif %}
 
-                  </template>
-                  <span>Update Equipment</span>
-                </v-tooltip>
-                {% endif %}
-
-                {% if request|has_any_feature_permission:"equipment-inventory:delete" %}
-                <v-tooltip bottom>
-                  <!-- delete btn -->
-                  <template v-slot:activator="{ on }">
-                    <v-btn 
-                      icon
-                      v-on="on"
-                      @click="dialog_del=true; equipment=item"
-                      > 
-                      <v-icon color="error" small>
-                        delete
-                      </v-icon>
-                    </v-btn>
-
-                  </template>
-                  <span>Delete Equipment</span>
-                </v-tooltip>
-                {% endif %}
-              </template> 
-              
-            </v-data-table>
-          </v-flex>            
-        </v-layout>
+                    {% if request|has_any_feature_permission:"equipment-inventory:delete" %}
+                    <v-tooltip bottom>
+                      <template v-slot:activator="{ on }">
+                        <v-btn icon small v-on="on" color="error"
+                          aria-label="Delete equipment"
+                          @click="dialog_del = true; equipment = item">
+                          <v-icon small>mdi-delete-outline</v-icon>
+                        </v-btn>
+                      </template>
+                      <span>Delete equipment</span>
+                    </v-tooltip>
+                    {% endif %}
+                  </div>
+                </template>
+              </v-data-table>
+            </div>
+          </section>
+        </main>
       </v-main>
-    </v-app>
 
-    <!-- snack bar status -->
-    <v-snackbar v-model="snackbar.show" :timeout="3000" :color="snackbar.color">
+      <!-- Create / edit: same equipment fields and Vue bindings as the original. -->
+      <v-dialog v-model="dialog_new" max-width="880px" scrollable>
+        <v-card class="ei-form-dialog">
+          <v-card-title class="ei-dialog-heading">
+            <div>
+              <h2>[[ is_new_equipment ? 'Add equipment' : 'Edit equipment' ]]</h2>
+              <p>[[ is_new_equipment ? 'Register equipment in the inventory.' : 'Update the selected equipment record.' ]]</p>
+            </div>
+            <v-spacer></v-spacer>
+            <v-btn icon aria-label="Close equipment form" @click="dialog_new = false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-divider></v-divider>
+
+          <v-card-text class="ei-form-body">
+            <section class="ei-form-section">
+              <div class="ei-section-title">
+                <v-icon color="primary" size="18">mdi-cube-outline</v-icon>
+                <div><h3>Equipment details</h3><p>Identify the equipment and its manufacturer.</p></div>
+              </div>
+              <div class="ei-form-grid">
+                <v-autocomplete :items="equipment_types" item-text="name" item-value="id"
+                  v-model="equipment.equipment_type_id" label="Equipment type *"
+                  autocomplete="off" outlined dense hide-details="auto"></v-autocomplete>
+                <v-autocomplete :items="manufacturers" item-text="name" item-value="id"
+                  v-model="equipment.manufacturer_id" label="Manufacturer *"
+                  autocomplete="off" outlined dense hide-details="auto"></v-autocomplete>
+                <v-autocomplete :items="equipment_models" item-text="name" item-value="id"
+                  v-model="equipment.equipment_model_id" label="Model *"
+                  autocomplete="off" outlined dense hide-details="auto"></v-autocomplete>
+                <v-text-field v-model="equipment.serial_number" label="Serial number *"
+                  outlined dense hide-details="auto"></v-text-field>
+              </div>
+            </section>
+
+            <section class="ei-form-section">
+              <div class="ei-section-title">
+                <v-icon color="primary" size="18">mdi-clipboard-text-outline</v-icon>
+                <div><h3>Inventory and acquisition</h3><p>Funding, acquisition, location, and classification.</p></div>
+              </div>
+              <div class="ei-form-grid">
+                <v-autocomplete :items="funding_sources" item-text="name" item-value="id"
+                  v-model="equipment.funding_source_id" label="Funding source *"
+                  autocomplete="off" outlined dense hide-details="auto"></v-autocomplete>
+                  <v-menu v-model="equipment.acquisition_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="equipment.acquisition_date" label="Acquisition date *"
+                          prepend-inner-icon="mdi-calendar-outline" outlined dense
+                          hide-details="auto" required v-on="on"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="equipment.acquisition_date"
+                        @input="equipment.acquisition_date_menu = false"></v-date-picker>
+                  </v-menu>
+                <!-- Location was read-only in the original page; preserve that rule. -->
+                <v-text-field :value="equipment.location || 'Office'" label="Location"
+                  prepend-inner-icon="mdi-map-marker-outline" readonly outlined dense
+                  hint="Location is managed outside this form." persistent-hint></v-text-field>
+                <v-autocomplete :items="equipment_classifications" item-text="name" item-value="id"
+                  v-model="equipment.classification_id" label="Classification"
+                  autocomplete="off" clearable outlined dense hide-details="auto"></v-autocomplete>
+              </div>
+            </section>
+
+            <section class="ei-form-section">
+              <div class="ei-section-title">
+                <v-icon color="primary" size="18">mdi-calendar-check-outline</v-icon>
+                <div><h3>Deployment history</h3><p>Optional dates for deployment and decommissioning.</p></div>
+              </div>
+              <div class="ei-form-grid">
+                  <v-menu v-model="equipment.first_deploy_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="equipment.first_deploy_date" label="First deployment"
+                          prepend-inner-icon="mdi-calendar-outline" outlined dense
+                          hide-details="auto" clearable v-on="on"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="equipment.first_deploy_date"
+                        @input="equipment.first_deploy_date_menu = false"></v-date-picker>
+                  </v-menu>
+                  <v-menu v-model="equipment.last_deploy_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="equipment.last_deploy_date" label="Last deployment"
+                          prepend-inner-icon="mdi-calendar-outline" outlined dense
+                          hide-details="auto" clearable v-on="on"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="equipment.last_deploy_date"
+                        @input="equipment.last_deploy_date_menu = false"></v-date-picker>
+                  </v-menu>
+                  <v-menu v-model="equipment.decommission_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="equipment.decommission_date" label="Decommission date"
+                          prepend-inner-icon="mdi-calendar-outline" outlined dense
+                          hide-details="auto" clearable v-on="on"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="equipment.decommission_date"
+                        @input="equipment.decommission_date_menu = false"></v-date-picker>
+                  </v-menu>
+              </div>
+            </section>
+
+            <section class="ei-form-section ei-form-section-last">
+              <div class="ei-section-title">
+                <v-icon color="primary" size="18">mdi-wrench-clock-outline</v-icon>
+                <div><h3>Calibration</h3><p>Maintain the equipment's calibration schedule.</p></div>
+              </div>
+              <div class="ei-form-grid">
+                  <v-menu v-model="equipment.last_calibration_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="equipment.last_calibration_date" label="Last calibration"
+                          prepend-inner-icon="mdi-calendar-outline" outlined dense
+                          hide-details="auto" clearable v-on="on"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="equipment.last_calibration_date"
+                        @input="equipment.last_calibration_date_menu = false"></v-date-picker>
+                  </v-menu>
+                  <v-menu v-model="equipment.next_calibration_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="equipment.next_calibration_date" label="Next calibration"
+                          prepend-inner-icon="mdi-calendar-outline" outlined dense
+                          hide-details="auto" clearable v-on="on"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="equipment.next_calibration_date"
+                        @input="equipment.next_calibration_date_menu = false"></v-date-picker>
+                  </v-menu>
+              </div>
+            </section>
+            <p class="ei-required-note">* Required fields</p>
+          </v-card-text>
+
+          <v-divider></v-divider>
+          <v-card-actions class="ei-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn color="error" class="text-none" @click="dialog_new = false">
+              Cancel
+            </v-btn>
+            <v-btn v-if="is_new_equipment" color="success" depressed class="text-none"
+              :disabled="$v.equipment.$invalid"
+              @click="dialog_new = false; createEquipment()">
+              Create Equipment
+            </v-btn>
+            <v-btn v-else color="success" depressed class="text-none"
+              :disabled="$v.equipment.$invalid"
+              @click="dialog_new = false; updateEquipment()">
+              Save Changes
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Destructive action keeps the original confirmation workflow. -->
+      <v-dialog v-model="dialog_del" max-width="470px">
+        <v-card>
+          <v-card-title class="ei-dialog-heading ei-delete-title">
+            <div>
+              <h2>Delete equipment?</h2>
+              <p>This action cannot be undone.</p>
+            </div>
+            <v-spacer></v-spacer>
+            <v-btn icon aria-label="Close delete dialog" @click="dialog_del = false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-divider></v-divider>
+          <v-card-text class="ei-delete-details">
+            <div><span>Equipment type</span><strong>[[ equipment.equipment_type || '—' ]]</strong></div>
+            <div><span>Manufacturer</span><strong>[[ equipment.manufacturer || '—' ]]</strong></div>
+            <div><span>Model</span><strong>[[ equipment.equipment_model || '—' ]]</strong></div>
+            <div><span>Serial number</span><strong>[[ equipment.serial_number || '—' ]]</strong></div>
+          </v-card-text>
+          <v-divider></v-divider>
+          <v-card-actions class="ei-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn color="success" class="text-none" @click="dialog_del = false">Cancel</v-btn>
+            <v-btn depressed color="error" class="text-none"
+              @click="dialog_del = false; deleteEquipment(equipment.equipment_id)">
+              Delete Equipment
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-overlay :value="loading" z-index="300">
+        <div class="ei-loading">
+          <v-progress-circular indeterminate size="46" width="4" color="white"></v-progress-circular>
+          <span>Loading equipment inventory...</span>
+        </div>
+      </v-overlay>
+
+      <v-snackbar v-model="snackbar.show" :timeout="3000" :color="snackbar.color">
         [[ snackbar.message ]]
-    </v-snackbar>
+      </v-snackbar>
+    </v-app>
   </div>
 </div>
-{% endblock %} {% block localjavascript %}
+{% endblock %}
+{% block localjavascript %}
   <script>
     Vue.use(window.vuelidate.default);
     const { required, minLength } = window.validators;
@@ -454,7 +327,6 @@
       },      
       data:{
         search: '',
-        tester_tester: [],
         snackbar: { show: false, message: '', color: '' },
         loading: true,
         request_error_message: null,
@@ -550,6 +422,21 @@
         }
       },
       methods: {
+        // Edit a copy so cancelling doesn't change the visible table row.
+        // Date-menu fields must exist up front for Vue 2 reactivity.
+        openEquipmentEdit(item) {
+          this.equipment = Object.assign({}, item, {
+            acquisition_date_menu: false,
+            first_deploy_date_menu: false,
+            last_deploy_date_menu: false,
+            last_calibration_date_menu: false,
+            next_calibration_date_menu: false,
+            decommission_date_menu: false,
+          });
+          this.is_new_equipment = false;
+          this.dialog_new = true;
+        },
+
         getEquipmentData(){
           axios({
             method: 'get',
@@ -669,5 +556,73 @@
       },
     });
   </script>
+<style>
+  [v-cloak] { display: none !important; }
 
+  /* Consistent with the existing SURFACE Data Inventory baseline. */
+  .ei-page, .ei-app, .ei-main { width: 100%; background: #fff !important; }
+  .ei-shell { padding: 10px 18px 42px; color: #303030; }
+  .ei-heading { margin: 0 0 23px; }
+  .ei-heading .srf-display-1 { display: block; }
+  .ei-heading p { margin: 12px 0 0; font-size: 14px; }
+
+  /* Simple search toolbar; primary action stays on the right. */
+  .ei-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 25px; }
+  .ei-search { max-width: 440px; min-width: 255px; flex: 1 1 320px; }
+  .ei-search .v-input__control { margin-top: 0; }
+  .ei-new-button { margin-left: auto; text-transform: none !important; letter-spacing: 0 !important; }
+  .ei-alert { margin: 12px 0; }
+
+  .ei-results-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 15px; flex-wrap: wrap; margin-bottom: 14px; }
+  .ei-results-heading h2 { font-size: 18px; font-weight: 500; color: #333; margin: 0 0 4px; }
+  .ei-results-heading p { font-size: 12px; color: #777; margin: 0; }
+  .ei-record-count { color: #666; font-size: 12px; }
+  .ei-record-count strong { color: #333; font-size: 15px; }
+
+  /* Table styling only: preserve v-data-table columns and action behavior. */
+  .ei-table-frame { border: 1px solid #e5e5e5; border-radius: 4px; overflow: hidden; }
+  .ei-table { box-shadow: none !important; }
+  .ei-table .v-data-table__wrapper { overflow-x: auto; }
+  .ei-table .v-data-table__wrapper table { min-width: 1160px; }
+  .ei-table .v-data-table__wrapper thead th { background: #f5f5f5; color: #555; font-size: 12px; font-weight: 600; white-space: nowrap; height: 44px; }
+  .ei-table .v-data-table__wrapper tbody td { font-size: 13px; color: #444; border-color: #eee; }
+  .ei-table .v-data-table__wrapper tbody tr:hover { background: #fafafa; }
+  .ei-table .v-data-table__wrapper thead th:first-child,
+  .ei-table .v-data-table__wrapper tbody td:first-child { text-align: left !important; }
+  .ei-table .v-data-table__wrapper tbody td:first-child { font-weight: 500; }
+  .ei-row-actions { display: flex; align-items: center; justify-content: center; gap: 2px; white-space: nowrap; }
+  .ei-empty { text-align: center; padding: 28px 15px; color: #777; }
+  .ei-empty h3 { margin: 9px 0 4px; font-size: 15px; color: #555; font-weight: 500; }
+  .ei-empty p { font-size: 12px; margin: 0; }
+
+  /* Grouped equipment form, without adding extra complexity to the data model. */
+  .ei-dialog-heading { padding: 20px 24px 17px !important; }
+  .ei-dialog-heading h2 { font-size: 19px; font-weight: 500; line-height: 1.4; color: #333; margin: 0; }
+  .ei-dialog-heading p { font-size: 12px; color: #777; margin: 4px 0 0; font-weight: 400; }
+  .ei-form-body { padding: 6px 24px 9px !important; }
+  .ei-form-section { padding: 20px 0; border-bottom: 1px solid #eceff1; }
+  .ei-form-section-last { border-bottom: none; }
+  .ei-section-title { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+  .ei-section-title h3 { font-size: 14px; font-weight: 600; color: #333; margin: 0; }
+  .ei-section-title p { font-size: 12px; color: #888; margin: 2px 0 0; }
+  .ei-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; row-gap: 16px; }
+  .ei-form-grid > * { min-width: 0; }
+  .ei-required-note { color: #888; font-size: 11px; margin: 0 0 12px; }
+  .ei-dialog-actions { padding: 13px 20px !important; gap: 6px; }
+  .ei-delete-details { padding: 18px 24px !important; }
+  .ei-delete-details > div { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid #f0f0f0; padding: 9px 0; font-size: 13px; }
+  .ei-delete-details > div:last-child { border-bottom: none; }
+  .ei-delete-details span { color: #777; }
+  .ei-delete-details strong { font-weight: 500; color: #333; text-align: right; overflow-wrap: anywhere; }
+  .ei-loading { display: flex; flex-direction: column; align-items: center; gap: 13px; color: #fff; }
+
+  @media (max-width: 650px) {
+    .ei-shell { padding: 10px 10px 30px; }
+    .ei-search { max-width: none; flex: 1 1 100%; }
+    .ei-new-button { margin-left: auto; }
+    .ei-form-body { padding-left: 16px !important; padding-right: 16px !important; }
+    .ei-form-grid { grid-template-columns: minmax(0, 1fr); }
+    .ei-dialog-heading { padding-left: 16px !important; padding-right: 16px !important; }
+  }
+</style>
 {% endblock %}

@@ -1,192 +1,201 @@
 {% extends "base.html" %} {% block content %} {% load static %} {% load material_form %} {% load wx_filters%}
 
-<div class="srf-container">
-    <!-- Heading -->
-    <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-        <span class="srf-display-1 text-uppercase">Data Capture</span><br /><br />
-        <span class="srf-display-2 text-uppercase">Monthly Capture</span>
-    </div>
+<div class="srf-container mc-page">
+    <div id="app" v-cloak>
+        <v-app class="mc-app">
+            <main class="mc-shell">
 
-    <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
-        <v-app>
-            <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
-            <div style="width: 50%;" class="mb-5">
-                <v-alert
-                    type="info"
-                    dense
-                    outlined
-                    text
-                    color="purple"
-                >
-                    Note: All dates and times shown are in the selected <b>station's local time.</b>
-                </v-alert>
-            </div>
+                <!-- Page heading, consistent with SURFACE Data Inventory. -->
+                <header class="mc-heading">
+                    <div class="mc-eyebrow">Data Capture</div>
+                    <span class="srf-display-1 text-uppercase">Monthly Capture</span>
+                    <p>View, enter, and maintain daily observations from manual weather stations.</p>
+                </header>
 
-            <!-- station and date picker -->
-            <form enctype="multipart/form-data" method="POST" class="mb-10">
-                {% csrf_token %}
-                <div class="fieldWrapper">
-                    <v-row>
-                        <!-- station selector -->
-                        <v-flex sm1 md3  lg3 class="d-flex justify-between mr-5">
-                            <v-autocomplete
-                                label="Manual Station"
-                                :items="stationList"
-                                item-value="id"
-                                item-text="name"
-                                v-model="requestData.stationId"
-                                :disabled="draft"
-                                required
-                                hint="*Required"
-                                persistent-hint
-                            >
-                            </v-autocomplete> 
-                        </v-flex>    
+                <!-- Station and reporting month selection. -->
+                <section class="mc-query-panel" aria-label="Monthly capture search options">
+                    <div class="mc-query-heading">
+                        <h2>Load monthly observations</h2>
+                        <p>Select a manual station and reporting month to open its capture sheet.</p>
+                    </div>
 
-                        <!-- date picker -->
-                        <v-flex sm1 md3 lg3 class="d-flex justify-between">                
-                            <v-menu
-                                :close-on-content-click="false"
-                                :disabled="draft"
-                                v-model="datepicker_menu"
-                                :nudge-right="40"
-                                transition="scale-transition"
-                                offset-y
-                                class="max-50"
-                            >
-                                <template v-slot:activator="{ on }">
-                                    <v-text-field
-                                        :disabled="draft"
-                                        v-model="requestData.date"
-                                        label="Date"
-                                        prepend-icon="event"
-                                        v-on="on"
-                                        required
-                                        hint="*Required"
-                                        persistent-hint
-                                        :rules="textFieldsRules"
-                                    >
-                                    </v-text-field>
-                                </template>
+                    <form enctype="multipart/form-data" method="POST">
+                        {% csrf_token %}
+                        <div class="mc-query-fields">
+                            <div class="mc-station-field">
+                                <v-autocomplete
+                                    label="Manual station"
+                                    dense
+                                    outlined
+                                    :items="stationList"
+                                    item-value="id"
+                                    item-text="name"
+                                    v-model="requestData.stationId"
+                                    :disabled="draft"
+                                    required
+                                    hint="*Required"
+                                    persistent-hint
+                                ></v-autocomplete>
+                            </div>
 
-                                <v-date-picker
-                                    name="date"
-                                    v-model="requestData.date"
-                                    @input="datepicker_menu = false"
-                                    :allowed-dates="allowedDates"
-                                    type="month"
+                            <div class="mc-month-field">
+                                <v-menu
+                                    :close-on-content-click="false"
+                                    :disabled="draft"
+                                    v-model="datepicker_menu"
+                                    :nudge-right="40"
+                                    transition="scale-transition"
+                                    offset-y
                                 >
-                                </v-date-picker>
-                            </v-menu>
-                        </v-flex>
-                    </v-row>
+                                    <template v-slot:activator="{ on }">
+                                        <v-text-field
+                                            dense
+                                            outlined
+                                            :disabled="draft"
+                                            v-model="requestData.date"
+                                            label="Reporting month"
+                                            prepend-inner-icon="mdi-calendar-month-outline"
+                                            v-on="on"
+                                            required
+                                            hint="*Required"
+                                            persistent-hint
+                                            :rules="textFieldsRules"
+                                        ></v-text-field>
+                                    </template>
+                                    <v-date-picker
+                                        name="date"
+                                        v-model="requestData.date"
+                                        @input="datepicker_menu = false"
+                                        :allowed-dates="allowedDates"
+                                        type="month"
+                                    ></v-date-picker>
+                                </v-menu>
+                            </div>
 
-                    <v-row class="mt-5">
-                        <v-btn class="ml-2" :disabled="draft" outlined @click="fetchData()" class="btn-outline-default" color="blue"> Load </v-btn>
-                        <v-btn class="ml-2" :disabled="!draft" outlined @click="fetchData()" class="btn-outline-default" color="red"> Cancel </v-btn>
-                    </v-row>
+                            <div class="mc-load-actions">
+                                <v-btn
+                                    color="primary"
+                                    depressed
+                                    height="40"
+                                    class="mc-action-btn"
+                                    :disabled="draft"
+                                    :loading="loading"
+                                    @click="fetchData()"
+                                >
+                                    <v-icon left small>mdi-table-arrow-down</v-icon>
+                                    Load observations
+                                </v-btn>
+                                <v-btn
+                                    v-if="draft"
+                                    outlined
+                                    color="error"
+                                    height="40"
+                                    class="mc-action-btn"
+                                    :disabled="loading"
+                                    @click="fetchData()"
+                                >
+                                    <v-icon left small>mdi-close</v-icon>
+                                    Discard changes
+                                </v-btn>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Information and draft-state guidance. -->
+                <div class="mc-caption">
+                    <v-icon color="primary" size="16">mdi-information-outline</v-icon>
+                    <span>All dates and observations are displayed in the selected station's local time.</span>
                 </div>
-            </form>
+                <div v-if="draft" class="mc-draft-note">
+                    <v-icon color="warning" size="17">mdi-alert-circle-outline</v-icon>
+                    <span>There are unsaved changes. Save your updates or discard them before changing the station or month.</span>
+                </div>
 
-            <!-- The buttons -->
-            <div class="mt-5">
-                <!-- save button -->
-                {% if request|has_any_feature_permission:"monthly-form:write" %}
-                <v-btn 
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    :disabled="!(draft && valid)" 
-                    outlined @click="updateData()" 
-                    class="btn-outline-default" 
-                    color="green"
-                    style="margin-bottom: 10px;"
-                > 
-                    Save 
-                    <v-icon right dark>save</v-icon>
-                </v-btn>
-                {% endif %}
+                <!-- Actions remain connected to the existing AG Grid methods. -->
+                <div v-show="!hideTable" class="mc-table-toolbar">
+                    <div class="mc-toolbar-primary">
+                        {% if request|has_any_feature_permission:"monthly-form:write" %}
+                        <v-btn
+                            color="success"
+                            depressed
+                            class="mc-action-btn"
+                            :disabled="!(draft && valid) || loading"
+                            @click="updateData()"
+                        >
+                            <v-icon left small>mdi-content-save-outline</v-icon>
+                            Save changes
+                        </v-btn>
+                        {% endif %}
 
-                <!-- delete rows btn -->
-                {% if request|has_any_feature_permission:"monthly-form:delete" %}
-                <v-btn
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    :disabled="!hasSelection || loading"
-                    outlined 
-                    @click="deleteSelectedRows" 
-                    class="btn-outline-default"
-                    color="red"
-                    style="margin-bottom: 10px;"
-                >
-                    Delete Selected
-                    <v-icon right dark>mdi-delete</v-icon>
-                </v-btn>
-                {% endif %}
-
-                <!-- theme switch button -->
-                <v-btn
-                    v-show="!hideTable"
-                    class="ml-2"
-                    outlined
-                    @click="toggleTheme"
-                    color="purple"
-                    style="margin-bottom: 10px;"
-                >
-                    Table Style
-                    <v-icon right dark>sync</v-icon>
-                </v-btn>
-
-                <!-- export csv button -->
-                {% if request|has_any_feature_permission:"monthly-form:write" %}
-                <v-btn 
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    outlined 
-                    @click="exportToCSV()"
-                    class="btn-outline-default" 
-                    color="black"
-                    style="margin-bottom: 10px;"
-                > 
-                    Export CSV
-
-                    <v-icon
-                        right
-                        dark
-                    >
-                        mdi-download
-                    </v-icon>
-                </v-btn>
-                {% endif %}
-
-            </div>
-
-            <!-- deletion confirmation dialog -->
-            <v-dialog
-                v-model="confirmDeleteDialog"
-                max-width="400"
-            >
-                <v-card>
-                    <v-card-title class="headline"> Confirm Deletion </v-card-title>
-                    
-                    <v-card-text>
-                        Are you sure you want to delete data?
-                        <!-- <strong>[[ pendingDeleteDays.join(', ') ]]</strong>? -->
-                    </v-card-text>
-
-                    <v-card-actions>
-                        <v-spacer></v-spacer>
-
-                        <v-btn text color="grey" @click="confirmDeleteDialog = false">
-                            Cancel
+                        {% if request|has_any_feature_permission:"monthly-form:delete" %}
+                        <v-btn
+                            outlined
+                            color="error"
+                            class="mc-action-btn"
+                            :disabled="!hasSelection || loading"
+                            @click="deleteSelectedRows"
+                        >
+                            <v-icon left small>mdi-delete-outline</v-icon>
+                            Delete selected
+                            <span v-if="selectedCount" class="ml-1">([[ selectedCount ]])</span>
+                        </v-btn>
+                        {% endif %}
+                    </div>
+                    <div class="mc-toolbar-secondary">
+                        <v-btn
+                            outlined
+                            color="purple"
+                            class="mc-action-btn"
+                            @click="toggleTheme"
+                        >
+                            <v-icon left small>mdi-palette-outline</v-icon>
+                            Table style
                         </v-btn>
 
-                        <v-btn text color="red" @click="confirmDelete">
-                            Delete
+                        {% if request|has_any_feature_permission:"monthly-form:write" %}
+                        <v-btn
+                            outlined
+                            color="primary"
+                            class="mc-action-btn"
+                            @click="exportToCSV()"
+                        >
+                            <v-icon left small>mdi-download</v-icon>
+                            Export CSV
                         </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
+                        {% endif %}
+                    </div>
+                </div>
 
+                <!-- Keep the existing deletion workflow; improve the dialog's clarity only. -->
+                <v-dialog v-model="confirmDeleteDialog" max-width="440">
+                    <v-card>
+                        <v-card-title class="mc-dialog-title">
+                            <v-icon left color="error">mdi-delete-alert-outline</v-icon>
+                            Delete selected observations?
+                        </v-card-title>
+                        <v-divider></v-divider>
+                        <v-card-text class="pt-5">
+                            You are about to delete the monthly capture data for
+                            <strong>[[ pendingDeleteDays.length ]] selected day(s)</strong>.
+                            This action cannot be undone.
+                        </v-card-text>
+                        <v-card-actions class="px-5 pb-4">
+                            <v-spacer></v-spacer>
+                            <v-btn text color="grey darken-2" class="mc-action-btn"
+                                   @click="confirmDeleteDialog = false">Cancel</v-btn>
+                            <v-btn depressed color="error" class="mc-action-btn"
+                                   @click="confirmDelete">Delete observations</v-btn>
+                        </v-card-actions>
+                    </v-card>
+                </v-dialog>
+
+                <!-- Before loading, explain what belongs in this workspace. -->
+                <div v-if="hideTable" class="mc-empty-state">
+                    <v-icon size="36" color="blue-grey lighten-2">mdi-table-large</v-icon>
+                    <h3>No monthly capture sheet loaded</h3>
+                    <p>Choose a manual station and reporting month, then load its observations.</p>
+                </div>
 
             <!-- Monthly table grid container -->
             <!-- Non Sticky header -->
@@ -220,6 +229,7 @@
             >
             </ag-grid-vue> -->
 
+            </main>
         </v-app>
 
 
@@ -1680,5 +1690,50 @@
 </style>
 
 
+
+
+<!-- Page-only redesign styles. No AG Grid CSS selectors or grid behavior changes. -->
+<style>
+    .mc-page { width: 100%; background: #fff; }
+    .mc-page .mc-app { background: #fff !important; }
+    .mc-shell { min-width: 0; padding: 10px 18px 42px; color: #303030; }
+
+    .mc-heading { margin: 0 0 20px; }
+    .mc-eyebrow { color: #1976d2; font-size: 12px; font-weight: 600; margin: 0 0 7px; }
+    .mc-heading .srf-display-1 { display: block; margin: 0 0 10px; }
+    .mc-heading p { margin: 0; color: #757575; font-size: 13px; }
+
+    .mc-query-panel { padding: 17px 18px 8px; border: 1px solid #e5e7eb; border-radius: 5px; background: #fff; }
+    .mc-query-heading { margin-bottom: 17px; }
+    .mc-query-heading h2 { margin: 0 0 3px; font-size: 16px; font-weight: 500; color: #333; }
+    .mc-query-heading p { margin: 0; font-size: 12px; color: #757575; }
+    .mc-query-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 18px; }
+    .mc-station-field { flex: 0 1 390px; min-width: 240px; }
+    .mc-month-field { flex: 0 0 210px; max-width: 100%; }
+    .mc-load-actions { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px; margin-left: auto; }
+    .mc-action-btn.v-btn { text-transform: none !important; letter-spacing: 0 !important; font-size: 13px; }
+
+    .mc-caption { display: flex; align-items: flex-start; gap: 7px; margin: 10px 0 17px; color: #757575; font-size: 12px; line-height: 1.5; }
+    .mc-caption .v-icon, .mc-draft-note .v-icon { flex-shrink: 0; }
+    .mc-draft-note { display: flex; align-items: flex-start; gap: 8px; margin: -4px 0 16px; color: #80621d; font-size: 12px; line-height: 1.5; }
+
+    .mc-table-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 11px 12px; margin: 0 0 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 5px; }
+    .mc-toolbar-primary, .mc-toolbar-secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+    .mc-dialog-title { font-size: 18px !important; font-weight: 500; }
+    .mc-empty-state { padding: 42px 15px; text-align: center; border: 1px solid #e5e7eb; border-radius: 4px; color: #757575; }
+    .mc-empty-state h3 { font-size: 15px; font-weight: 500; color: #4b5563; margin: 12px 0 5px; }
+    .mc-empty-state p { font-size: 12px; margin: 0; }
+
+    @media (max-width: 800px) {
+        .mc-load-actions { margin-left: 0; }
+        .mc-toolbar-secondary { margin-left: 0; }
+    }
+    @media (max-width: 650px) {
+        .mc-shell { padding: 10px 10px 32px; }
+        .mc-station-field, .mc-month-field { flex: 1 1 100%; width: 100%; }
+        .mc-load-actions { width: 100%; justify-content: flex-start; }
+        .mc-table-toolbar { align-items: flex-start; }
+    }
+</style>
 
 {% endblock %}

@@ -6902,7 +6902,8 @@ def query_stationsmonitoring_station(data_type, time_type, date_picked, station_
                 AND sv.variable_id = r.variable_id
             WHERE sv.station_id = %s
             GROUP BY v.id, v.name
-            ORDER BY v.id, v.name
+            -- Show variables with the most Bad observations first.
+            ORDER BY bad DESC, suspicious DESC, not_checked DESC, good DESC, v.id, v.name
         """
 
         with connection.cursor() as cursor:
@@ -10577,26 +10578,82 @@ def get_data_inventory(request):
     result = []
 
     query = """
-        SELECT EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') AS year
-            ,station.id
-            ,station.name
-            ,station.code
-            ,station.is_automatic
-            ,station.begin_date
-            ,region.name
-            ,TRUNC(AVG(station_data.record_count_percentage)::numeric, 2) AS avg_record_count
-        FROM wx_stationdataminimuminterval AS station_data
-        JOIN wx_station AS station ON station.id = station_data.station_id
-        JOIN wx_administrativeregion AS region ON region.id = station.region_id
-        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
-        AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') <  %(end_year)s
-        AND station.is_automatic = %(is_automatic)s
-        GROUP BY 1, station.id, region.name
-        ORDER BY region.name, station.name
+        WITH yearly_data AS (
+            SELECT
+                EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC')::int AS year,
+                station_data.station_id,
+
+                -- Include all existing daily percentages, including zeros.
+                SUM(COALESCE(station_data.record_count_percentage, 0))::numeric
+                    AS total_percentage,
+
+                -- Count distinct variables represented in the year.
+                COUNT(DISTINCT station_data.variable_id) AS variable_count
+
+            FROM wx_stationdataminimuminterval AS station_data
+
+            WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
+              AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') < %(end_year)s
+
+            GROUP BY
+                1,
+                station_data.station_id
+        )
+
+        SELECT
+            yearly_data.year,
+            station.id,
+            station.name,
+            station.code,
+            station.is_automatic,
+            station.begin_date,
+            region.name,
+
+            TRUNC(
+                yearly_data.total_percentage
+                / NULLIF(
+                    yearly_data.variable_count * (
+                        -- Always use the full calendar year (365 or 366 days).
+                        MAKE_DATE(yearly_data.year + 1, 1, 1)
+                        - MAKE_DATE(yearly_data.year, 1, 1)
+                    ),
+                    0
+                ),
+                2
+            ) AS avg_record_count
+
+        FROM yearly_data
+
+        JOIN wx_station AS station
+            ON station.id = yearly_data.station_id
+
+        JOIN wx_administrativeregion AS region
+            ON region.id = station.region_id
+
+        WHERE station.is_automatic = %(is_automatic)s
+
+          -- Exclude future years based on the station's local date.
+          AND yearly_data.year <= EXTRACT(
+              YEAR FROM (
+                  (NOW() AT TIME ZONE 'UTC')
+                  + station.utc_offset_minutes * INTERVAL '1 minute'
+              )
+          )
+
+        ORDER BY
+            region.name,
+            station.name;
     """
 
     with connection.cursor() as cursor:
-        cursor.execute(query, {"start_year": start_year, "end_year": end_year, "is_automatic": is_automatic})
+        cursor.execute(
+            query,
+            {
+                "start_year": start_year,
+                "end_year": end_year,
+                "is_automatic": is_automatic,
+            }
+        )
         rows = cursor.fetchall()
 
         for row in rows:
@@ -10617,61 +10674,6 @@ def get_data_inventory(request):
     return Response(result, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-def get_data_inventory_by_station(request):
-    start_year = request.GET.get('start_date', None)
-    end_year = request.GET.get('end_date', None)
-    station_id: list = request.GET.get('station_id', None)
-    record_limit = request.GET.get('record_limit', None)
-
-    if station_id is None or len(station_id) == 0:
-        return JsonResponse({"message": "\"station_id\" must not be null"}, status=status.HTTP_400_BAD_REQUEST)
-
-    record_limit_lexical = ""
-    if record_limit is not None:
-        record_limit_lexical = f"LIMIT {record_limit}"
-
-    result = []
-    query = f"""
-       WITH variable AS (
-            SELECT variable.id, variable.name 
-            FROM wx_variable AS variable
-            JOIN wx_stationvariable AS station_variable ON station_variable.variable_id = variable.id
-            WHERE station_variable.station_id = %(station_id)s
-            ORDER BY variable.name
-            {record_limit_lexical}
-        )
-        SELECT EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC')
-              ,limited_variable.id
-              ,limited_variable.name
-              ,TRUNC(AVG(station_data.record_count_percentage)::numeric, 2)
-        FROM wx_stationdataminimuminterval AS station_data
-        JOIN variable AS limited_variable ON limited_variable.id = station_data.variable_id
-        JOIN wx_station station ON station_data.station_id = station.id
-        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') >= %(start_year)s
-          AND EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') <  %(end_year)s
-          AND station_data.station_id = %(station_id)s
-        GROUP BY 1, limited_variable.id, limited_variable.name
-        ORDER BY 1, limited_variable.name
-    """
-
-    with connection.cursor() as cursor:
-        cursor.execute(query, {"start_year": start_year, "end_year": end_year, "station_id": station_id})
-        rows = cursor.fetchall()
-
-        for row in rows:
-            obj = {
-                'year': row[0],
-                'variable': {
-                    'id': row[1],
-                    'name': row[2],
-                },
-                'percentage': row[3],
-            }
-            result.append(obj)
-
-    return Response(result, status=status.HTTP_200_OK)
-
 
 @api_view(['GET'])
 def get_station_variable_month_data_inventory(request):
@@ -10679,26 +10681,84 @@ def get_station_variable_month_data_inventory(request):
     station_id = request.GET.get('station_id', None)
 
     if station_id is None:
-        return JsonResponse({"message": "Invalid request. Station id must be provided"},
-                            status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {"message": "Invalid request. Station id must be provided"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     result = []
+
     query = """
-        SELECT EXTRACT(MONTH FROM station_data.datetime AT TIME ZONE 'UTC') AS month
-              ,variable.id
-              ,variable.name
-              ,measurementvariable.name
-              ,TRUNC(AVG(station_data.record_count_percentage)::numeric, 2)
-        FROM wx_stationdataminimuminterval AS station_data
-        JOIN wx_variable variable ON station_data.variable_id=variable.id
-        LEFT JOIN wx_measurementvariable measurementvariable ON measurementvariable.id = variable.measurement_variable_id
-        WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') = %(year)s
-          AND station_data.station_id = %(station_id)s
-        GROUP BY 1, variable.id, variable.name, measurementvariable.name
+        WITH monthly_data AS (
+            SELECT
+                DATE_TRUNC(
+                    'month',
+                    station_data.datetime AT TIME ZONE 'UTC'
+                )::date AS month_start,
+
+                station_data.variable_id,
+
+                -- Include all existing daily percentages, including zeros.
+                SUM(COALESCE(station_data.record_count_percentage, 0))::numeric
+                    AS total_percentage
+
+            FROM wx_stationdataminimuminterval AS station_data
+
+            WHERE EXTRACT(YEAR FROM station_data.datetime AT TIME ZONE 'UTC') = %(year)s
+              AND station_data.station_id = %(station_id)s
+
+            GROUP BY
+                1,
+                station_data.variable_id
+        )
+
+        SELECT
+            EXTRACT(MONTH FROM md.month_start) AS month,
+            variable.id,
+            variable.name,
+            measurementvariable.name,
+
+            TRUNC(
+                md.total_percentage
+                / NULLIF(
+                    -- Always use the total days in the calendar month.
+                    (md.month_start + INTERVAL '1 month')::date
+                    - md.month_start,
+                    0
+                ),
+                2
+            ) AS percentage
+
+        FROM monthly_data AS md
+
+        JOIN wx_variable AS variable
+            ON md.variable_id = variable.id
+
+        JOIN wx_station AS station
+            ON station.id = %(station_id)s
+
+        LEFT JOIN wx_measurementvariable AS measurementvariable
+            ON measurementvariable.id = variable.measurement_variable_id
+
+        -- Exclude future months based on the station's local date.
+        WHERE md.month_start <= (
+            (NOW() AT TIME ZONE 'UTC')
+            + station.utc_offset_minutes * INTERVAL '1 minute'
+        )::date
+
+        ORDER BY
+            month,
+            variable.name;
     """
 
     with connection.cursor() as cursor:
-        cursor.execute(query, {"year": year, "station_id": station_id})
+        cursor.execute(
+            query,
+            {
+                "year": year,
+                "station_id": station_id,
+            }
+        )
         rows = cursor.fetchall()
 
         for row in rows:
@@ -10707,7 +10767,10 @@ def get_station_variable_month_data_inventory(request):
                 'variable': {
                     'id': row[1],
                     'name': row[2],
-                    'measurement_variable_name': row[3] if row[3] is None else row[3].lower().replace(' ', '-'),
+                    'measurement_variable_name': (
+                        row[3] if row[3] is None
+                        else row[3].lower().replace(' ', '-')
+                    ),
                 },
                 'percentage': row[4],
             }

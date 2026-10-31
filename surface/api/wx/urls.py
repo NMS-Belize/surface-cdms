@@ -140,7 +140,6 @@ urlpatterns = [
     # Data Inventory Page
     path('wx/data/inventory/', views.DataInventoryView.as_view(), name='data-inventory'),
     path('api/data_inventory/', views.get_data_inventory),
-    path('api/data_inventory_by_station/', views.get_data_inventory_by_station),
     path('api/station_variable_data_month_inventory/', views.get_station_variable_month_data_inventory),
     path('api/station_variable_data_day_inventory/', views.get_station_variable_day_data_inventory),
     

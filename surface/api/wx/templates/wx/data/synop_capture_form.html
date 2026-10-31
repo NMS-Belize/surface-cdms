@@ -15,7 +15,6 @@
                 <v-alert
                     type="info"
                     dense
-                    outlined
                     text
                     color="purple"
                 >
@@ -38,6 +37,8 @@
                                 v-model="requestData.stationId"
                                 :disabled="draft"
                                 required
+                                outlined
+                                dense
                                 hint="*Required"
                                 persistent-hint
                             >
@@ -63,6 +64,8 @@
                                         prepend-icon="event"
                                         v-on="on"
                                         required
+                                        outlined
+                                        dense
                                         hint="*Required"
                                         persistent-hint
                                         :rules="textFieldsRules"

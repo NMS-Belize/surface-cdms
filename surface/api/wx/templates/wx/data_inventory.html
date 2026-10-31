@@ -1,997 +1,936 @@
-{% extends "base.html" %} {% block content %} {% load wx_filters%}
-<div class="srf-container">
+{% extends "base.html" %}
+{% load wx_filters %}
+{% block content %}
+<div class="srf-container inv2-page">
+  <div id="app" v-cloak>
+    <v-app class="inv2-app">
+      <v-content class="inv2-content">
+        <main class="inv2-shell">
 
-  <!-- Heading -->
-  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-      <span class="srf-display-1 text-uppercase">Data</span><br /><br />
-      <span class="srf-display-2 text-uppercase">Inventory</span>
-  </div>
+          <!-- Heading -->
+          <header class="inv2-heading">
+            <div class="inv2-title">
+              <span class="srf-display-1 text-uppercase">Data Inventory</span>
 
-  <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
-    <v-app>
+              <br/><br/>
 
-      <v-content fluid fill-height style="background: white">
+              <p class="grey--text text--darken-1">
+                Explore station completeness, reporting history, and quality control.
+              </p>
+            </div>
+          </header>
 
-        <v-layout column>
-          <!-- datetime info -->
-          <div style="width: 65%;" class="mb-3">
-            <v-alert
-                type="info"
-                dense
-                outlined
-                text
-                color="purple"
-            >
-                Inventory dates and completeness percentages are based on each
-                station's local reporting day, using its configured UTC offset.
-            </v-alert>
+          <!-- search filters -->
+          <section class="inv2-querybar" aria-label="Inventory search options">
+            <!-- year start -->
+            <div class="inv2-query-field">
+              <v-text-field v-model="requestObject.start_year" label="From year" type="number"
+                min="1900" dense outlined hide-details="auto" @keyup.enter="getDataInventory"></v-text-field>
+            </div>
+
+            <!-- year end -->
+            <div class="inv2-query-field">
+              <v-text-field v-model="requestObject.end_year" label="To year (exclusive)" type="number"
+                min="1901" dense outlined hide-details="auto" @keyup.enter="getDataInventory"></v-text-field>
+            </div>
+
+            <!-- station type filter (automatic / manual) -->
+            <div class="inv2-query-type">
+                <v-switch
+                    v-model="stationTypeSelection"
+                    true-value="automatic"
+                    false-value="manual"
+                    :label="stationTypeSelection === 'automatic' ? 'Automatic' : 'Manual'"
+                    color="primary"
+                    inset
+                    hide-details
+                    class="mt-0"
+                ></v-switch>
+            </div>
+
+            <!-- search btn -->
+            <v-btn color="primary" elevation="0" height="40" class="inv2-search-action"
+              :loading="loading" @click="getDataInventory">
+              <v-icon left small>mdi-magnify</v-icon> Search Inventory
+            </v-btn>
+          </section>
+
+          <!-- Inventory reporting and update information -->
+          <div class="inv2-inventory-notes">
+
+              <p class="inv2-date-caption">
+                  <v-icon color="primary" size="16">mdi-information-outline</v-icon>
+                  <span>
+                      Inventory dates reflect each station’s local reporting day.
+                  </span>
+              </p>
+
+              <p class="inv2-date-caption">
+                  <v-icon color="primary" size="16">mdi-clock-outline</v-icon>
+                  <span>
+                      Completeness percentages and Received / Ideal counts may take a few
+                      minutes to reflect newly ingested observations. A short delay is
+                      normal and does not necessarily indicate inaccurate percentages or missing data.
+                  </span>
+              </p>
+
+              <p class="inv2-date-caption">
+                  <v-icon color="success" size="16">mdi-check-circle-outline</v-icon>
+                  <span>
+                      QC Passed percentages however reflect saved validation and QC flag changes
+                      to existing observations immediately when the daily inventory is refreshed.
+                  </span>
+              </p>
+
           </div>
 
-          <!-- page options -->
-          <v-layout column fluid>
+          <!-- error alert -->
+          <v-alert v-model="request_error" type="error" dense dismissible class="inv2-alert">
+            [[ request_error_message ]]
+          </v-alert>
 
-            <!-- search options -->
-            <v-layout mt-3 mb-5>
-              <!-- start year option  -->
-              <v-flex lg2 mr-10 class="d-flex justify-between">
-                <v-text-field
-                    v-model="requestObject.start_year"
-                    label="Start year"
-                    required
-                    hint="*Required"
-                ></v-text-field>
-              </v-flex>
+          <!-- warning alert -->
+          <v-alert v-model="request_warning" type="warning" dense dismissible class="inv2-alert">
+            [[ request_warning_message ]]
+          </v-alert>
 
-              <!-- end year option -->
-              <v-flex lg2 mr-10 class="d-flex justify-between">
-                <v-text-field
-                    v-model="requestObject.end_year"
-                    label="End date"
-                    required
-                    hint="*Required"
-                ></v-text-field>
-              </v-flex>
+          <!-- info alert -->
+          <v-alert v-model="request_info" type="info" dense dismissible class="inv2-alert">
+            Choose a year range and station type, then select Search to view inventory.
+          </v-alert>
 
-              <!-- station type select (is_automatic) -->
-              <v-flex lg1 mr-10 class="d-flex justify-center">
-                <v-switch
-                    label="Automatic"
-                    inset
-                    v-model="requestObject.is_automatic"
-                ></v-switch>
-              </v-flex>
+          <!-- Station context appears only in the monthly and daily drilldowns. -->
+          <div v-if="hasSearched || pageStage !== 'firstLevel'" class="inv2-workbench"
+               :class="{ 'inv2-with-station': pageStage !== 'firstLevel' }">
+            <aside v-if="pageStage !== 'firstLevel' && currentData.station"
+                   class="inv2-station-sidebar" aria-label="Selected station information">
+              <div class="inv2-sidebar-heading">Station information</div>
+              <h3 class="inv2-sidebar-station">[[ currentData.station.name ]]</h3>
+              <p class="inv2-sidebar-code">[[ currentData.station.code || 'No station code' ]]</p>
 
-              <!-- submit btn -->
-              <v-flex mt-5 lg2 class="d-flex justify-between">
-                <v-btn
-                    color="success"
-                    @click="getDataInventory"
-                    :disabled="$v.requestObject.$invalid"
-                >
-                  SUBMIT
-                </v-btn
-                >
-              </v-flex>
+              <dl class="inv2-sidebar-facts">
+                <div><dt>Station ID</dt><dd>[[ currentData.station.id ]]</dd></div>
+                <div><dt>Region</dt><dd>[[ currentData.station.region || '—' ]]</dd></div>
+                <div><dt>Type</dt><dd>[[ currentData.station.is_automatic === null || currentData.station.is_automatic === undefined ? '—' : (currentData.station.is_automatic ? 'Automatic' : 'Manual') ]]</dd></div>
+                <div><dt>Begin date</dt><dd>[[ currentData.station.begin_date_formatted || '—' ]]</dd></div>
+                <div><dt>Year</dt><dd>[[ currentData.year ]]</dd></div>
+                <div v-if="pageStage === 'secondLevel' && currentData.percentage !== null && currentData.percentage !== undefined">
+                  <dt>Year completeness</dt><dd>[[ formatPercentage(currentData.percentage) ]]</dd>
+                </div>
+                <div v-if="pageStage === 'thirdLevel' && currentData.variable">
+                  <dt>Variable</dt><dd>[[ currentData.variable.name ]]</dd>
+                </div>
+              </dl>
 
-            </v-layout>
+              <div class="inv2-sidebar-navigation">
+                <v-btn v-if="pageStage === 'thirdLevel' && variableSet.length"
+                       outlined color="primary" block @click="goToMonthlyOverview">
+                  <v-icon left>mdi-arrow-left</v-icon> Back to months
+                </v-btn>
+                <v-btn outlined color="primary" block @click="goToOverview">
+                  <v-icon left>mdi-arrow-left</v-icon> Back to stations
+                </v-btn>
+              </div>
+            </aside>
+            <div class="inv2-workspace">
+              <!-- LEVEL 1: Region-filterable station/year heatmap -->
+              <section v-if="pageStage === 'firstLevel'" class="inv2-panel" aria-label="Station inventory">
+                <div class="inv2-panel-heading">
+                  <div>
+                    <h2>Station inventory</h2>
+                    <p>[[ visibleStations.length ]] of [[ stations.length ]] stations · [[ availableYears.length ]] reporting years</p>
+                  </div>
+                  <div class="inv2-header-controls">
+                    <v-select v-model="selectedRegion" :items="['All'].concat(regionNames)"
+                      label="Region" dense outlined hide-details class="inv2-region-select"></v-select>
 
-            <!-- alert pop up -->
-            <v-alert v-model="request_error" transition="scale-transition" dismissible border="left" type="error" dense elevation="2">
-              [[ request_error_message ]]
-            </v-alert>
+                    <v-text-field v-model="stationNameFilter" prepend-inner-icon="mdi-magnify"
+                      placeholder="Search station or code" aria-label="Search station or code"
+                      dense outlined clearable hide-details class="inv2-station-search"></v-text-field>
+                  </div>
+                </div>
 
-            <!-- warning pop up -->
-            <v-alert v-model="request_warning" transition="scale-transition" dismissible border="left" type="warning" dense elevation="2">
-              [[ request_warning_message ]]
-            </v-alert>
-
-            <!-- loading overlay -->
-            <!-- 
-            <v-overlay :value="loading">
-              <v-progress-circular
-                :size="120"
-                :width="10"
-                :rotate="-90"
-                :value="progress"
-                color="primary"
-              >
-                [[ Math.floor(progress) ]]
-              </v-progress-circular>
-            </v-overlay>
-            -->
-
-            <!-- loading overlay -->
-            <v-overlay :value="loading">
-              <v-progress-circular
-                  indeterminate
-                  size="64"
-              >
-                [[ Math.floor(progress) ]]%
-              </v-progress-circular>
-            </v-overlay> 
-
-            <!-- ------------------------------------------------------------------------------------------------------------------------------ -->
-
-            <!--  -->
-            <v-layout mt-3 :hidden="regionSet == null" column fluid>
-
-              <!-- "search result" title -->
-              <!-- <v-layout>
-                <v-flex justify-center>
-                  Search Result
-                  <v-divider style="margin-top: 5px"></v-divider>
-                </v-flex>
-              </v-layout> -->
-
-              <!-- inventory container -->
-              <v-layout ml-3 mt-3 column>
-
-                <!-- inventory firstLevel -->
-                <template v-if="pageStage == 'firstLevel'">
-
-                  <v-layout mt-3 w-100>
-                    <!-- station output description -->
-                    <v-layout column fluid w-50>
-                      <div class="info_box">
-                        <div> Total Stations: [[stations.length]]</div>
-                        <div> Date: [[ display_start_year ]] to [[ display_end_year ]]</div>
-                      </div>
-                    </v-layout>
-                    
-                    <!-- search bar -->
-                    <v-layout pl-5 column fluid align-end w-25>
-                      <v-flex lg2 class="d-flex" w-75>
-                        <v-text-field
-                            v-model="stationNameFilter"
-                            style="padding-top: 0"
-                            label="Station name"
-                            required>
-                          <v-icon slot="append">
-                            mdi-magnify
-                          </v-icon>
-                        </v-text-field>
-                      </v-flex>
-                    </v-layout>
-                  </v-layout>
-
-                  <v-layout mt-3 w-100>
-                    <!-- hold the region pannels which expand to show the station list -->
-                    <v-expansion-panels>
-                      <!-- looping through each region -->
-                      <v-expansion-panel v-for="(stations, regionName) in filteredRegionSet" :key="regionName">
-                        <!-- panel header ex. Belize 2020 2021 2025 -->
-                        <v-expansion-panel-header v-slot="{open}" style="min-height: 0;">
-                          <v-simple-table>
-                            <template>
-                              <thead>
-                              <tr style="border-bottom: 1px solid rgba(0, 0, 0, .3);">
-                                <th class="surface-main-cell">[[regionName]]</th>
-                                <!-- loop through the years and display them as table headers -->
-                                <th class="surface-detail-cell" v-for="(availableYear, index) in availableYears">
-                                  [[availableYear]]
-                                </th>
-                              </tr>
-                              </thead>
-                            </template>
-                          </v-simple-table>
-                        </v-expansion-panel-header>
-
-                        <!-- pannel content. Holding all stations in a given region -->
-                        <v-expansion-panel-content>
-
-                          <!-- pannel content breaks down into an additional level to show station variables -->
-                          <v-expansion-panels>
-
-                            <!-- Holds the headers and the contents for the content pannel -->
-                            <v-expansion-panel v-for="(station, stationIndex) in stations" :key="stationIndex"
-                                               @change="getVariableByStation(station, 5)"
-                                               style="margin-bottom: .4vh;border: none">
-
-                              <!-- header for the content.ex Altun ha etc...-->
-                              <v-expansion-panel-header v-slot="{open}" style="background: #e6e6e6; padding-left: 0">
-                                <div>
-                                  
-                                  <!-- station heaader -->
-                                  <v-simple-table style="background: #e6e6e6;">
-                                    <template>
-                                      <tbody>
-                                      <tr style="border: none;">
-                                        <!-- station name and code -->
-                                        <td class="surface-main-cell" style="color: rgba(0,0,0,.7) !important;">
-                                          [[station.name]] - [[station.code]]
-                                        </td>
-                                        
-                                        <!-- <td class="surface-value-detail-cell" -->
-                                        <td class="surface-detail-cell"
-                                            v-for="(availableYear, index) in availableYears"
-                                            :key="index"
-                                            @click="fetchVariables(availableYear, station, station.yearSet[availableYear])">
-
-                                          <div
-                                              :style="{'background-color': getPercentageColor(station.yearSet[availableYear] || 0)}"
-                                              class="value-cell" style="height: 75%">
-                                            [[ station.yearSet[availableYear] || 0 ]]%
-                                          </div>
-                                        </td>
-                                      </tr>
-                                      </tbody>
-                                    </template>
-                                  </v-simple-table>
-
-                                  <!-- display station metadata -->
-                                  <div v-if="open" class="surface-station-details" style="padding-left: 2vw;">
-                                    <div>Local station ID: [[station.id]]</div>
-                                    <div>Begin date: [[station.begin_date_formatted]]</div>
-                                    <div>Automatic: [[station.is_automatic ? 'True': 'False' ]]</div>
-                                  </div>
-
-                                </div>
-                              </v-expansion-panel-header>
-
-                              <!-- holds station variable content the limit is 5 variables per station this can be increased if needed. More is displayed on the second level-->
-                              <v-expansion-panel-content>
-                        
-                                <template v-if="station.variables">
-                                  <v-simple-table style="margin-right: 24px; padding-left: 1vw">
-                                    <template>
-                                      <tbody>
-                                      <tr style="border: none;" v-for="(variable, variableId) in station.variables"
-                                          :key="variableId">
-                                        <td class="surface-main-cell surface-main-variable-cell">
-                                          [[ variable.name ]]
-                                        </td>
-                                        <!-- variable percentage -->
-                                        <td class="surface-value-detail-cell-wide"
-                                            v-for="(availableYear, index) in availableYears" :key="index">
-                                          <div
-                                              :style="{'background-color': getPercentageColor(variable.yearSet[availableYear] || 0)}"
-                                              class="value-cell">
-                                            [[ variable.yearSet[availableYear] || 0 ]]%
-                                          </div>
-                                        </td>
-                                      </tr>
-                                      </tbody>
-                                    </template>
-                                  </v-simple-table>
-                                </template>
-
-                              </v-expansion-panel-content>
-                            </v-expansion-panel>
-                          </v-expansion-panels>
-                        </v-expansion-panel-content>
-                      </v-expansion-panel>
-                    </v-expansion-panels>
-                  </v-layout>
-                  
-                </template>
-
-                <!-- inventory secondLevel : individual station view  -->
-                <template v-if="pageStage == 'secondLevel'">
-
-                  <!-- second level header information -->
-                  <v-layout mt-3 w-100>
-                    <!-- station metadata, search year -->
-                    <v-layout column fluid w-50>
-                      <div class="info_box">
-                        <div>[[this.currentData.station.name]] - [[this.currentData.station.code]]</div>
-                        <div>Date: [[this.currentData.year]]</div>
-                        <div class="surface-station-details">
-                          <div>Local station ID: [[this.currentData.station.id]]</div>
-                          <div>Station Begin date: [[this.currentData.station.begin_date_formatted]]</div>
-                          <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
-                        </div>
-                      </div>
-                    </v-layout>
-
-                    <!-- back button -->
-                    <v-layout pl-5 column fluid align-end w-25>
-                      <v-flex lg2 class="d-flex justify-between">
-                        <v-btn
-                            color="error"
-                            @click="() => pageStage = 'firstLevel'"
-                        >Go Back
-                        </v-btn>
-                      </v-flex>
-                    </v-layout>
-
-                  </v-layout>
-
-                  <!-- second level content -->
-                  <v-simple-table>
-                    <template>
-                      <thead>
-                      <!-- Month headers -->
-                      <tr>
-                        <th></th>
-                        <th class="month-cell" v-for="(month, monthIndex) in availableMonths" :key="monthIndex">
-                          [[month]]
+                <div v-if="!stations.length" class="inv2-empty">
+                  <v-icon size="38" color="blue-grey lighten-2">mdi-database-off-outline</v-icon>
+                  <h3>No inventory found</h3><p>Try a different period or station type.</p>
+                </div>
+                <div v-else-if="!visibleStations.length" class="inv2-empty">
+                  <v-icon size="38" color="blue-grey lighten-2">mdi-magnify</v-icon>
+                  <h3>No matching stations</h3><p>Try another search or region.</p>
+                </div>
+                <div v-else class="inv2-scroll inv2-table-frame">
+                  <table class="inv2-matrix inv2-year-table" :style="{ minWidth: (370 + availableYears.length * 112) + 'px' }">
+                    <thead><tr>
+                      <th scope="col" class="inv2-col-station">Station</th>
+                      <th scope="col" class="inv2-col-region">Region</th>
+                      <th v-for="year in availableYears" :key="year" scope="col" class="inv2-col-value">[[ year ]]</th>
+                    </tr></thead>
+                    <tbody>
+                      <tr v-for="station in visibleStations" :key="station.id">
+                        <th scope="row" class="inv2-col-station">
+                          <strong>[[ station.name ]]</strong><small>[[ station.code || 'No code' ]]</small>
                         </th>
-                      </tr>
-                      </thead>
-                      
-                      <!-- variable content -->
-                      <tbody>
-                      <tr v-for="(variable, variableId) in variableSet" :key="variableId" style="border: none;">
-                        <td class="month-main-cell">[[ variable.name ]]</td>
-
-                        <td v-for="(availableYear, index) in availableMonths" :key="index"
-                            @click="fetchVariableDetails(index + 1, variable, variable.monthSet[index + 1])"
-                            class="month-cell month-value-detail-cell">
-
-                          <div
-                              :style="{'background-color': getPercentageColor(variable.monthSet[index + 1] || 0)}"
-                              class="value-cell">
-                            [[ variable.monthSet[index + 1] || 0 ]]%
-                          </div>
+                        <td class="inv2-col-region">[[ station.region || 'Others' ]]</td>
+                        <td v-for="year in availableYears" :key="year" class="inv2-col-value">
+                          <button v-if="getYearPercentage(station, year) !== null"
+                            type="button" class="inv2-heatcell" :style="getPercentageStyle(getYearPercentage(station, year))"
+                            :aria-label="station.name + ' in ' + year + ': ' + formatPercentage(getYearPercentage(station, year)) + '. Open.'"
+                            @click="fetchVariables(year, station, getYearPercentage(station, year))">
+                            <strong>[[ formatPercentage(getYearPercentage(station, year)) ]]</strong>
+                          </button>
+                          <span v-else class="inv2-missing" title="No yearly summary">—</span>
                         </td>
                       </tr>
-                      </tbody>
-                    </template>
-                  </v-simple-table>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="inv2-table-note">— No summary exists for that station/year. Actual 0% values remain selectable.</div>
+              </section>
 
-                </template>
-
-                <!-- Third level or month view -->
-                <template v-if="pageStage == 'thirdLevel'">
-
-                  <!--  -->
-                  <v-layout mt-3 w-100>
-                    <v-layout column fluid w-50>
-                      <div class="info_box">
-                        <div>[[this.currentData.station.name]] - [[this.currentData.station.code]] - [[this.currentData.variable.name]]</div>
-                        <div>Date: [[ this.availableMonthNames[this.currentData.month - 1] ]] [[this.currentData.year]]</div>
-                        <div class="surface-station-details">
-                          <div>Local station ID: [[this.currentData.station.id]]</div>
-                          <div>Begin date: [[this.currentData.station.begin_date_formatted]]</div>
-                          <div>Automatic: [[this.currentData.station.is_automatic ? 'True': 'False' ]]</div>
-                        </div>
-                      </div>
-                    </v-layout>
-                    <v-layout pl-5 column fluid align-end w-25>
-                      <v-flex lg2 class="d-flex justify-between">
-                        <v-btn
-                            color="error"
-                            @click="() => pageStage = 'secondLevel'"
-                        >Go Back
-                        </v-btn>
-                      </v-flex>
-                    </v-layout>
-                  </v-layout>
-
-                  <!--  -->
-                  <v-simple-table>
-
-                    <template>
-                      <thead>
-                      <tr>
-                        <th class="month-cell" v-for="(day, dayIndex) in availableDays" :key="dayIndex">
-                          [[day]]
-                        </th>
-                      </tr>
-                      </thead>
-
-                      <tr v-for="week in variableDetails">
-                        <td v-for="dayData in week" style="text-align: center; vertical-align: middle; padding: 0;">
-                          <template v-if="dayData != null">
-                            <div :style="{'background-color': getPercentageColor(dayData.percentage || 0)}" class="calendar-value">
-                              <div style="font: 18px Roboto, sans-serif; padding: 8px 0px 3px 0px"><b>[[ dayData.day ]]</b></div>
-                              <div class="calendar-details">
-                                <div>[[ dayData.percentage ]]% - [[ dayData.record_count ]] of [[dayData.ideal_record_count ]]
-                                </div>
-                                <div>[[ dayData.qc_passed_percentage || 0 ]]% - QC passed</div>
-                                {% if request|has_any_feature_permission:"quality-control:read" %}
-                                <div class="calendar-button" @click="goToDataValidation(dayData.day)">Data Validation</div>
-                                {% endif %}
-                                
-                                {% if request|has_any_feature_permission:"station-report:read" %}
-                                <div class="calendar-button" @click="goToStationReport(dayData.day)">Station Report</div>
-                                {% endif %}
-                              </div>
-                            </div>
-                          </template>
-
+              <!-- LEVEL 2: Monthly variable matrix with heat indicators. -->
+              <section v-if="pageStage === 'secondLevel' && currentData.station" class="inv2-panel" aria-label="Monthly variable inventory">
+                <div class="inv2-panel-heading">
+                  <div>
+                    <h2>Monthly breakdown <span class="inv2-light-heading">· [[ currentData.year ]]</span></h2>
+                    <p>[[ variableSet.length ]] variables · Select a month to view its daily observations.</p>
+                  </div>
+                </div>
+                <div v-if="!variableSet.length" class="inv2-empty">
+                  <v-icon size="38" color="blue-grey lighten-2">mdi-chart-box-outline</v-icon>
+                  <h3>No monthly summaries</h3><p>There are no monthly records for this station and year.</p>
+                </div>
+                <div v-else class="inv2-scroll inv2-table-frame">
+                  <table class="inv2-matrix inv2-month-table">
+                    <thead><tr>
+                      <th scope="col" class="inv2-col-variable">Variable</th>
+                      <th v-for="(name, monthIndex) in availableMonths" :key="name" scope="col" class="inv2-col-value">[[ name ]]</th>
+                    </tr></thead>
+                    <tbody>
+                      <tr v-for="variable in variableSet" :key="variable.id">
+                        <th scope="row" class="inv2-col-variable"><strong>[[ variable.name ]]</strong></th>
+                        <td v-for="(monthName, monthIndex) in availableMonths" :key="monthName" class="inv2-col-value">
+                          <span v-if="isFutureMonth(monthIndex + 1)" class="inv2-missing" title="Future month">—</span>
+                          <button v-else type="button" class="inv2-heatcell"
+                            :style="getPercentageStyle(getMonthPercentage(variable, monthIndex + 1))"
+                            :aria-label="variable.name + ' in ' + monthName + ': ' + formatPercentage(getMonthPercentage(variable, monthIndex + 1)) + '. Open.'"
+                            @click="fetchVariableDetails(monthIndex + 1, variable)">
+                            <strong>[[ formatPercentage(getMonthPercentage(variable, monthIndex + 1)) ]]</strong>
+                          </button>
                         </td>
                       </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="inv2-table-note">Select a tile to inspect individual reporting days and QC pass rates.</div>
+              </section>
+
+              <!-- LEVEL 3: Full-day heat calendar; both metrics and protected actions retained. -->
+              <section v-if="pageStage === 'thirdLevel' && currentData.station && currentData.variable" class="inv2-panel" aria-label="Daily inventory calendar">
+                <div class="inv2-panel-heading">
+                  <div>
+                    <h2>[[ availableMonthNames[Number(currentData.month) - 1] ]] [[ currentData.year ]]</h2>
+                    <p>[[ currentData.variable.name ]] · Daily inventory</p>
+                  </div>
+
+                  <div class="inv2-day-controls">
+                    <!-- Daily calendar metric selector -->
+                    <div class="inv2-metric-pills">
+                      <v-btn
+                        depressed
+                        class="inv2-metric-pill inv2-metric-completeness"
+                        :class="{ 'inv2-metric-active': dailyMetric === 'completeness' }"
+                        @click="dailyMetric = 'completeness'"
+                      >
+                        Completeness
+                      </v-btn>
+
+                      <v-btn
+                        depressed
+                        class="inv2-metric-pill inv2-metric-qc"
+                        :class="{ 'inv2-metric-active': dailyMetric === 'qc' }"
+                        @click="dailyMetric = 'qc'"
+                      >
+                        QC Passed
+                      </v-btn>
+                    </div>
+
+                    <!-- referesh btn -->
+                    <v-btn outlined color="primary" class="inv2-refresh-action" @click="refreshDailyInventory">
+                      <v-icon left>mdi-refresh</v-icon> Refresh
+                    </v-btn>
+                  </div>
+                </div>
+                <div class="inv2-scroll inv2-calendar-scroll">
+                  <div class="inv2-calendar-grid">
+                    <div v-for="dayName in availableDays" :key="dayName" class="inv2-weekday">[[ dayName ]]</div>
+                    <template v-for="(dayData, index) in calendarCells">
+                      <div v-if="!dayData" :key="'blank-' + index" class="inv2-day-blank" aria-hidden="true"></div>
+                      <article v-else :key="'day-' + index" class="inv2-day-card" :style="getDayCardStyle(dayData)">
+                        <div class="inv2-day-top">
+                          <span class="inv2-day-number">[[ dayData.day ]]</span>
+                          <span class="inv2-day-primary">[[ formatPercentage(getDayPrimaryPercentage(dayData)) ]]</span>
+                        </div>
+                        <div class="inv2-day-stats">
+                          <div><span>Completeness</span><strong>[[ formatPercentage(dayData.percentage) ]]</strong></div>
+                          <div><span>QC passed</span><strong>[[ formatPercentage(dayData.qc_passed_percentage) ]]</strong></div>
+                          <div class="inv2-day-received"><span>Received / ideal</span><strong>[[ dayData.record_count ]] / [[ dayData.ideal_record_count ]]</strong></div>
+                        </div>
+                        <div class="inv2-day-actions">
+                          {% if request|has_any_feature_permission:"quality-control:read" %}
+                          <button type="button" @click="goToDataValidation(dayData.day)"><v-icon size="14">mdi-check-decagram-outline</v-icon> Validation</button>
+                          {% endif %}
+                          {% if request|has_any_feature_permission:"station-report:read" %}
+                          <button v-if="currentData.variable.measurement_variable_name" type="button" @click="goToStationReport(dayData.day)"><v-icon size="14">mdi-file-chart-outline</v-icon> Report</button>
+                          {% endif %}
+                        </div>
+                      </article>
                     </template>
+                  </div>
+                </div>
+                <p class="inv2-calendar-footnote">00:00 observations belong to the previous reporting day. Use Refresh to load recent QC or Validation changes.</p>
+              </section>
+            </div>
+          </div>
+        </main>
 
-                  </v-simple-table>
-                </template>
-
-              </v-layout>
-
-            </v-layout>
-
-          </v-layout>
-
-        </v-layout>
-
+        <v-overlay :value="loading" z-index="300">
+          <div class="inv2-loading">
+            <v-progress-circular indeterminate size="46" width="4" color="white"></v-progress-circular>
+            <span>[[ loadingMessage ]]</span>
+          </div>
+        </v-overlay>
       </v-content>
-
-      <!--  -->
-      <pre id="csv" style="display: none"></pre>
-
     </v-app>
   </div>
+</div>
+{% endblock %}
 
-  {% endblock %} {% block localjavascript %}
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
 
-  <script>
-    Vue.use(HighchartsVue.default);
-    Vue.use(window.vuelidate.default);
-
-    const { required, minLength } = window.validators;
-
-    new Vue({
-      el: "#app",
-      vuetify: new Vuetify(),
-      delimiters: ["[[", "]]"],
-      validations: {
-        requestObject: {
-          start_year: { required },
-          end_year: { required }
-        }
+    data: {
+      timezone: '{{ TIMEZONE_NAME|escapejs }}',
+      loading: false,
+      loadingMessage: 'Loading inventory...',
+      request_error: false,
+      request_error_message: '',
+      request_warning: false,
+      request_warning_message: '',
+      request_info: true,
+      hasSearched: false,
+      pageStage: 'firstLevel',
+      stationNameFilter: '',
+      selectedRegion: 'All',
+      display_start_year: null,
+      display_end_year: null,
+      rawStationData: [],
+      regionSet: {},
+      stations: [],
+      availableYears: [],
+      variableSet: [],
+      calendarCells: [],
+      dailyMetric: 'completeness',
+      pendingValidationRefresh: false,
+      validationTabOpenedAt: 0,
+      pollingIntervalId: null,
+      activeTaskId: null,
+      availableMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+      availableMonthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+      availableDays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      currentData: {
+        station: null,
+        variable: null,
+        year: null,
+        month: null,
+        percentage: null
       },
-      
-      data: {
-        timezone: "{{ TIMEZONE_NAME|escapejs }}",
-        request_error:false,
-        request_error_message: '',
-        request_warning:false,
-        request_warning_message: '',
-        loading: false,
-        progress: 0,
-        progressIntervalId: null,
-        searchVariables: '',
-        seriesData: [],
-        variable_list: [
-          {% for variable in variable_list %}
-            {
-              variable: {{ variable.id }},
-              variable_name: "{{ variable.name }}",
-              unit_symbol: "{{ variable.unit.symbol }}"
-            },
-          {% endfor %}
-        ],
-        layout: {
-          yAxis: {
-            title: {
-              text: null
-            },
-          },
+      requestObject: {
+        start_year: moment().subtract(5, 'years').format('YYYY'),
+        end_year: moment().add(1, 'years').format('YYYY'),
+        is_automatic: true
+      },
+      // Used to resolve variable names when this page is opened via a direct link.
+      variable_list: [
+        {% for variable in variable_list %}
+        {
+          variable: {{ variable.id }},
+          variable_name: '{{ variable.name|escapejs }}'
         },
-        stationNameFilter: null,
-        display_start_year: null,
-        display_end_year: null,
-        rawStationData: [],
-        regionSet: null,
-        originalRegionSet: null,
-        variableSet: null,
-        availableYears: [],
-        availableMonths: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        availableMonthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-        availableDays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-        currentData: {
-          station: null,
-          variable: null,
-          month: null,
-        },
-        variableDetails: null,
-        pageStage: 'firstLevel',
-        regionRevision: 0,
-        stations: [],
-        requestObject: {
-          start_year: moment().add(-5, 'years').format('YYYY'),
-          end_year: moment().add(1, 'years').format('YYYY'),
-          is_automatic: true,
-        },
-        simpleTextFieldsRules: [
-          v => (v !== undefined && v !== "") || "This field is required"
-        ],
-        drilldowns: {},
-        colorGradient: new Color('#f08080').range(new Color('#90ee90'), { outputSpace: "srgb" })
+        {% endfor %}
+      ]
+    },
+
+    computed: {
+      // Provide a clean two-option control without changing the API boolean.
+      stationTypeSelection: {
+        get() { return this.requestObject.is_automatic ? 'automatic' : 'manual'; },
+        set(value) { this.requestObject.is_automatic = value === 'automatic'; }
       },
 
-      
-      watch: {
-        variables (newSelectedArray, oldSelectedArray) {
-          this.searchVariables = '';
-        }
-      },
-      
-      
-      computed: {
-        filteredRegionSet() {
-          if (this.regionRevision < 0){
-            return;
-          }
-
-          if (!this.stationNameFilter) {
-            return this.originalRegionSet;
-          }
-
-          for(regionName in this.originalRegionSet) {
-            this.regionSet[regionName] = this.originalRegionSet[regionName].filter(station => station.filterName.toLowerCase().includes(this.stationNameFilter.toLowerCase()));
-            if (this.regionSet[regionName].length == 0) {
-              delete this.regionSet[regionName];
-            }
-          }
-
-          return this.regionSet;
-        }
-
-      },
-      
-      watch: {
-        loading(newVal) {
-          if (newVal) {
-            this.startProgress();  // start when loading = true
-          } else {
-            this.resetProgress();  // reset when loading = false
-          }
-        }
+      regionNames() {
+        return Object.keys(this.regionSet).sort((a, b) => a.localeCompare(b));
       },
 
-      beforeDestroy() {
-        clearInterval(this.progressIntervalId);
-      },
-
-      methods: {
-        goToStationReport(day) {
-            const { startDate, endDate } = this.getInventoryDayRange(day);
-
-            const url = `/wx/products/station_report/?start_date=${startDate}&end_date=${endDate}&station_id=${this.currentData.station.id}&measurement_variable=${this.currentData.variable.measurement_variable_name}`;
-
-            window.open(url, '_blank');
-        },
-
-        goToDataValidation(day) {
-            const { startDate, endDate } = this.getInventoryDayRange(day);
-
-            const url = `/wx/quality_control/validation?start_date=${startDate}&end_date=${endDate}&station_id=${this.currentData.station.id}&variable_id=${this.currentData.variable.id}`;
-
-            window.open(url, '_blank');
-        },
-
-        getInventoryDayRange(day) {
-            const start = moment(
-                `${this.currentData.year}-${this.currentData.month}-${day}`,
-                'YYYY-M-D',
-                true
-            );
-
-            return {
-                startDate: start.format('YYYY-MM-DD'),
-                endDate: start.clone().add(1, 'day').format('YYYY-MM-DD')
-            };
-        },
-
-        getPercentageColor(percentage) {
-          return this.colorGradient(percentage/100).toString();
-        },
-        
-        fetchVariableDetails(month, variable, percentage) {
-          // if (percentage == null) {
-          if (percentage == null || percentage == 0) {
-            this.request_warning = true;
-            this.request_warning_message = "No data to display";
-            return;
-          }
-
-          this.loading = true;
-
-          this.currentData.month = month
-          this.currentData.variable = variable
-
-          axios.get(`/api/station_variable_data_day_inventory/?&year=${this.currentData.year}&month=${this.currentData.month}&station_id=${this.currentData.station.id}&variable_id=${this.currentData.variable.id}`)
-          .then(result => {
-            const taskId = result.data.task_id;
-            this.pollFetchVariableTask(taskId); // poll until done
-
-            // console.log(`This is the task ID: ${taskId}`) // log the task id
-
-          }).catch((error) => {
-            this.loading = false;
-            this.request_error = true;
-            this.request_error_message = error.message || 'An unknown error occurred';
+      // Region and station searches are filters only; original data stays intact.
+      visibleStations() {
+        const query = (this.stationNameFilter || '').trim().toLowerCase();
+        return this.stations
+          .filter(station =>
+            (this.selectedRegion === 'All' || (station.region || 'Others') === this.selectedRegion) &&
+            (!query || station.filterName.includes(query))
+          )
+          .slice()
+          .sort((a, b) => {
+            const regionOrder = (a.region || 'Others').localeCompare(b.region || 'Others');
+            return regionOrder || a.name.localeCompare(b.name);
           });
+      },
 
-        },
+      currentReportingYearMonth() {
+        try {
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: this.timezone || 'UTC',
+            year: 'numeric',
+            month: 'numeric'
+          }).formatToParts(new Date());
+          const getPart = type => Number(parts.find(part => part.type === type).value);
+          return { year: getPart('year'), month: getPart('month') };
+        } catch (error) {
+          const now = new Date();
+          return { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
+        }
+      }
+    },
 
-        fetchVariableDetailsLink() {
-          this.loading = true;
+    beforeDestroy() {
+      this.stopTaskPolling();
+      window.removeEventListener('focus', this.handleWindowFocus);
+    },
 
-          console.log(this.currentData.station.id)
+    methods: {
+      clearAlerts() {
+        this.request_error = false;
+        this.request_warning = false;
+        this.request_error_message = '';
+        this.request_warning_message = '';
+      },
 
-          axios.get(`/api/station_variable_data_day_inventory/?&year=${this.currentData.year}&month=${this.currentData.month}&station_id=${this.currentData.station_id}&variable_id=${this.currentData.variable_id}`)
-          .then(result => {
-            const taskId = result.data.task_id;
-            this.pollFetchVariableTask(taskId); // poll until done
+      showError(error, fallback) {
+        this.request_error = true;
+        this.request_error_message = (error && error.response && error.response.data && error.response.data.message)
+          || (error && error.message)
+          || fallback
+          || 'Unable to retrieve inventory data.';
+      },
 
-            // console.log(`This is the task ID: ${taskId}`) // log the task id
+      clampPercentage(value) {
+        const number = Number(value);
+        return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : 0;
+      },
 
-          }).catch((error) => {
-            this.loading = false;
-            this.request_error = true;
-            this.request_error_message = error.message || 'An unknown error occurred';
-          });
+      formatPercentage(value) {
+        const number = Number(value);
+        return (Number.isFinite(number) ? number : 0).toFixed(2) + '%';
+      },
 
-        },
-        
-        pollFetchVariableTask(taskId) {
-          // Define pollFetchVariableTask
-          const interval = setInterval(() => {
-            axios.get(`/api/task/${taskId}/`)
-              .then(res => {
-                if (res.data.status === "completed") {
-                  clearInterval(interval);
+      // Continuous low-to-high colors are visual cues, not QC classifications.
+      // Balanced red-to-green percentage scale.
+      getPercentageStyle(value) {
+          const percentage = this.clampPercentage(value);
+          const hue = Math.round(4 + percentage * 1.17);
 
-                  // process result
-                  const rows = [];
-                  for (let i=0; i < 6; i++) {
-                    const columns = [];
-
-                    for (let j=0; j < 7; j++) {
-                      columns[j] = null;
-                    }
-                    rows[i] = columns;
-                  }
-
-                  count = 0
-
-                  res.data.data.forEach(data => {
-                    rows[count][data.dow] = data;
-                    if(data.dow == 6) {
-                      count += 1;
-                    }
-                  });
-
-                  this.variableDetails = rows;
-
-                  // show the month view (third level)
-                  this.pageStage = 'thirdLevel';
-
-                  this.loading = false;
-                  // console.log(res.data.data); // the result
-                } 
-                else if (res.data.status === "failed") {
-                  clearInterval(interval);
-                  this.loading = false;
-                  this.request_error = true;
-                  this.request_error_message = res.data.error;
-                }
-              })
-              .catch(err => {
-                clearInterval(interval);
-                this.loading = false;
-                this.request_error = true;
-                this.request_error_message = err.message || 'Task check failed';
-              });
-          }, 1000); // poll every 1s
-        },
-        
-        fetchVariables(year, station, percentage) {
-          if (percentage == null) {
-            return;
-          }
-
-          this.pageStage = 'secondLevel';
-          this.loading = true;
-          this.currentData = {
-            year: year,
-            station: station,
+          return {
+              backgroundColor: `hsl(${hue}, 72%, 88%)`,
+              borderColor: `hsl(${hue}, 72%, 88%)`,
+              color: `hsl(${hue}, 58%, 26%)`
           };
-
-          axios.get(`/api/station_variable_data_month_inventory/?&year=${year}&station_id=${station.id}`)
-            .then(result => {
-              variableSet = {}
-              result.data.forEach(record => {
-                  if (variableSet[record.variable.id] == null) {
-                      variableSet[record.variable.id] = record.variable;
-                      record.variable.monthSet = {};
-                  }
-                  variableSet[record.variable.id].monthSet[record.month] = record.percentage;
-              });
-
-              this.variableSet = variableSet;
-              this.loading = false;
-          }).catch((error) => {
-            this.loading = false;
-            this.request_error = true;
-            this.request_error_message = `${error}`;
-          });
-
-        },
-        
-        getDataInventory(){
-          // resetting the page stage to null
-          this.pageStage = null;
-
-          // enable loading overlay
-          this.loading = true;
-
-          // get the years
-          axios.get(`/api/data_inventory/?&start_date=${this.requestObject.start_year}&end_date=${this.requestObject.end_year}&is_automatic=${this.requestObject.is_automatic}`)
-          .then(result => {
-            const stationSet = {};
-            const stationArray = [];
-            const regionSet = {};
-            const yearSet = {};
-            let yearArray = [];
-
-            this.rawStationData = result.data;
-
-            this.rawStationData.forEach(record => {
-               this.pageStage = 'firstLevel';
-
-               if (stationSet[record.station.id] == null) {
-                  stationArray.push(record.station);
-                  stationSet[record.station.id] = record.station;
-                  record.station.yearSet = {};
-                  record.station.variables = null;
-                  record.station.filterName = record.station.name + ' ' + record.station.code;
-                  record.station.begin_date_formatted = moment.utc(record.station.begin_date).format('YYYY-MM-DD');
-
-                 const stationRegion = record.station.region || "Others";
-                 if (regionSet[stationRegion] == null) {
-                    regionSet[stationRegion] = [];
-                 }
-                 regionSet[stationRegion].push(record.station);
-
-                 if (yearSet[record.year] == null) {
-                    yearSet[record.year] = true;
-                    yearArray.push(record.year);
-                 }
-              }
-              stationSet[record.station.id].yearSet[record.year] = record.percentage;
-            });
-
-            if (yearArray.length != 0) {
-              yearArray = yearArray.sort()
-            }
-            this.regionSet = Object.assign({}, regionSet);
-            this.originalRegionSet = regionSet;
-            this.availableYears = yearArray;
-            this.stations = stationArray;
-
-            this.display_start_year = this.requestObject.start_year;
-            this.display_end_year = this.requestObject.end_year;
-
-            this.loading = false;
-          }).catch((error) => {
-            this.loading = false;
-            this.request_error = true;
-            this.request_error_message = `${error}`;
-          });
-        },
-        
-        getVariableByStation(station, recordLimit) {
-          if (station.variables != null || station.loading) {
-            return;
-          }
-
-          station.loading = true;
-          axios.get(`/api/data_inventory_by_station/?&start_date=${this.requestObject.start_year}&end_date=${this.requestObject.end_year}&station_id=${station.id}&record_limit=${recordLimit}`)
-          .then(result => {
-            variableSet = {}
-            result.data.forEach(record => {
-                if (variableSet[record.variable.id] == null) {
-                    variableSet[record.variable.id] = record.variable;
-                    record.variable.yearSet = {};
-                }
-                variableSet[record.variable.id].yearSet[record.year] = record.percentage;
-            });
-            this.regionRevision++;
-
-            station.variables = variableSet;
-            station.loading = false;
-          });
-        },
-        
-        startProgress() {
-          clearInterval(this.progressIntervalId);
-          this.progress = 0;
-
-          const duration = 5000; // 5 seconds total
-          const target = 98;     // Fake-loading cap
-          const stepTime = 50;   // Update every 50ms for 20fps smoothness
-          
-          // Calculate how much to add per 50ms tick
-          const step = target / (duration / stepTime);
-
-          this.progressIntervalId = setInterval(() => {
-            if (this.progress < target) {
-              // Use a small bit of randomness to make it look "human" or "real"
-              const jitter = Math.random() * 0.1; 
-              this.progress = Math.min(this.progress + step + jitter, target);
-            } else {
-              clearInterval(this.progressIntervalId);
-            }
-          }, stepTime);
-        },
-
-        resetProgress() {
-          clearInterval(this.progressIntervalId);
-          this.progress = 0;
-        },
-
-        setParamsAndRunQuery() {
-          const queryString = window.location.search;
-          const urlParams = new URLSearchParams(queryString);
-
-          const station_id = urlParams.get('station_id')
-          const variable_id = urlParams.get('variable_id')
-          const month = urlParams.get('month')
-          const year = urlParams.get('year')
-
-          if(station_id != null && variable_id != null && month != null && year != null ){
-            this.currentData.month = month;
-            this.currentData.year = year;
-            this.currentData.station_id = station_id;
-            this.currentData.variable_id = variable_id;
-
-            this.fetchVariableDetailsLink()
-          }
-        },
       },
-      
-      mounted() {
-        axios.defaults.xsrfHeaderName = "X-CSRFToken"
-        axios.defaults.xsrfCookieName = 'csrftoken'
 
-        window.addEventListener("load", () => {
-          this.setParamsAndRunQuery();
+      getPercentageBarColor(value) {
+        return `hsl(${Math.round(4 + this.clampPercentage(value) * 1.17)}, 60%, 43%)`;
+      },
+
+      // Match the light shade used by yearly and monthly percentage tiles.
+      // The selected metric (completeness or QC) drives the entire day card.
+      getDayCardStyle(dayData) {
+        const style = this.getPercentageStyle(this.getDayPrimaryPercentage(dayData));
+        return {
+          backgroundColor: style.backgroundColor,
+          borderColor: style.borderColor
+        };
+      },
+
+      // Only the highlighted daily percentage changes; both values remain visible.
+      getDayPrimaryPercentage(dayData) {
+        return this.dailyMetric === 'qc'
+          ? dayData.qc_passed_percentage
+          : dayData.percentage;
+      },
+
+      refreshDailyInventory() {
+        if (this.currentData.station && this.currentData.variable && this.currentData.month) {
+          this.fetchVariableDetails(this.currentData.month, this.currentData.variable);
+        }
+      },
+
+      handleWindowFocus() {
+        // Refresh when returning from the validation tab; avoid repeated heavy polling.
+        if (this.pendingValidationRefresh && this.pageStage === 'thirdLevel' &&
+            !this.loading && Date.now() - this.validationTabOpenedAt > 1500) {
+          this.pendingValidationRefresh = false;
+          this.refreshDailyInventory();
+        }
+      },
+
+      getYearPercentage(station, year) {
+        const value = station.yearSet && station.yearSet[year];
+        return value === null || value === undefined ? null : Number(value);
+      },
+
+      // A missing monthly summary is reported as zero, consistent with the backend.
+      getMonthPercentage(variable, month) {
+        const value = variable.monthSet && variable.monthSet[month];
+        return value === null || value === undefined ? 0 : Number(value);
+      },
+
+      // Prefer the station offset when supplied by the API; fall back to
+      // SURFACE's configured timezone for display-only future-month checks.
+      isFutureMonth(month) {
+        let current = this.currentReportingYearMonth;
+        const station = this.currentData.station;
+        if (station && station.utc_offset_minutes !== null &&
+            station.utc_offset_minutes !== undefined) {
+          const offset = Number(station.utc_offset_minutes);
+          if (Number.isFinite(offset)) {
+            const stationNow = new Date(Date.now() + offset * 60000);
+            current = { year: stationNow.getUTCFullYear(), month: stationNow.getUTCMonth() + 1 };
+          }
+        }
+        const year = Number(this.currentData.year);
+        return year > current.year || (year === current.year && month > current.month);
+      },
+
+      goToOverview() {
+        this.pendingValidationRefresh = false;
+        this.stopTaskPolling();
+        this.loading = false;
+        this.pageStage = 'firstLevel';
+      },
+
+      goToMonthlyOverview() {
+        this.pendingValidationRefresh = false;
+        this.stopTaskPolling();
+        this.loading = false;
+        this.pageStage = this.variableSet.length ? 'secondLevel' : 'firstLevel';
+      },
+
+      getInventoryDayRange(day) {
+        // The target views accept reporting dates, not UTC instants.
+        const start = moment(`${this.currentData.year}-${this.currentData.month}-${day}`, 'YYYY-M-D', true);
+        return {
+          startDate: start.format('YYYY-MM-DD'),
+          endDate: start.clone().add(1, 'day').format('YYYY-MM-DD')
+        };
+      },
+
+      goToDataValidation(day) {
+        const range = this.getInventoryDayRange(day);
+        const params = new URLSearchParams({
+          start_date: range.startDate,
+          end_date: range.endDate,
+          start_time: "00:00:001", // because 00:00:00 is counted as in the previous day
+          end_time: "00:00",
+          station_id: this.currentData.station.id,
+          variable_id: this.currentData.variable.id
+        });
+        this.pendingValidationRefresh = true;
+        this.validationTabOpenedAt = Date.now();
+        window.open('/wx/quality_control/validation?' + params.toString(), '_blank', 'noopener');
+      },
+
+      goToStationReport(day) {
+        const variableName = this.currentData.variable.measurement_variable_name;
+        if (!variableName) return;
+        const range = this.getInventoryDayRange(day);
+        const params = new URLSearchParams({
+          start_date: range.startDate,
+          end_date: range.endDate,
+          station_id: this.currentData.station.id,
+          measurement_variable: variableName
+        });
+        window.open('/wx/products/station_report/?' + params.toString(), '_blank', 'noopener');
+      },
+
+      getDataInventory() {
+        this.request_info = false;
+
+        const start = Number(this.requestObject.start_year);
+        const end = Number(this.requestObject.end_year);
+        this.clearAlerts();
+
+        // The API's end_year is exclusive; a 10-year range is allowed.
+        if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1900 || end <= start) {
+          this.request_warning = true;
+          this.request_warning_message = 'Enter a valid year range. The end year must be later than the start year.';
+          return;
+        }
+        if (end - start > 10) {
+          this.request_warning = true;
+          this.request_warning_message = 'Maximum year range allowed is 10 years.';
+          return;
+        }
+
+        this.stopTaskPolling();
+        this.loading = true;
+        this.loadingMessage = 'Loading station inventory...';
+
+        axios.get('/api/data_inventory/', {
+          params: {
+            start_date: start,
+            end_date: end,
+            is_automatic: this.requestObject.is_automatic
+          }
+        }).then(response => {
+          const stationMap = {};
+          const regionMap = {};
+          const years = new Set();
+
+          this.rawStationData = response.data;
+          response.data.forEach(record => {
+            const stationId = record.station.id;
+            if (!stationMap[stationId]) {
+              const station = Object.assign({}, record.station, {
+                yearSet: {},
+                filterName: (record.station.name + ' ' + (record.station.code || '')).toLowerCase(),
+                begin_date_formatted: record.station.begin_date
+                  ? moment.utc(record.station.begin_date).format('YYYY-MM-DD') : null
+              });
+              stationMap[stationId] = station;
+              const region = station.region || 'Others';
+              if (!regionMap[region]) regionMap[region] = [];
+              regionMap[region].push(station);
+            }
+            // Record every year, not just the first year encountered for each station.
+            years.add(Number(record.year));
+            stationMap[stationId].yearSet[record.year] = record.percentage;
+          });
+
+          Object.keys(regionMap).forEach(region => {
+            regionMap[region].sort((a, b) => a.name.localeCompare(b.name));
+          });
+
+          this.stations = Object.values(stationMap);
+          this.regionSet = regionMap;
+          this.availableYears = Array.from(years).sort((a, b) => a - b);
+          this.selectedRegion = 'All';
+          this.display_start_year = start;
+          this.display_end_year = end;
+          this.stationNameFilter = '';
+          this.hasSearched = true;
+          this.pageStage = 'firstLevel';
+        }).catch(error => {
+          this.showError(error, 'Could not load station inventory.');
+        }).finally(() => {
+          this.loading = false;
         });
       },
-    });
-  </script>
 
-  <style>
-        .info_box {
-          width: 100%;
-          max-width: 250px;
-          padding: 8px 16px;
-          
-          border: 1px solid #2196f3;
-          border-radius: 4px;
-          
-          background-color: rgba(33, 150, 243, 0.075); 
-          color: #0890ff;
+      fetchVariables(year, station, percentage) {
+        if (percentage === null || percentage === undefined) return;
+        this.clearAlerts();
+        this.stopTaskPolling();
+        this.loading = true;
+        this.loadingMessage = 'Loading monthly completeness...';
 
+        axios.get('/api/station_variable_data_month_inventory/', {
+          params: { year: year, station_id: station.id }
+        }).then(response => {
+          const variableMap = {};
+          response.data.forEach(record => {
+            if (!variableMap[record.variable.id]) {
+              variableMap[record.variable.id] = Object.assign({}, record.variable, { monthSet: {} });
+            }
+            variableMap[record.variable.id].monthSet[Number(record.month)] = record.percentage;
+          });
+          this.variableSet = Object.values(variableMap).sort((a, b) => a.name.localeCompare(b.name));
+          this.currentData = { year, station, percentage, variable: null, month: null };
+          this.pageStage = 'secondLevel';
+        }).catch(error => this.showError(error, 'Could not load monthly inventory.'))
+          .finally(() => { this.loading = false; });
+      },
+
+      fetchVariableDetails(month, variable) {
+        this.clearAlerts();
+        this.stopTaskPolling();
+        this.loading = true;
+        this.loadingMessage = 'Preparing daily inventory...';
+        this.currentData.month = month;
+        this.currentData.variable = variable;
+
+        axios.get('/api/station_variable_data_day_inventory/', {
+          params: {
+            year: this.currentData.year,
+            month: month,
+            station_id: this.currentData.station.id,
+            variable_id: variable.id
+          }
+        }).then(response => {
+          if (!response.data.task_id) throw new Error('No task ID returned from the server.');
+          this.pollFetchVariableTask(response.data.task_id);
+        }).catch(error => {
+          this.loading = false;
+          this.showError(error, 'Could not start the daily inventory request.');
+        });
+      },
+
+      stopTaskPolling() {
+        if (this.pollingIntervalId !== null) {
+          clearInterval(this.pollingIntervalId);
+          this.pollingIntervalId = null;
         }
+        this.activeTaskId = null;
+      },
 
-        .v-expansion-panel-content__wrap {
-          padding: 0;
-        }
+      // Poll Celery until the daily calendar is ready. Clear the interval on every exit.
+      pollFetchVariableTask(taskId) {
+        this.stopTaskPolling();
+        this.activeTaskId = taskId;
+        this.loadingMessage = 'Calculating daily completeness...';
+        let requestInFlight = false;
 
-        .v-expansion-panel-header {
-          padding: 0;
-        }
+        const check = () => {
+          if (requestInFlight || this.activeTaskId !== taskId) return;
+          requestInFlight = true;
+          axios.get(`/api/task/${encodeURIComponent(taskId)}/`)
+            .then(response => {
+              if (this.activeTaskId !== taskId) return;
+              if (response.data.status === 'completed') {
+                const data = Array.isArray(response.data.data) ? response.data.data : [];
+                // Sunday=0. Leading blanks align day 1 under its weekday.
+                const leadingBlanks = data.length ? Number(data[0].dow) : 0;
+                this.calendarCells = Array(leadingBlanks).fill(null).concat(data);
+                this.stopTaskPolling();
+                this.pageStage = 'thirdLevel';
+                this.loading = false;
+              } else if (response.data.status === 'failed') {
+                this.stopTaskPolling();
+                this.loading = false;
+                this.showError(new Error(response.data.error || 'Daily inventory task failed.'));
+              }
+            })
+            .catch(error => {
+              if (this.activeTaskId !== taskId) return;
+              this.stopTaskPolling();
+              this.loading = false;
+              this.showError(error, 'Unable to check daily inventory status.');
+            })
+            .finally(() => { requestInFlight = false; });
+        };
 
-        .surface-main-cell {
-          min-width: 10vw;
-          max-width: 10vw;
-          width: 10vw;
-          border: none !important;
-          font: 15px Roboto, sans-serif !important;
-          color: #000000 !important;
-        }
+        check();
+        this.pollingIntervalId = setInterval(check, 1000);
+      },
 
-        .surface-main-variable-cell {
-          font: 13px Roboto, sans-serif !important;
-        }
+      // Support a URL pointing directly to a station, variable, month and year.
+      setParamsAndRunQuery() {
+        const params = new URLSearchParams(window.location.search);
+        const stationId = Number(params.get('station_id'));
+        const variableId = Number(params.get('variable_id'));
+        const month = Number(params.get('month'));
+        const year = Number(params.get('year'));
+        if (!stationId || !variableId || month < 1 || month > 12 || !year) return;
 
-        .surface-detail-cell {
-          min-width: 1vw;
-          max-width: 1vw;
-          border-bottom: none !important;
-          margin-left: 2px !important;
-          width: 1vw;
-          text-align: center !important;
-          vertical-align: middle;
-          font: 15px Roboto, sans-serif !important;
-          color: #000000 !important;
-        }
+        const namedVariable = this.variable_list.find(item => Number(item.variable) === variableId);
+        this.currentData = {
+          station: { id: stationId, name: `Station ${stationId}`, code: '', is_automatic: null },
+          variable: { id: variableId, name: namedVariable ? namedVariable.variable_name : `Variable ${variableId}`, measurement_variable_name: null },
+          year,
+          month,
+          percentage: null
+        };
+        this.fetchVariableDetails(month, this.currentData.variable);
+      }
+    },
 
-        .surface-value-detail-cell {
-          min-width: 1vw;
-          max-width: 1vw;
-          border-bottom: none !important;
-          width: 1vw;
-          text-align: center !important;
-          vertical-align: middle !important;
-          font: 15px Roboto, sans-serif !important;
-          color: #000000 !important;
-          padding: 4px 2px 0 0 !important;
-        }
+    mounted() {
+      axios.defaults.xsrfHeaderName = 'X-CSRFToken';
+      axios.defaults.xsrfCookieName = 'csrftoken';
+      this.setParamsAndRunQuery();
+      window.addEventListener('focus', this.handleWindowFocus);
+    }
+  });
+</script>
 
-        .surface-value-detail-cell-wide {
-          min-width: 1vw;
-          max-width: 1vw;
-          border-bottom: none !important;
-          width: 1vw;
-          text-align: center !important;
-          vertical-align: middle !important;
-          font: 15px Roboto, sans-serif !important;
-          color: #000000 !important;
-          padding-top: 4px !important;
-        }
 
-        .surface-station-details {
-          font: 13px Roboto, sans-serif !important;
-          color: rgba(0,0,0,.5) !important;
-          padding-bottom: 1vh;
-        }
+<style>
+  [v-cloak] { display: none !important; }
+  /* Minimal SURFACE presentation: white workspace, plain tables, blue actions. */
+  .inv2-page, .inv2-app, .inv2-content { width: 100%; background: #fff !important; }
+  .inv2-shell { padding: 10px 18px 42px; color: #303030; }
+  .inv2-heading { margin: 0 0 18px; }
+  .inv2-title { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.08; }
+  .inv2-title .srf-display-1, .inv2-title .srf-display-2 { display: block; }
 
-        .theme--light.v-expansion-panels .v-expansion-panel:not(:first-child)::after {
-          border: none;
-        }
+  .inv2-querybar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 0 0 12px; }
+  .inv2-query-field { width: 155px; }
+  .inv2-query-field .v-input { margin-top: 0; }
+  .inv2-query-type { display: flex; align-items: center; }
+  
+  /* Compact metric selector */
+  .inv2-metric-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+  }
 
-        .value-cell {
-          width: 100%;
-          height: 100%;
-          text-align: center !important;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          border-radius: 5px;
-        }
+  .inv2-metric-pill.v-btn {
+      height: 34px !important;
+      padding: 0 18px !important;
+      text-transform: none;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: normal;
+      box-shadow: none !important;
+  }
 
-        .month-main-cell {
-          min-width: 25vw;
-          max-width: 25vw;
-          width: 25vw;
-          border: none !important;
-          font: 14px Roboto, sans-serif !important;
-          color: #000000 !important;
-        }
+  /* Completeness - Green */
+  .inv2-metric-completeness.v-btn {
+      background: #e8f5e9 !important;
+      color: #2e7d32 !important;
+  }
 
-        .month-cell {
-          min-width: 5vw;
-          max-width: 5vw;
-          width: 5vw;
-          border: none !important;
-          text-align: center !important;
-          vertical-align: middle !important;
-          font: 15px Roboto, sans-serif !important;
-          color: #000000 !important;
-        }
+  .inv2-metric-completeness.inv2-metric-active.v-btn {
+      background: #4caf50 !important;
+      color: #fff !important;
+  }
 
-        .month-value-detail-cell {
-          padding: 4px 2px 0 0 !important;
-        }
+  /* QC Passed - Blue */
+  .inv2-metric-qc.v-btn {
+      background: #e3f2fd !important;
+      color: #1565c0 !important;
+  }
 
-        .month-value-detail-cell:hover {
-          cursor: pointer !important;
-        }
+  .inv2-metric-qc.inv2-metric-active.v-btn {
+      background: #2196f3 !important;
+      color: #fff !important;
+  }
 
-        tr:hover {
-          background-color: transparent !important;
-        }
+  /* Keep button text consistent with its selected state */
+  .inv2-metric-pill.v-btn .v-btn__content {
+      color: inherit !important;
+  }
 
-        .calendar-value {
-          padding-bottom: 5px;
-        }
+  .inv2-search-action, .inv2-refresh-action { letter-spacing: 0 !important; text-transform: none !important; }
+  .inv2-search-action { margin-left: auto !important; }
+  .inv2-date-caption { display: flex; align-items: center; gap: 7px; color: #757575; font-size: 12px; margin: 10px 0 22px; }
+  .inv2-alert { margin-bottom: 12px; }
 
-        .calendar-details {
-          background-color: rgba(220, 220, 220, .5);
-          margin: 2px 5px 0px 5px;
-          border-radius: 5px;
-          padding-bottom: 4px;
-        }
+  /* Compact informational notes beneath the search filters */
+  .inv2-inventory-notes {
+      margin: 10px 0 22px;
+  }
 
-        .calendar-button {
-          background-color: rgb(120, 120, 120);
-          margin: 2px 10px 2px 10px;
-          padding: 4px 0px 4px 0px;
-          border-radius: 5px;
-          font: 14px Roboto, sans-serif !important;
-          color: rgb(220, 220, 220) !important;
-        }
+  .inv2-inventory-notes .inv2-date-caption {
+      margin: 0 0 6px;
+      align-items: flex-start;
+      line-height: 1.5;
+  }
 
-        .calendar-button:hover {
-          background-color: rgb(140, 140, 140);
-          cursor: pointer;
-        }
-  </style>
-</div>
+  .inv2-inventory-notes .inv2-date-caption:last-child {
+      margin-bottom: 0;
+  }
+
+  .inv2-inventory-notes .v-icon {
+      flex-shrink: 0;
+  }
+
+  .inv2-workbench, .inv2-workspace, .inv2-panel { width: 100%; min-width: 0; }
+  /* Simple station context, without bringing back the region explorer/dashboard. */
+  .inv2-workbench.inv2-with-station { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 22px; align-items: start; }
+  .inv2-station-sidebar { padding: 15px 15px 16px; border: 1px solid #e3e5e8; border-radius: 4px; background: #fff; position: sticky; top: 16px; }
+  .inv2-sidebar-heading { font-size: 12px; color: #1976d2; font-weight: 500; margin-bottom: 9px; }
+  .inv2-sidebar-station { margin: 0; font-size: 16px; font-weight: 500; line-height: 1.35; color: #333; }
+  .inv2-sidebar-code { font-size: 12px; color: #777; margin: 4px 0 15px; }
+  .inv2-sidebar-facts { margin: 0; }
+  .inv2-sidebar-facts > div { padding: 8px 0; border-top: 1px solid #f0f0f0; }
+  .inv2-sidebar-facts dt { color: #777; font-size: 11px; margin-bottom: 2px; }
+  .inv2-sidebar-facts dd { margin: 0; color: #333; font-size: 13px; overflow-wrap: anywhere; }
+  .inv2-sidebar-navigation { display: flex; flex-direction: column; gap: 8px; margin-top: 17px; }
+  .inv2-sidebar-navigation .v-btn { margin: 0 !important; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .inv2-panel-heading { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px; margin: 0 0 15px; }
+  .inv2-panel-heading h2 { margin: 0 0 4px; font-size: 18px; font-weight: 500; color: #333; }
+  .inv2-panel-heading p { margin: 0; color: #777; font-size: 12px; }
+  .inv2-light-heading { color: #777; font-weight: 400; }
+  .inv2-header-controls, .inv2-day-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .inv2-region-select { width: 190px; max-width: 100%; }
+  .inv2-station-search { width: 255px; max-width: 100%; }
+  .inv2-header-controls .v-input { margin-top: 0; }
+  .inv2-missing { color: #a9a9a9; }
+
+  /* Matrices keep the original SURFACE table feel while remaining scrollable. */
+  .inv2-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .inv2-table-frame { border: 1px solid #e5e5e5; border-radius: 3px; }
+  .inv2-matrix { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  .inv2-year-table { min-width: 720px; }
+  .inv2-month-table { min-width: 1420px; }
+  .inv2-matrix th, .inv2-matrix td { padding: 7px 8px; border-bottom: 1px solid #eeeeee; }
+  .inv2-matrix tbody tr:last-child > * { border-bottom: none; }
+  .inv2-matrix thead th { background: #f5f5f5; color: #555; height: 38px; text-align: center; font-size: 12px; font-weight: 500; }
+  .inv2-matrix tbody th { font-weight: 400; text-align: left; }
+  .inv2-matrix .inv2-col-station, .inv2-matrix .inv2-col-variable { position: sticky; left: 0; z-index: 2; min-width: 210px; width: 210px; text-align: left; background: #fff; box-shadow: 1px 0 #eee; padding-left: 12px; }
+  .inv2-matrix thead .inv2-col-station, .inv2-matrix thead .inv2-col-variable { z-index: 3; background: #f5f5f5; }
+  .inv2-matrix .inv2-col-region { width: 125px; min-width: 125px; color: #666; font-size: 12px; }
+  .inv2-matrix .inv2-col-value { width: 109px; min-width: 109px; text-align: center; }
+  .inv2-month-table .inv2-col-value { width: 100px; min-width: 100px; }
+  .inv2-matrix tbody th strong { display: block; color: #333; font-size: 13px; font-weight: 500; }
+  .inv2-matrix tbody th small { display: block; margin-top: 2px; color: #888; font-size: 11px; }
+  .inv2-matrix tbody tr:hover > * { background: #fafafa; }
+  .inv2-matrix tbody tr:hover > .inv2-col-station, .inv2-matrix tbody tr:hover > .inv2-col-variable { background: #fafafa; }
+  .inv2-heatcell { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 35px; border: 1px solid; border-radius: 4px; padding: 6px 5px; cursor: pointer; background: #fafafa; }
+  .inv2-heatcell strong { font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .inv2-heatcell:hover { filter: brightness(.97); }
+  .inv2-heatcell:focus-visible { outline: 2px solid #1976d2; outline-offset: 2px; }
+  .inv2-table-note, .inv2-calendar-footnote { margin: 9px 0 0; font-size: 12px; color: red }
+  .inv2-empty { text-align: center; border: 1px solid #e5e5e5; padding: 35px 12px; color: #777; }
+  .inv2-empty h3 { color: #555; margin: 7px 0; font-size: 15px; font-weight: 500; }
+  .inv2-empty p { margin: 0; font-size: 12px; }
+
+  /* Day cards use the metric's full background color; avoid extra visual effects. */
+  .inv2-calendar-scroll { border: 1px solid #e5e5e5; padding: 8px; border-radius: 3px; }
+  .inv2-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(118px, 1fr)); min-width: 840px; gap: 5px; }
+  .inv2-weekday { text-align: center; background: #f5f5f5; padding: 8px 3px; font-size: 12px; color: #555; font-weight: 500; }
+  .inv2-day-blank { background: #fafafa; }
+  .inv2-day-card { display: flex; flex-direction: column; min-height: 172px; border: 1px solid; border-radius: 4px; padding: 10px; }
+  .inv2-day-top { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-bottom: 10px; }
+  .inv2-day-number { font-size: 18px; font-weight: 600; color: #222; }
+  .inv2-day-primary { background: rgba(255,255,255,.52); border-radius: 3px; padding: 3px 5px; color: #333; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .inv2-day-stats { display: flex; flex-direction: column; gap: 6px; }
+  .inv2-day-stats > div { display: flex; justify-content: space-between; gap: 5px; font-size: 11px; color: #333; line-height: 1.25; }
+  .inv2-day-stats strong { font-size: 11px; font-weight: 600; text-align: right; }
+  .inv2-day-received { border-top: 1px solid rgba(0,0,0,.12); margin-top: 4px; padding-top: 7px; }
+  .inv2-day-actions { margin-top: auto; padding-top: 12px; display: flex; flex-wrap: wrap; gap: 7px 12px; }
+  .inv2-day-actions button { background: transparent; border: 0; padding: 0; font-size: 11px; color: #165d9d; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
+  .inv2-day-actions button:hover { text-decoration: underline; }
+  .inv2-day-actions .v-icon { color: inherit; }
+  .inv2-welcome { border: 1px solid #e5e5e5; border-radius: 3px; padding: 18px; font-size: 13px; color: #666; }
+  .inv2-loading { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #fff; }
+  @media (max-width: 980px) {
+    .inv2-workbench.inv2-with-station { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+    .inv2-station-sidebar { position: static; }
+    .inv2-sidebar-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); column-gap: 14px; }
+    .inv2-sidebar-navigation { flex-direction: row; flex-wrap: wrap; }
+    .inv2-sidebar-navigation .v-btn { width: auto !important; min-width: 150px; }
+  }
+  @media (max-width: 700px) {
+    .inv2-shell { padding: 10px 10px 32px; }
+    .inv2-query-field { width: calc(50% - 10px); }
+    .inv2-header-controls { width: 100%; }
+    .inv2-region-select, .inv2-station-search { flex: 1 1 170px; width: auto; }
+    .inv2-day-controls { width: 100%; }
+  }
+</style>
 {% endblock %}
