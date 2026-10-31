@@ -1,277 +1,247 @@
 {% extends "base.html" %} {% block content %} {% load static %} {% load material_form %} {% load wx_filters%}
 
-<div class="srf-container">
-    <!-- Heading -->
-    <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-        <span class="srf-display-1 text-uppercase">Data Capture</span><br /><br />
-        <span class="srf-display-2 text-uppercase">Synop Capture</span>
-    </div>
+<div class="srf-container sc-page">
+    <div id="app" v-cloak>
+        <v-app class="sc-app">
+            <main class="sc-shell">
 
-    <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
-        
-        <v-app>
-            <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
-            <div style="width: 50%;" class="mb-5">
-                <v-alert
-                    type="info"
-                    dense
-                    text
-                    color="purple"
-                >
-                    Note: All dates and times shown are in the selected <b>station's local time.</b>
-                </v-alert>
-            </div>
+                <!-- Page heading: same layout language as Monthly Capture and Data Inventory. -->
+                <header class="sc-heading">
+                    <div class="sc-eyebrow">Data Capture</div>
+                    <span class="srf-display-1 text-uppercase">Synop Capture</span>
+                    <p>Review and enter hourly synoptic observations for your selected station and reporting day.</p>
+                </header>
 
-            <!-- station and date picker -->
-            <form enctype="multipart/form-data" method="POST" class="mb-10">
-                {% csrf_token %}
-                <div class="fieldWrapper">
-                    <v-row>
-                        <!-- station selector -->
-                        <v-flex sm1 md3  lg3 class="d-flex justify-between mr-5">
-                            <v-autocomplete
-                                label="Synoptic Station"
-                                :items="stationList"
-                                item-value="id"
-                                item-text="name"
-                                v-model="requestData.stationId"
-                                :disabled="draft"
-                                required
-                                outlined
-                                dense
-                                hint="*Required"
-                                persistent-hint
-                            >
-                            </v-autocomplete> 
-                        </v-flex>    
-
-                        <!-- date picker -->
-                        <v-flex sm1 md3 lg3 class="d-flex justify-between">                
-                            <v-menu
-                                :close-on-content-click="false"
-                                :disabled="draft"
-                                v-model="datepicker_menu"
-                                :nudge-right="40"
-                                transition="scale-transition"
-                                offset-y
-                                class="max-50"
-                            >
-                                <template v-slot:activator="{ on }">
-                                    <v-text-field
-                                        :disabled="draft"
-                                        v-model="requestData.date"
-                                        label="Date"
-                                        prepend-icon="event"
-                                        v-on="on"
-                                        required
-                                        outlined
-                                        dense
-                                        hint="*Required"
-                                        persistent-hint
-                                        :rules="textFieldsRules"
-                                    >
-                                    </v-text-field>
-                                </template>
-
-                                <v-date-picker
-                                    name="date"
-                                    v-model="requestData.date"
-                                    @input="datepicker_menu = false"
-                                    :allowed-dates="allowedDates"
-                                >
-                                </v-date-picker>
-                            </v-menu>
-                        </v-flex>
-                    </v-row>
-
-                    <v-row class="mt-5">
-                        <v-btn class="ml-2" :disabled="draft" outlined @click="fetchData()" class="btn-outline-default" color="blue"> Load </v-btn>
-                        <v-btn class="ml-2" :disabled="!draft" outlined @click="fetchData()" class="btn-outline-default" color="red"> Cancel </v-btn>
-                    </v-row>
-                </div>
-            </form>
-
-            <!-- The buttons -->
-            <div class="mt-5">
-                <!-- utc change button -->
-                <v-btn
-                    v-show="!hideTable"
-                    class="ml-2"
-                    outlined
-                    color="info"
-                    @click="toggleTimeMode"
-                    style="margin-bottom: 10px;"
-                >
-                    [[ useUTC ? 'UTC' : 'Local' ]]
-                    <v-icon right dark>mdi-clock-outline</v-icon>
-                </v-btn>
-
-                <!-- go to the configuration page for the synop form -->
-                {% if request|has_any_feature_permission:"configuration-settings:write" %}
-                <v-btn
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    outlined 
-                    @click="goToConfigSynopForm" 
-                    class="btn-outline-default"
-                    color="purple"
-                    style="margin-bottom: 10px;"
-                >
-                    Configure Synop Form
-                    <v-icon right dark>mdi-cog</v-icon>
-                </v-btn>
-                {% endif %}
-
-                <!-- theme switch button -->
-                <!-- <v-btn
-                    v-show="!hideTable"
-                    class="ml-2"
-                    outlined
-                    @click="toggleTheme"
-                    color="purple"
-                    style="margin-bottom: 10px;"
-                >
-                    Table Style
-                    <v-icon right dark>sync</v-icon>
-                </v-btn> -->
-
-                <!-- save button -->
-                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
-                <v-btn 
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    :disabled="!(draft && valid)" 
-                    outlined @click="updateData()" 
-                    class="btn-outline-default" 
-                    color="green"
-                    style="margin-bottom: 10px;"
-                > 
-                    Save 
-                    <v-icon right dark>save</v-icon>
-                </v-btn>
-                {% endif %}
-
-                <!-- delete rows btn -->
-                {% if request|has_any_feature_permission:"synop-capture-form:delete" %}
-                <v-btn
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    :disabled="!hasSelection || loading"
-                    outlined 
-                    @click="deleteSelectedRows" 
-                    class="btn-outline-default"
-                    color="red"
-                    style="margin-bottom: 10px;"
-                >
-                    Delete Selected
-                    <v-icon right dark>mdi-delete</v-icon>
-                </v-btn>
-                {% endif %}
-
-                <!-- push to wis2box button -->
-                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
-                <v-btn 
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    :disabled="!wis2PublishControl.publishing" 
-                    @click="handlePushClick()" 
-                    class="" 
-                    color="success"
-                    style="margin-bottom: 10px;"
-                > 
-                    Push to WIS2
-                    <v-icon right dark>send</v-icon>
-                </v-btn>
-                {% endif %}
-
-                <!-- export csv button -->
-                {% if request|has_any_feature_permission:"synop-capture-form:write" %}
-                <v-btn 
-                    v-show="!hideTable"
-                    class="ml-2" 
-                    outlined 
-                    @click="exportToCSV()"
-                    class="btn-outline-default" 
-                    color="black"
-                    style="margin-bottom: 10px;"
-                > 
-                    Export CSV
-
-                    <v-icon
-                        right
-                        dark
-                    >
-                        mdi-download
-                    </v-icon>
-                </v-btn>
-                {% endif %}
-
-            </div>
-
-            <!-- push now settings Dialog -->
-            <v-dialog v-model="dialogPushNow" max-width="750" persistent>
-                <v-card>
-                    <v-card-title>Push to WIS2BOX</v-card-title>
-
-                    <!-- logs lenght of time notice -->
-                    <v-scroll-x-transition>
-                        <v-alert 
-                            type="warning" 
-                            icon="warning"
-                            dense
-                            class="mt-2"
-                            rounded="0"
-                            dismissible
-                        >
-                            Go to the WIS2 Dashboard to see the Logs
-                        </v-alert>
-                    </v-scroll-x-transition>
-
-
-                    <div style="min-height: 4px;" class="ml-3 mr-3 mb-5 mt-5">
-                        <v-progress-linear
-                            v-model="progressLinear"
-                            :active="progressLinearShow"
-                            :indeterminate="progressLinearQuery"
-                            :query="true"
-                            height="25"
-                            stripped
-                            style="border-radius: 20px !important;"
-                        >
-                            <strong style="color: white;">[[ progressLinear ]]% Pushing to WIS2 </strong>
-                        </v-progress-linear>
+                <!-- Search form: existing station/date selection and load logic are preserved. -->
+                <section class="sc-query-panel" aria-label="Synoptic capture search options">
+                    <div class="sc-query-heading">
+                        <h2>Load synoptic observations</h2>
+                        <p>Choose a synoptic station and reporting date to open its capture sheet.</p>
                     </div>
 
-                    <v-card-actions>
-                        <v-btn color="red" dark @click="closePushNowDialog" class="mr-3">Close</v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>  
+                    <form enctype="multipart/form-data" method="POST">
+                        {% csrf_token %}
+                        <div class="sc-query-fields">
+                            <div class="sc-station-field">
+                                <v-autocomplete
+                                    label="Synoptic station"
+                                    :items="stationList"
+                                    item-value="id"
+                                    item-text="name"
+                                    v-model="requestData.stationId"
+                                    :disabled="draft"
+                                    required
+                                    outlined
+                                    dense
+                                    hint="*Required"
+                                    persistent-hint
+                                ></v-autocomplete>
+                            </div>
 
-            <!-- deletion confirmation dialog -->
-            <v-dialog v-model="confirmDeleteDialog" max-width="400">
-                <v-card>
-                    <v-card-title class="headline"> Confirm Deletion </v-card-title>
-                    
-                    <v-card-text>
-                        Are you sure you want to delete data?
-                        <!-- <strong>[[ pendingDeleteHours.join(', ') ]]</strong>? -->
-                    </v-card-text>
+                            <div class="sc-date-field">
+                                <v-menu
+                                    :close-on-content-click="false"
+                                    :disabled="draft"
+                                    v-model="datepicker_menu"
+                                    :nudge-right="40"
+                                    transition="scale-transition"
+                                    offset-y
+                                >
+                                    <template v-slot:activator="{ on }">
+                                        <v-text-field
+                                            :disabled="draft"
+                                            v-model="requestData.date"
+                                            label="Reporting date"
+                                            prepend-inner-icon="mdi-calendar-outline"
+                                            v-on="on"
+                                            required
+                                            outlined
+                                            dense
+                                            hint="*Required"
+                                            persistent-hint
+                                            :rules="textFieldsRules"
+                                        ></v-text-field>
+                                    </template>
+                                    <v-date-picker
+                                        name="date"
+                                        v-model="requestData.date"
+                                        @input="datepicker_menu = false"
+                                        :allowed-dates="allowedDates"
+                                    ></v-date-picker>
+                                </v-menu>
+                            </div>
 
-                    <v-card-actions>
-                        <v-spacer></v-spacer>
+                            <div class="sc-load-actions">
+                                <v-btn
+                                    color="primary"
+                                    depressed
+                                    height="40"
+                                    class="sc-action-btn"
+                                    :disabled="draft"
+                                    :loading="loading"
+                                    @click="fetchData()"
+                                >
+                                    <v-icon left small>mdi-table-arrow-down</v-icon>
+                                    Load observations
+                                </v-btn>
 
-                        <v-btn text color="grey" @click="confirmDeleteDialog = false">
-                            Cancel
+                                <v-btn
+                                    v-if="draft"
+                                    outlined
+                                    color="error"
+                                    height="40"
+                                    class="sc-action-btn"
+                                    :disabled="loading"
+                                    @click="fetchData()"
+                                >
+                                    <v-icon left small>mdi-close</v-icon>
+                                    Discard changes
+                                </v-btn>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+
+                <div class="sc-caption">
+                    <v-icon color="primary" size="16">mdi-information-outline</v-icon>
+                    <span>The reporting date uses the station's local time. Use the Local / UTC control to change the time displayed in the table.</span>
+                </div>
+
+                <div v-if="draft" class="sc-draft-note">
+                    <v-icon color="warning" size="17">mdi-alert-circle-outline</v-icon>
+                    <span>There are unsaved changes. Save your updates or discard them before selecting another station or date.</span>
+                </div>
+
+                <!-- Only the toolbar presentation changes; all existing methods and permissions stay. -->
+                <div v-show="!hideTable" class="sc-table-toolbar">
+                    <div class="sc-toolbar-primary">
+                        {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                        <v-btn
+                            depressed
+                            color="success"
+                            class="sc-action-btn"
+                            :disabled="!(draft && valid)"
+                            @click="updateData()"
+                        >
+                            <v-icon left small>mdi-content-save-outline</v-icon>
+                            Save changes
+                        </v-btn>
+                        {% endif %}
+
+                        {% if request|has_any_feature_permission:"synop-capture-form:delete" %}
+                        <v-btn
+                            outlined
+                            color="error"
+                            class="sc-action-btn"
+                            :disabled="!hasSelection || loading"
+                            @click="deleteSelectedRows"
+                        >
+                            <v-icon left small>mdi-delete-outline</v-icon>
+                            Delete selected
+                            <span v-if="selectedCount" class="ml-1">([[ selectedCount ]])</span>
+                        </v-btn>
+                        {% endif %}
+
+                        {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                        <v-btn
+                            outlined
+                            color="primary"
+                            class="sc-action-btn"
+                            :disabled="!wis2PublishControl.publishing"
+                            @click="handlePushClick()"
+                        >
+                            <v-icon left small>mdi-send-outline</v-icon>
+                            Push to WIS2
+                        </v-btn>
+                        {% endif %}
+                    </div>
+
+                    <div class="sc-toolbar-secondary">
+                        <v-btn outlined color="info" class="sc-action-btn" @click="toggleTimeMode">
+                            <v-icon left small>mdi-clock-outline</v-icon>
+                            [[ useUTC ? 'UTC' : 'Local' ]] time
                         </v-btn>
 
-                        <v-btn text color="red" @click="confirmDelete">
-                            Delete
+                        {% if request|has_any_feature_permission:"configuration-settings:write" %}
+                        <v-btn outlined color="purple" class="sc-action-btn" @click="goToConfigSynopForm">
+                            <v-icon left small>mdi-cog-outline</v-icon>
+                            Configure form
                         </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
+                        {% endif %}
 
+                        {% if request|has_any_feature_permission:"synop-capture-form:write" %}
+                        <v-btn outlined color="primary" class="sc-action-btn" @click="exportToCSV()">
+                            <v-icon left small>mdi-download</v-icon>
+                            Export CSV
+                        </v-btn>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Publication workflow retains its original task and progress bindings. -->
+                <v-dialog v-model="dialogPushNow" max-width="650" persistent>
+                    <v-card>
+                        <v-card-title class="sc-dialog-title">
+                            <v-icon color="primary" class="mr-2">mdi-cloud-upload-outline</v-icon>
+                            Push to WIS2
+                        </v-card-title>
+                        <v-divider></v-divider>
+                        <v-card-text class="pt-5">
+                            <div class="sc-dialog-info">
+                                <v-icon color="primary" size="17">mdi-information-outline</v-icon>
+                                <span>For publishing details and task logs, visit the WIS2 Dashboard.</span>
+                            </div>
+                            <div class="sc-publish-progress">
+                                <v-progress-linear
+                                    v-model="progressLinear"
+                                    :active="progressLinearShow"
+                                    :indeterminate="progressLinearQuery"
+                                    :query="true"
+                                    height="25"
+                                    striped
+                                    style="border-radius: 20px !important;"
+                                >
+                                    <strong style="color: white;">[[ progressLinear ]]% Pushing to WIS2</strong>
+                                </v-progress-linear>
+                            </div>
+                        </v-card-text>
+                        <v-card-actions class="px-5 pb-4">
+                            <v-spacer></v-spacer>
+                            <v-btn outlined color="primary" class="sc-action-btn" @click="closePushNowDialog">
+                                Close
+                            </v-btn>
+                        </v-card-actions>
+                    </v-card>
+                </v-dialog>
+
+                <!-- Existing deletion action, with a more specific confirmation message. -->
+                <v-dialog v-model="confirmDeleteDialog" max-width="440">
+                    <v-card>
+                        <v-card-title class="sc-dialog-title">
+                            <v-icon color="error" class="mr-2">mdi-delete-alert-outline</v-icon>
+                            Delete selected observations?
+                        </v-card-title>
+                        <v-divider></v-divider>
+                        <v-card-text class="pt-5">
+                            You are about to delete synoptic observations for
+                            <strong>[[ pendingDeleteHours.length ]] selected hour(s)</strong>.
+                            This action cannot be undone.
+                        </v-card-text>
+                        <v-card-actions class="px-5 pb-4">
+                            <v-spacer></v-spacer>
+                            <v-btn color="success" class="sc-action-btn"
+                                @click="confirmDeleteDialog = false">Cancel</v-btn>
+                            <v-btn depressed color="error" class="sc-action-btn"
+                                @click="confirmDelete">Delete observations</v-btn>
+                        </v-card-actions>
+                    </v-card>
+                </v-dialog>
+
+                <div v-if="hideTable" class="sc-empty-state">
+                    <v-icon size="36" color="blue-grey lighten-2">mdi-table-large</v-icon>
+                    <h3>No synoptic capture sheet loaded</h3>
+                    <p>Choose a station and reporting date, then load hourly observations.</p>
+                </div>
 
             <!-- ag grid -->
             <!-- Synop table grid container -->
@@ -309,6 +279,7 @@
 
 
 
+            </main>
         </v-app>
 
 
@@ -2334,5 +2305,52 @@
 </style>
 
 
+
+
+<!-- Page-only layout styles; all original AG Grid CSS remains unchanged. -->
+<style>
+    .sc-page { width: 100%; background: #fff; }
+    .sc-page .sc-app { background: #fff !important; }
+    .sc-shell { min-width: 0; padding: 10px 18px 42px; color: #303030; }
+
+    .sc-heading { margin: 0 0 20px; }
+    .sc-eyebrow { color: #1976d2; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
+    .sc-heading .srf-display-1 { display: block; margin: 0 0 10px; }
+    .sc-heading p { margin: 0; color: #757575; font-size: 13px; }
+
+    .sc-query-panel { padding: 17px 18px 8px; border: 1px solid #e5e7eb; border-radius: 5px; background: #fff; }
+    .sc-query-heading { margin-bottom: 17px; }
+    .sc-query-heading h2 { margin: 0 0 3px; font-size: 16px; font-weight: 500; color: #333; }
+    .sc-query-heading p { margin: 0; font-size: 12px; color: #757575; }
+    .sc-query-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 18px; }
+    .sc-station-field { flex: 0 1 390px; min-width: 240px; }
+    .sc-date-field { flex: 0 0 210px; max-width: 100%; }
+    .sc-load-actions { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px; margin-left: auto; }
+    .sc-action-btn.v-btn { text-transform: none !important; letter-spacing: 0 !important; font-size: 13px; }
+
+    .sc-caption { display: flex; align-items: flex-start; gap: 7px; margin: 10px 0 17px; color: #757575; font-size: 12px; line-height: 1.5; }
+    .sc-caption .v-icon, .sc-draft-note .v-icon, .sc-dialog-info .v-icon { flex-shrink: 0; }
+    .sc-draft-note { display: flex; align-items: flex-start; gap: 8px; margin: -4px 0 16px; color: #80621d; font-size: 12px; line-height: 1.5; }
+
+    .sc-table-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 11px 12px; margin: 0 0 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 5px; }
+    .sc-toolbar-primary, .sc-toolbar-secondary { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+    .sc-dialog-title { font-size: 18px !important; font-weight: 500; }
+    .sc-dialog-info { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #666; }
+    .sc-publish-progress { margin-top: 20px; min-height: 25px; }
+    .sc-empty-state { padding: 42px 15px; text-align: center; border: 1px solid #e5e7eb; border-radius: 4px; color: #757575; }
+    .sc-empty-state h3 { font-size: 15px; font-weight: 500; color: #4b5563; margin: 12px 0 5px; }
+    .sc-empty-state p { font-size: 12px; margin: 0; }
+
+    @media (max-width: 900px) {
+        .sc-load-actions { margin-left: 0; }
+        .sc-toolbar-secondary { margin-left: 0; }
+    }
+    @media (max-width: 650px) {
+        .sc-shell { padding: 10px 10px 32px; }
+        .sc-station-field, .sc-date-field { flex: 1 1 100%; width: 100%; }
+        .sc-load-actions { width: 100%; justify-content: flex-start; }
+        .sc-table-toolbar { align-items: flex-start; }
+    }
+</style>
 
 {% endblock %}
