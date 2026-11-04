@@ -1,38 +1,49 @@
 {% extends "base.html" %} {% block content %} {% load static %} {% load wx_filters %}
 
-<div class="srf-container" style="max-height: 280px">
-  <div
-    class="srf-flex flex-row align-items-center justify-content-between srf-padding"
-  >
-    <span class="srf-display-1 text-uppercase">Data Export</span><br /><br />
-  </div>
-  
-  <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
-    <v-app>
-      <!-- Notifying user that the time values entered must be in THE STATIONS LOCAL TIME -->
-      <div style="width: 50%;">
-          <v-alert
-              type="info"
-              dense
-              outlined
-              text
-              color="purple"
-          >
-            Note: All dates and times entered must be in <b>UTC.</b>
-          </v-alert>
-      </div>
+<div class="srf-container de-page">
 
+  <div id="app" class="de-app" v-cloak>
+    <header class="de-page-heading">
       <div>
-        <form class="col l12">
+        <span class="srf-display-1 text-uppercase">Data Export</span>
+        <p>Prepare station observations and summaries for download in CSV or Excel format.</p>
+      </div>
+    </header>
 
-          <!-- Form title -->
-          <h6>Station Filters</h6>
+    <v-app>
+      <main class="de-workspace">
+        <v-alert 
+          text
+          color="purple" 
+          dense 
+          icon="mdi-clock"
+          dark
+          dismissible  
+        >
+          <strong>[[ usesCalendarDates ? 'Station-local calendar periods' : 'UTC date and time' ]]</strong>
+          <span v-if="usesCalendarDates">Daily, monthly, and yearly boundaries use the station's calendar (no timezone conversion).</span>
+          <span v-else>Raw and hourly exports interpret the selected timestamps as UTC.</span>
+          <span> The start is included and the end is excluded.</span>
+        </v-alert>
 
+        <form class="de-form">
+          <!-- Station filtering and selection -->
+          <section class="de-section">
+            <div class="de-section-head">
+              <span class="de-section-step">01</span>
+              <div class="de-section-title">
+                <h2>Choose stations</h2>
+                <p>Filter by location and station type, then select the stations to export.</p>
+              </div>
+              <i class="material-icons-outlined de-section-symbol" aria-hidden="true">place</i>
+            </div>
+            <div class="de-section-body">
+              <div class="de-small-label">FILTER STATIONS</div>
           <!-- Row 1-->
-          <v-row dense justify="start" class="mb-3">
+          <v-row dense justify="start" class="de-filter-row">
             <!-- administrative region selector -->
-            <v-col class="text-center" cols="3">
-              <v-autocomplete
+            <v-col cols="12" sm="6" md="3">
+              <v-autocomplete outlined dense
                 item-text="name"
                 item-value="name"
                 v-model="filter.stationAdminRegion"
@@ -44,8 +55,8 @@
             </v-col>
 
             <!-- Watershed Selector -->
-            <v-col class="text-center" cols="3">
-              <v-autocomplete
+            <v-col cols="12" sm="6" md="3">
+              <v-autocomplete outlined dense
                 item-text="name"
                 item-value="name"
                 v-model="filter.stationWatershed"
@@ -57,8 +68,8 @@
             </v-col>
 
             <!-- Station Profile Selector -->
-            <v-col class="text-center" cols="2">
-              <v-autocomplete
+            <v-col cols="12" sm="6" md="2">
+              <v-autocomplete outlined dense
                 item-text="name"
                 item-value="id"
                 v-model="filter.stationProfile"
@@ -70,31 +81,33 @@
             </v-col>
 
             <!-- is active switch -->
-            <v-col class="text-center" cols="2">
+            <v-col cols="12" sm="6" md="2">
               <v-switch
                 inset
                 v-model="filter.isActive"
                 @change="invertValue(filter.isActive)"
-                label="Active"
+                :label="filter.isActive === true ? 'Active' : 'Inactive'"
               ></v-switch>
             </v-col>
 
             <!-- is automatic switch -->
-            <v-col class="text-center" cols="2">
+            <v-col cols="12" sm="6" md="2">
               <v-switch
                 inset
                 v-model="filter.isAutomatic"
                 @change="invertValue(filter.isAutomatic)"
-                label="Automatic"
+                :label="filter.isAutomatic === true ? 'Automatic' : 'Manual'"
               ></v-switch>
             </v-col>
           </v-row>
 
+              <div class="de-subsection-divider"></div>
+              <div class="de-small-label">STATION SELECTION</div>
           <!-- Row 2 -->
-          <v-row dense justify="start" class="pt-3">
+          <v-row dense justify="start" class="de-station-row">
             <!-- station search -->
-            <v-col class="text-center" cols="10">
-              <v-autocomplete
+            <v-col cols="12" md="9">
+              <v-autocomplete outlined dense
                 v-model="station"
                 :items="stationList"
                 :search-input.sync="searchStations"
@@ -110,9 +123,9 @@
             </v-col>
 
             <!-- select all station button -->
-            <v-col class="text-center" cols="2">
+            <v-col cols="12" md="3">
               <v-btn
-                class="ml-2"
+                class="de-select-all"
                 outlined
                 justify-end
                 color="primary"
@@ -122,11 +135,25 @@
             </v-col>
           </v-row>
 
+            </div>
+          </section>
+
+          <!-- Export source and variables -->
+          <section class="de-section">
+            <div class="de-section-head">
+              <span class="de-section-step">02</span>
+              <div class="de-section-title">
+                <h2>Data selection</h2>
+                <p>Choose the data source, interval or aggregation, and the variables to include.</p>
+              </div>
+              <i class="material-icons-outlined de-section-symbol" aria-hidden="true">tune</i>
+            </div>
+            <div class="de-section-body">
           <!-- Row 3 -->
-          <v-row dense justify="start" class="pt-3">
+          <v-row dense justify="start" class="de-fields-row">
             <!-- data source-->
-            <v-col class="text-center" :cols="6">
-              <v-select
+            <v-col cols="12" md="6">
+              <v-select outlined dense
                 v-model="source"
                 :items="sources"
                 label="Data Source"
@@ -136,8 +163,8 @@
             </v-col>
                     
             <!-- data interval -->
-            <v-col class="text-center" :cols="6" v-if="source.source === 'raw_data'">
-              <v-select
+            <v-col cols="12" md="6" v-if="source.source === 'raw_data'">
+              <v-select outlined dense
               v-model="dataInterval"
               :items="dataIntervals"
               label="Data Interval"
@@ -148,13 +175,13 @@
             </v-col>
 
             <!-- dropdown for aggregation -->
-            <v-col class="text-center" :cols="6" v-if="source.source != 'raw_data'">
-              <!-- <v-select
+            <v-col cols="12" md="6" v-if="source.source != 'raw_data'">
+              <!-- <v-select outlined dense
                 v-model="aggregation"
                 :items="aggregations"
                 label="Aggregation"
               ></v-select> -->
-              <v-autocomplete
+              <v-autocomplete outlined dense
                 v-model="aggregation"
                 :items="aggregations"
                 :search-input.sync="searchAggregations"
@@ -173,8 +200,8 @@
 
           <!-- Row 4 -->
           <v-row dense justify="start">
-            <v-col class="text-center" cols="12">
-              <v-autocomplete
+            <v-col cols="12">
+              <v-autocomplete outlined dense
                 v-model="variables"
                 :items="variable_list"
                 :search-input.sync="searchVariables"
@@ -190,113 +217,146 @@
             </v-col>
           </v-row>
 
-          <!-- Row 5 -->
-          <v-row dense justify="start">
-            <v-col class="text-center" cols="3">
-              <v-menu
-                :close-on-content-click="false"
-                v-model="initial_date_menu"
-                transition="scale-transition"
-                offset-y
-                class="max-50"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="initial_date"
-                    label="Initial date"
-                    prepend-icon="event"
-                    v-on="on"
-                    required
-                    persistent-hint
-                  ></v-text-field>
-                </template>
-                <v-date-picker
-                  v-model="initial_date"
-                  @input="initial_date_menu = false"
-                  :type="getDatepickFormat()"
-                  :allowed-dates="allowedDates"
-                ></v-date-picker>
-              </v-menu>
-            </v-col>
-            <v-col class="text-center" cols="3">
-              <v-menu
-                v-if="source.source === 'hourly_summary' || source.source === 'raw_data'"
-                :close-on-content-click="false"
-                v-model="initial_time_menu"
-                transition="scale-transition"
-                offset-y
-                class="max-50"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="initial_time"
-                    label="Initial time"
-                    v-on="on"
-                    prepend-icon="access_time"
-                    required
-                    persistent-hint
-                  ></v-text-field>
-                </template>
-                <v-time-picker v-model="initial_time"></v-time-picker>
-              </v-menu>
-            </v-col>
+            </div>
+          </section>
 
-            <v-col class="text-center" cols="3">
-              <v-menu
-                :close-on-content-click="false"
-                v-model="final_date_menu"
-                transition="scale-transition"
-                offset-y
-                class="max-50"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="final_date"
-                    label="Final date"
-                    v-on="on"
-                    required
-                    prepend-icon="event"
-                    persistent-hint
-                  ></v-text-field>
-                </template>
-                <v-date-picker
-                  v-model="final_date"
-                  @input="final_date_menu = false"
-                  :type="getDatepickFormat()"
-                  :allowed-dates="allowedDates"
-                ></v-date-picker>
-              </v-menu>
-            </v-col>
+          <!-- Reporting window -->
+          <section class="de-section">
+            <div class="de-section-head">
+              <span class="de-section-step">03</span>
+              <div class="de-section-title">
+                <h2>Reporting period</h2>
+                <p>Start included · End excluded. Use the first day/month/year <em>after</em> your desired period as the end.</p>
+              </div>
+              <i class="material-icons-outlined de-section-symbol" aria-hidden="true">date_range</i>
+            </div>
+            <div class="de-section-body">
+              <div class="de-small-label mb-5">
+                REPORTING RANGE 
+                <span class="de-utc-tag">[[ usesCalendarDates ? 'Station Local Time' : 'UTC' ]]</span>
+              </div>
+              
+              <!-- Row 5 -->
+              <v-row dense justify="start">
+                <v-col cols="12" sm="6" :md="usesCalendarDates ? 6 : 3">
+                  <v-menu
+                    :close-on-content-click="false"
+                    v-model="initial_date_menu"
+                    transition="scale-transition"
+                    offset-y
+                    class="de-date-menu"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field outlined dense
+                        v-model="initial_date"
+                        :label="source.source === 'yearly_summary' ? 'Start year (included)' : source.source === 'monthly_summary' ? 'Start month (included)' : 'Start date (included)'"
+                        prepend-icon="event"
+                        v-on="on"
+                        required
+                        persistent-hint
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
+                      v-model="initial_date"
+                      @input="initial_date_menu = false"
+                      :type="getDatepickFormat()"
+                      :allowed-dates="allowedDates"
+                    ></v-date-picker>
+                  </v-menu>
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-menu
+                    v-if="source.source === 'hourly_summary' || source.source === 'raw_data'"
+                    :close-on-content-click="false"
+                    v-model="initial_time_menu"
+                    transition="scale-transition"
+                    offset-y
+                    class="de-date-menu"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field outlined dense
+                        v-model="initial_time"
+                        label="Start time (included)"
+                        v-on="on"
+                        prepend-icon="access_time"
+                        required
+                        persistent-hint
+                      ></v-text-field>
+                    </template>
+                    <v-time-picker v-model="initial_time"></v-time-picker>
+                  </v-menu>
+                </v-col>
 
-            <v-col class="text-center" cols="3">
-              <v-menu
-                v-if="source.source === 'hourly_summary' || source.source === 'raw_data'"
-                :close-on-content-click="false"
-                v-model="final_time_menu"
-                transition="scale-transition"
-                offset-y
-                class="max-50"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="final_time"
-                    label="Final time"
-                    prepend-icon="access_time"
-                    v-on="on"
-                    required
-                    persistent-hint
-                  ></v-text-field>
-                </template>
-                <v-time-picker v-model="final_time"></v-time-picker>
-              </v-menu>
-            </v-col>
-          </v-row>
+                <v-col cols="12" sm="6" :md="usesCalendarDates ? 6 : 3">
+                  <v-menu
+                    :close-on-content-click="false"
+                    v-model="final_date_menu"
+                    transition="scale-transition"
+                    offset-y
+                    class="de-date-menu"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field outlined dense
+                        v-model="final_date"
+                        :label="source.source === 'yearly_summary' ? 'End year (excluded)' : source.source === 'monthly_summary' ? 'End month (excluded)' : 'End date (excluded)'"
+                        v-on="on"
+                        required
+                        prepend-icon="event"
+                        persistent-hint
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
+                      v-model="final_date"
+                      @input="final_date_menu = false"
+                      :type="getDatepickFormat()"
+                      :allowed-dates="allowedDates"
+                    ></v-date-picker>
+                  </v-menu>
+                </v-col>
 
+                <v-col cols="12" sm="6" md="3">
+                  <v-menu
+                    v-if="source.source === 'hourly_summary' || source.source === 'raw_data'"
+                    :close-on-content-click="false"
+                    v-model="final_time_menu"
+                    transition="scale-transition"
+                    offset-y
+                    class="de-date-menu"
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field outlined dense
+                        v-model="final_time"
+                        label="End time (excluded)"
+                        prepend-icon="access_time"
+                        v-on="on"
+                        required
+                        persistent-hint
+                      ></v-text-field>
+                    </template>
+                    <v-time-picker v-model="final_time"></v-time-picker>
+                  </v-menu>
+                </v-col>
+              </v-row>
+
+            </div>
+          </section>
+
+          <!-- Export quality rules and time display -->
+          <section class="de-section">
+            <div class="de-section-head">
+              <span class="de-section-step">04</span>
+              <div class="de-section-title">
+                <h2>Export options</h2>
+                <p>Control which observations qualify and how timestamps are displayed.</p>
+              </div>
+              <i class="material-icons-outlined de-section-symbol" aria-hidden="true">verified_user</i>
+            </div>
+            <div class="de-section-body">
           <!-- Row 6 -->
           <v-row dense justify="start">
             <!-- Choose the record filter independently of the exported numeric value. -->
             <v-col cols="12" md="6" v-if="source.source === 'raw_data'">
-              <v-select
+              <v-select outlined dense
                 v-model="exportMode"
                 :items="exportModes"
                 label="Export data"
@@ -309,23 +369,32 @@
             </v-col>
 
             <!-- Togglable switch to determine whether the output should be in local time of utc time -->
-            <v-col class="text-center" cols="auto" v-if="source.source === 'hourly_summary' || source.source === 'raw_data'">
+            <v-col cols="12" sm="6" md="3" v-if="source.source === 'hourly_summary' || source.source === 'raw_data'">
               <v-switch
                 inset
                 v-model="displayUTC"
                 label="Show in UTC"
+                :label="displayUTC === true ? 'Show in UTC' : 'Show in Station Local Time'"
               ></v-switch>
             </v-col>
           </v-row>
 
+            </div>
+          </section>
+
+          <section class="de-actions-panel" aria-label="Export actions">
+            <div class="de-actions-intro">
+              <h2>Generate export files</h2>
+              <p>Request CSV files or create one combined Excel workbook.</p>
+            </div>
           <!-- Action Buttons -->
-          <v-row dense justify="start" class="mt-5 pt-5">
+          <v-row dense justify="start" class="de-actions-row">
             <!-- Export to CSV button -->
-            <v-col class="text-center" cols="auto">
+            <v-col cols="auto">
               <v-btn
                 @click="exportCSV()"
-                color="primary"
-                :disabled="variables.length == 0 || station.length == 0"
+                color="primary" class="de-export-btn"
+                :disabled="variables.length == 0 || station.length == 0 || !validDateRange"
               >
                 Export
                 <i class="material-icons right">send</i>
@@ -333,11 +402,11 @@
             </v-col>
 
             <!-- Combine and Dowload .XLSX -->
-            <v-col class="text-center" cols="auto">
+            <v-col cols="auto">
               <v-btn
-                color="success"
+                color="success" class="de-excel-btn"
                 @click="convertCombineXLSX"
-                :disabled="showCombineXLSX()"
+                :disabled="showCombineXLSX() || !validDateRange"
               >
                 <template>
                   Combine and Download .XLSX
@@ -346,47 +415,43 @@
               </v-btn>    
             </v-col>    
 
-            <div class="tooltip-container">
-              <!-- Info Button -->
-              <v-col class="text-center" cols="auto">
-                <v-icon
-                  outlined
-                  color="warning"
-                  large
-                >
-                  info
-                </v-icon> 
-              </v-col>
-
-              <!-- Info Message -->
-              <v-col cols="auto">
-                <span class="custom_tooltip">
-                  <span style="color: red;">Note:</span> Exported values are rounded based on each variable's configured precision. 
-                  
-                  <br><br>
-
-                  To change this, update the variable's precision setting.
-                </span>
-              </v-col>
-            </div>
-
           </v-row>
+            <div class="de-precision-note">
+              <i class="material-icons-outlined" aria-hidden="true">info</i>
+              <span>Exported values follow each variable's configured decimal precision. To change rounding, update that variable's precision setting.</span>
+            </div>
+          </section>
         </form>
 
-        <!-- Alert -->
-        <v-alert v-model="request_error" dismissible type="error">
+        <v-alert v-model="request_error" dense dismissible type="error" class="de-request-error">
           [[ request_error_message ]]
         </v-alert>
 
-        <v-divider class="pa-3"></v-divider>
-
+        <section class="de-section de-results-section">
+          <div class="de-section-head">
+            <span class="de-section-step de-results-symbol"><i class="material-icons-outlined" aria-hidden="true">folder_open</i></span>
+            <div class="de-section-title">
+              <h2>Export files</h2>
+              <p>Monitor requests and download completed files from the tables below.</p>
+            </div>
+            <div class="de-history-counts">
+              <span class="de-count"><strong>[[ documents.length ]]</strong> CSV exports</span>
+              <span class="de-count de-count-green"><strong>[[ combine_documents.length ]]</strong> Excel workbooks</span>
+            </div>
+          </div>
+          <div class="de-section-body de-results-body">
+            <div v-if="documents.length === 0 && combine_documents.length === 0" class="de-empty-history">
+              <i class="material-icons-outlined" aria-hidden="true">inventory_2</i>
+              <strong>No export files yet</strong>
+              <p>Your requested files will appear here when you generate an export.</p>
+            </div>
         <!-- output files -->
         <v-tabs
-          v-if="documents.length > 0"
+          v-if="documents.length > 0 || combine_documents.length > 0"
           v-model="export_files_model"
           centered
           slider-color="green"
-          class="mb-9"
+          class="de-history-tabs"
         >
           <v-tab :key="1" :href="`#tab-1`" >
             Export Files
@@ -603,8 +668,9 @@
 
           </v-tab-item>
         </v-tabs-items>
-
-      </div>
+          </div>
+        </section>
+      </main>
     </v-app>
   </div>
 </div>
@@ -631,10 +697,10 @@
         station: [],
         searchStations: '',
         displayUTC: true,
-        exportMode: "aqc_good",
+        exportMode: "qc_good",
         exportModes: [
           { text: "Validated data", value: "validated" },
-          { text: "Good data — AQC only", value: "aqc_good" },
+          { text: "Good data (Effective QC)", value: "qc_good" },
           { text: "All data", value: "all" },
         ],
         stations: [
@@ -755,12 +821,20 @@
         }
       },
       computed: {
+        usesCalendarDates() {
+          return ['daily_summary', 'monthly_summary', 'yearly_summary'].includes(this.source.source);
+        },
+        validDateRange() {
+          const start = this.formatDatetimeForRequest(this.initial_date, this.initial_time);
+          const end = this.formatDatetimeForRequest(this.final_date, this.final_time);
+          return Boolean(start && end && start < end);
+        },
         exportModeHint() {
           if (this.exportMode === "validated") {
             return "All validated records, including confirmed Missing. Actual timestamps; unvalidated cells stay blank. Numeric values use consisted when present, otherwise measured.";
           }
-          if (this.exportMode === "aqc_good") {
-            return "AQC Good (flag 4) only. Numeric values use consisted when validated and present, otherwise measured. Gaps use -99.9.";
+          if (this.exportMode === "qc_good") {
+            return "QC Good (flag 4) only. Numeric values use consisted when validated and present, otherwise measured. Gaps use -99.9.";
           }
           return "All QC statuses. Numeric values use consisted when validated and present, otherwise measured. Gaps use -99.9.";
         },
@@ -809,34 +883,51 @@
           return this.stations.find(s => s.name == name).code;
         },
 
-        // format the date time in YYYY-MM-DD HH:mm:ss (when it reaches the backend it will be assumed to be in UTC)
-        formatDatetimeForRequest(datetime){
-            return datetime.clone().format('YYYY-MM-DD HH:mm:ss');
+        // Serialize calendar labels without timezone conversion. A month picker
+        // supplies YYYY-MM; expand it to the first day for the existing API.
+        formatDatetimeForRequest(date, time) {
+          const dateString = String(date || '');
+          const expanded = dateString.length === 7 ? `${dateString}-01` : dateString;
+          const clock = this.usesCalendarDates ? '00:00' : String(time || '');
+          const parsed = moment.utc(`${expanded} ${clock}`, 'YYYY-MM-DD HH:mm', true);
+          return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : null;
         },
 
         handleServerDatetime(datetime){
           return datetime ? moment.utc(datetime).tz(this.timezone).format('YYYY-MM-DD HH:mm:ss'): null;
         },
+
+        // Summary DateTimeFields store UTC-midnight calendar *markers*, not instants.
+        formatExportBoundary(datetime, source) {
+          if (!datetime) return null;
+          const name = String((source && source.text) || '').toLowerCase();
+          if (name === 'daily summary') return moment.utc(datetime).format('YYYY-MM-DD');
+          if (name === 'monthly summary') return moment.utc(datetime).format('YYYY-MM');
+          if (name === 'yearly summary') return moment.utc(datetime).format('YYYY');
+          return this.handleServerDatetime(datetime);
+        },
         selectAllStations(){
           this.station = this.stationList;
         },
         onChangeTimescale(){
-          if(this.source.source === 'monthly_summary') {
-            this.initial_date = moment().format('YYYY-MM')
-            this.final_date = moment().add(1, 'month').format('YYYY-MM')
-            this.initial_time = '00:00'
-            this.final_time = '00:00'
-          } else if(this.source.source === 'yearly_summary') {
-            this.initial_date = moment().format('YYYY-01')
-            this.final_date = moment().add(1, 'year').format('YYYY-01')
-            this.initial_time = '00:00'
-            this.final_time = '00:00'
-          } else if(this.source.source === 'daily_summary') {
-            this.initial_time = '00:00'
-            this.final_time = '00:00'
+          if (this.source.source === 'monthly_summary') {
+            this.initial_date = moment().format('YYYY-MM');
+            this.final_date = moment().add(1, 'month').format('YYYY-MM');
+          } else if (this.source.source === 'yearly_summary') {
+            this.initial_date = moment().format('YYYY-01');
+            this.final_date = moment().add(1, 'year').format('YYYY-01');
+          } else if (String(this.initial_date).length === 7 || String(this.final_date).length === 7) {
+            // After a month/year picker, restore date input for raw/daily/hourly.
+            this.initial_date = moment().format('YYYY-MM-DD');
+            this.final_date = moment().add(1, 'day').format('YYYY-MM-DD');
+          }
+          if (this.usesCalendarDates) {
+            this.initial_time = '00:00';
+            this.final_time = '00:00';
           }
         },
         invertValue(bool){
+          this.station = [];
           bool = !bool;
         },
         exportCSV() {
@@ -845,15 +936,15 @@
 
           this.loading = true;
 
-          let start_datetime = moment(`${this.initial_date} ${this.initial_time}`)
-          let end_datetime = moment(`${this.final_date} ${this.final_time}`)
+          const start_datetime = this.formatDatetimeForRequest(this.initial_date, this.initial_time);
+          const end_datetime = this.formatDatetimeForRequest(this.final_date, this.final_time);
 
           axios.post("schedule/", {
             multiple: true,
             stations: this.station.map(s => s.value),
             source: this.source.source,
-            start_datetime: this.formatDatetimeForRequest(start_datetime),
-            end_datetime: this.formatDatetimeForRequest(end_datetime),
+            start_datetime: start_datetime,
+            end_datetime: end_datetime,
             variables: this.variables.map(v => v.value),
             data_interval: this.dataInterval,
             aggregation: this.aggregation.map(a => a.value),
@@ -875,8 +966,8 @@
               res.data.forEach(record => {
                 record.request_date =  this.handleServerDatetime(record.request_date);
                 record.ready_date =  this.handleServerDatetime(record.ready_date);
-                record.initial_date =  this.handleServerDatetime(record.initial_date);
-                record.final_date =  this.handleServerDatetime(record.final_date);
+                record.initial_date = this.formatExportBoundary(record.initial_date, record.source);
+                record.final_date = this.formatExportBoundary(record.final_date, record.source);
               });
               this.documents = res.data
             }).finally(async () => {
@@ -906,16 +997,16 @@
           this.exportXLSX();
         },
         exportXLSX() {
-          let start_datetime = moment(`${this.initial_date} ${this.initial_time}`)
-          let end_datetime = moment(`${this.final_date} ${this.final_time}`)
+          const start_datetime = this.formatDatetimeForRequest(this.initial_date, this.initial_time);
+          const end_datetime = this.formatDatetimeForRequest(this.final_date, this.final_time);
 
 
           axios.post("combine_xlsx/", {
             multiple: true,
             stations: this.station.map(s => s.value),
             source: this.source.source,
-            start_datetime: this.formatDatetimeForRequest(start_datetime),
-            end_datetime: this.formatDatetimeForRequest(end_datetime),
+            start_datetime: start_datetime,
+            end_datetime: end_datetime,
             variables: this.variables.map(v => v.value),
             data_interval: this.dataInterval,
             aggregation: this.aggregation.map(a => a.value),
@@ -936,8 +1027,8 @@
               res.data.forEach(record => {
                 record.request_date =  this.handleServerDatetime(record.request_date);
                 record.ready_date =  this.handleServerDatetime(record.ready_date);
-                record.initial_date =  this.handleServerDatetime(record.initial_date);
-                record.final_date =  this.handleServerDatetime(record.final_date);
+                record.initial_date = this.formatExportBoundary(record.initial_date, record.source);
+                record.final_date = this.formatExportBoundary(record.final_date, record.source);
               });
               this.combine_documents = res.data
             }).finally(async () => {
@@ -1026,6 +1117,85 @@
 
   .tooltip-container:hover .custom_tooltip {
     display: block;
+  }
+</style>
+
+<!-- Data Export styling: white page, neutral text, purposeful accents. -->
+<style>
+  /* Page and Vuetify host: no blue-gray background. */
+  .de-page { background: #fff; width: 100%; padding-bottom: 34px; color: #252525; }
+  .de-page .v-application, .de-page .v-application--wrap { background: #fff !important; }
+  .de-page .v-application--wrap { min-height: auto !important; }
+  .de-page .de-workspace { width: 100%; padding: 0 20px 28px; margin: 0 auto; }
+  .de-page .de-page-heading { padding: 20px 20px 12px; }
+  .de-page .de-page-heading .srf-display-1 { display: inline-block; color: #232323; }
+  .de-page .de-page-heading p { margin: 5px 0 0; font-size: 13px; color: #737373; }
+
+  .de-page .de-utc-tag { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5fa; border-radius: 6px; font-weight: 750; padding: 3px 9px; letter-spacing: .06em; font-size: 9px; }
+
+  .de-page .de-section { border: 1px solid #e5e5e5; border-radius: 11px; background: #fff; margin-bottom: 17px; box-shadow: 0 2px 8px rgba(0,0,0,.025); overflow: hidden; }
+  .de-page .de-section-head { display: flex; align-items: center; gap: 13px; padding: 17px 20px; border-bottom: 1px solid #eee; min-height: 74px; }
+  .de-page .de-section-step { width: 35px; height: 35px; flex: none; display: flex; align-items: center; justify-content: center; background: #f2f2f2; border: 1px solid #e7e7e7; color: #555; border-radius: 9px; font-size: 12px; font-weight: 750; letter-spacing: .025em; }
+  .de-page .de-section-title { flex: 1; min-width: 0; }
+  .de-page .de-section-title h2 { color: #242424; margin: 0; font-size: 16px; line-height: 1.4; font-weight: 700; }
+  .de-page .de-section-title p { margin: 3px 0 0; color: #777; font-size: 12px; line-height: 1.5; }
+  .de-page .de-section-symbol { color: #9a9a9a; font-size: 23px; }
+  .de-page .de-section-body { padding: 19px 21px 17px; }
+  .de-page .de-small-label { color: #777; text-transform: uppercase; letter-spacing: .065em; font-weight: 700; font-size: 10px; margin-bottom: 8px; }
+  .de-page .de-subsection-divider { border-top: 1px solid #eee; margin: 10px 0 17px; }
+  .de-page .de-section-body .v-input { font-size: 13px; }
+  .de-page .de-section-body .v-text-field__details { min-height: 18px; }
+  .de-page .de-section-body .v-label { color: #626262; }
+  .de-page .de-section-body .v-input--switch { margin-top: 0; padding-top: 4px; }
+  .de-page .de-section-body .v-input--switch .v-label { font-size: 13px; }
+  .de-page .de-section-body .v-chip { background-color: #f3f3f3; color: #444; font-size: 12px; }
+  .de-page .de-select-all { margin-top: 3px; width: 100%; min-height: 40px; letter-spacing: 0; text-transform: none; }
+  .de-page .de-filter-row { margin-bottom: 0 !important; }
+  .de-page .de-station-row { padding-top: 2px !important; }
+  .de-page .de-fields-row { padding-top: 0 !important; }
+
+  .de-page .de-actions-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; padding: 21px; border: 1px solid #dfdfdf; border-radius: 11px; background: #fff; margin: 2px 0 18px; }
+  .de-page .de-actions-intro { flex: 1 1 260px; }
+  .de-page .de-actions-intro h2 { font-size: 16px; font-weight: 700; margin: 0 0 3px; color: #222; }
+  .de-page .de-actions-intro p { color: #777; font-size: 12px; margin: 0; }
+  .de-page .de-actions-row { flex: 0 1 auto; margin: 0 !important; padding: 0 !important; gap: 5px; }
+  .de-page .de-actions-row .v-btn { text-transform: none; font-size: 12px; font-weight: 650; letter-spacing: 0; border-radius: 7px; min-height: 39px; box-shadow: none; }
+  .de-page .de-actions-row .material-icons { font-size: 18px; }
+  .de-page .de-excel-btn { background: #198754 !important; border-color: #198754 !important; }
+  .de-page .de-precision-note { width: 100%; display: flex; align-items: flex-start; gap: 9px; color: #7c6638; border-top: 1px solid #efefef; padding-top: 13px; margin-top: 1px; font-size: 12px; }
+  .de-page .de-precision-note i { font-size: 17px; color: #b68c31; flex: none; }
+  .de-page .de-request-error { margin: 8px 0 20px; }
+
+  .de-page .de-results-symbol { background: #eaf7ee; border-color: #d3ebda; color: #237a46; }
+  .de-page .de-results-symbol i { font-size: 19px; }
+  .de-page .de-history-counts { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .de-page .de-count { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #525252; background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 20px; padding: 5px 10px; }
+  .de-page .de-count strong { color: #282828; }
+  .de-page .de-count-green { color: #31744c; background: #f1faf4; border-color: #dcefe2; }
+  .de-page .de-count-green strong { color: #24653b; }
+  .de-page .de-results-body { padding: 13px 19px 19px; min-width: 0; }
+  .de-page .de-history-tabs { margin-bottom: 16px !important; }
+  .de-page .de-history-tabs .v-tab { font-size: 12px; font-weight: 650; letter-spacing: 0; text-transform: none; }
+  .de-page .de-results-body .v-data-table { width: 100%; }
+  .de-page .de-results-body .v-data-table.elevation-1 { box-shadow: none !important; border: 1px solid #e7e7e7; border-radius: 8px; overflow: hidden; }
+  .de-page .de-results-body .v-data-table th { background: #fafafa; font-size: 11px; color: #666; font-weight: 750; }
+  .de-page .de-results-body .v-data-table td { font-size: 12px; color: #343434; }
+  .de-page .de-results-body .v-data-table .v-icon { color: #646464; }
+  .de-page .de-results-body .v-data-table .v-icon:hover { color: #2373b9; }
+  .de-page .de-empty-history { text-align: center; padding: 39px 20px 43px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .de-page .de-empty-history > i { font-size: 34px; color: #b4b4b4; }
+  .de-page .de-empty-history strong { font-size: 13px; color: #4a4a4a; }
+  .de-page .de-empty-history p { color: #888; font-size: 12px; margin: 0; }
+
+  @media (max-width: 760px) {
+    .de-page .de-workspace { padding: 0 11px 20px; }
+    .de-page .de-page-heading { padding: 14px 11px 10px; }
+    .de-page .de-section-head { padding: 14px; gap: 10px; }
+    .de-page .de-section-body { padding: 15px 13px; }
+    .de-page .de-section-symbol { display: none; }
+    .de-page .de-actions-panel { padding: 16px; }
+    .de-page .de-history-counts { display: none; }
+    .de-page .de-utc-tag { display: none; }
   }
 </style>
 

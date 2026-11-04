@@ -218,7 +218,6 @@
                 <v-dialog v-model="confirmDeleteDialog" max-width="440">
                     <v-card>
                         <v-card-title class="sc-dialog-title">
-                            <v-icon color="error" class="mr-2">mdi-delete-alert-outline</v-icon>
                             Delete selected observations?
                         </v-card-title>
                         <v-divider></v-divider>
@@ -232,7 +231,7 @@
                             <v-btn color="success" class="sc-action-btn"
                                 @click="confirmDeleteDialog = false">Cancel</v-btn>
                             <v-btn depressed color="error" class="sc-action-btn"
-                                @click="confirmDelete">Delete observations</v-btn>
+                                @click="confirmDelete">Delete</v-btn>
                         </v-card-actions>
                     </v-card>
                 </v-dialog>

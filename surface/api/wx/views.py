@@ -174,10 +174,10 @@ def parse_export_selection(body, source):
         if type(aqc) is not bool or type(mqc) is not bool:
             raise ValueError("Legacy AQC/MQC settings must be booleans.")
         return "legacy", aqc, mqc
-    if mode not in ("validated", "aqc_good", "all"):
-        raise ValueError("Export selection must be validated, aqc_good, or all.")
+    if mode not in ("validated", "qc_good", "all"):
+        raise ValueError("Export selection must be validated, qc_good, or all.")
     # MQC remains a legacy manual-flag setting; it is never a validation flag.
-    return mode, mode == "aqc_good", False
+    return mode, mode == "qc_good", False
 
 
 class DataExportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
@@ -293,59 +293,53 @@ def DownloadDataFileXLSX(request):
 @csrf_exempt
 @wx_mapped_permission_required
 def CombineFilesXLSX(request):
-    # ensure that the request method is post
     if request.method != 'POST':
-        # else return the "method not allowed" error in response
         return HttpResponse(status=405)
-    
-    # processing the request
+
     try:
-        # ensuring that the start date and the end date are valid
         json_body = json.loads(request.body)
-        
-        # grabbing the start and the end date
-        start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S
-        end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S
 
-        # format start and end date NOTE: START and END dates are all understood to be in UTC.
-        start_date_utc = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
-        end_date_utc = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
+        start_date = json_body['start_datetime']
+        end_date = json_body['end_datetime']
+        data_source = json_body['source']
 
-        # Attach UTC timezone info
-        start_date_utc = start_date_utc.replace(tzinfo=datetime.timezone.utc)
-        end_date_utc = end_date_utc.replace(tzinfo=datetime.timezone.utc)
+        # UTC timestamps for raw/hourly exports.
+        # Station-local calendar labels for daily/monthly/yearly exports.
+        try:
+            start_boundary, end_boundary = tasks.parse_export_date_range(
+                data_source, start_date, end_date
+            )
+            start_date_formatted = tasks.export_metadata_datetime(start_boundary)
+            end_date_formatted = tasks.export_metadata_datetime(end_boundary)
+        except ValueError as exc:
+            return JsonResponse(
+                {"message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # ensuring that the start date and the end date are valid
-        if start_date_utc > end_date_utc:
-            message = 'The initial date must be on or before the final date.'
-            return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
-
-        station_ids = json_body['stations']  # array with station ids
-
-        data_source = json_body['source']  # could be either raw_data, hourly_summary, daily_summary, monthly_summary or yearly_summary
-
-        variable_ids = json_body['variables']  # list of obj in format {id: Int, agg: Str}
-
-        aggregation = json_body['aggregation'] # sets which column in the db will be used when the source is a summary. 
-
-        displayUTC = json_body['displayUTC'] # determins wheter an offset will be applied based on the truthines of displayUTC
+        station_ids = json_body['stations']
+        variable_ids = json_body['variables']
+        aggregation = json_body['aggregation']
+        displayUTC = json_body['displayUTC']
 
         try:
-            export_mode, aqc_checks, mqc_checks = parse_export_selection(json_body, data_source)
+            export_mode, aqc_checks, mqc_checks = parse_export_selection(
+                json_body, data_source
+            )
         except ValueError as exc:
-            return JsonResponse({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return JsonResponse(
+                {"message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # If source is raw_data, aggregation will be set to none
+        # Raw data does not use summary aggregation.
         if data_source == 'raw_data':
             aggregation = ""
 
         data_interval_seconds = None
-        if data_source == 'raw_data' and 'data_interval' in json_body:  # a number with the data interval in seconds. Only required for raw_data
-            data_interval_seconds = json_body['data_interval']
-        elif data_source == 'raw_data':
-            data_interval_seconds = 300
+        if data_source == 'raw_data':
+            data_interval_seconds = json_body.get('data_interval', 300)
 
-        prepared_by = None
         if request.user.first_name and request.user.last_name:
             prepared_by = f'{request.user.first_name} {request.user.last_name}'
         else:
@@ -358,38 +352,56 @@ def CombineFilesXLSX(request):
             "monthly_summary": "Monthly Summary",
             "yearly_summary": "Yearly Summary",
         }
-
         data_source_description = data_source_dict[data_source]
 
-        # converting the station_ids into a string to pass to the new entry
-        station_ids_string = ""
-        for x in station_ids:
-            station_ids_string += str(x) + "_"
+        station_ids_string = "".join(f"{station_id}_" for station_id in station_ids)
+        variable_ids_string = "".join(f"{variable_id}_" for variable_id in variable_ids)
 
-        # converting the variable_ids into a string to pass to the new entry
-        variable_ids_string = ""
-        for y in variable_ids:
-            variable_ids_string += str(y) + "_"
+        # DateTimeFields store UTC timestamps for raw/hourly exports.
+        # For calendar summaries, UTC-midnight values serve only as
+        # storage markers for the selected local calendar boundaries.
+        new_entry = CombineDataFile.objects.create(
+            ready=False,
+            initial_date=start_date_formatted,
+            final_date=end_date_formatted,
+            source=data_source_description,
+            prepared_by=prepared_by,
+            stations_ids=station_ids_string,
+            variable_ids=variable_ids_string,
+            aggregation="  ".join(aggregation).upper(),
+            aqc_checks=aqc_checks,
+            mqc_checks=mqc_checks,
+            export_mode=export_mode,
+        )
 
-        # add this file entry to the combine data file model
-        new_entry = CombineDataFile.objects.create(ready=False, 
-                                                   initial_date=start_date_utc, 
-                                                   final_date=end_date_utc,
-                                                   source=data_source_description, 
-                                                   prepared_by=prepared_by,
-                                                   stations_ids=station_ids_string, 
-                                                   variable_ids=variable_ids_string, 
-                                                   aggregation="  ".join(aggregation).upper(),                                                  
-                                                   aqc_checks=aqc_checks,
-                                                   mqc_checks=mqc_checks,
-                                                   export_mode=export_mode)
+        # Pass the original input strings to Celery.
+        # The task uses the same date parser and exclusive-end convention.
+        tasks.combine_xlsx_files.delay(
+            station_ids,
+            data_source,
+            start_date,
+            end_date,
+            variable_ids,
+            aggregation,
+            displayUTC,
+            data_interval_seconds,
+            prepared_by,
+            data_source_description,
+            aqc_checks,
+            mqc_checks,
+            new_entry.id,
+            export_mode=export_mode,
+        )
 
-        # send the MAIN task unto celery
-        combine_task = tasks.combine_xlsx_files.delay(station_ids, data_source, start_date, end_date, variable_ids, aggregation, displayUTC, data_interval_seconds, prepared_by, data_source_description, aqc_checks, mqc_checks, new_entry.id, export_mode=export_mode)
+        return JsonResponse(
+            {'data': new_entry.id},
+            status=status.HTTP_200_OK,
+        )
 
-        return JsonResponse({'data': new_entry.id}, status=status.HTTP_200_OK)
     except Exception as e:
-        logger.error(f'An error occured while attempting to schedule combine task. Error = {e}')
+        logger.error(
+            f'An error occurred while attempting to schedule combine task. Error = {e}'
+        )
         return JsonResponse({"error": str(e)}, status=500)
 
 
@@ -491,58 +503,58 @@ def DeleteDataFile(request):
     return JsonResponse({}, status=status.HTTP_200_OK)
 
 
+
 @csrf_exempt
 @wx_mapped_permission_required
 def ScheduleDataExport(request):
     if request.method != 'POST':
         return HttpResponse(status=405)
 
-    # access values from the response
     json_body = json.loads(request.body)
-    station_ids = json_body['stations']  # array with station ids
 
-    data_source = json_body['source']  # could be either raw_data, hourly_summary, daily_summary, monthly_summary or yearly_summary
-
-    start_date = json_body['start_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
-
-    end_date = json_body['end_datetime']  # in format %Y-%m-%d %H:%M:%S (tz naive, but in station timezone)
-
-    variable_ids = json_body['variables']  # list of obj in format {id: Int, agg: Str}
-
-    aggregation = json_body['aggregation'] # sets which column in the db will be used when the source is a summary. 
-
-    displayUTC = json_body['displayUTC'] # determines whether an offset will be applied based on the truthines of displayUTC
+    station_ids = json_body['stations']
+    data_source = json_body['source']
+    start_date = json_body['start_datetime']
+    end_date = json_body['end_datetime']
+    variable_ids = json_body['variables']
+    aggregation = json_body['aggregation']
+    displayUTC = json_body['displayUTC']
 
     try:
-        export_mode, aqc_checks, mqc_checks = parse_export_selection(json_body, data_source)
+        export_mode, aqc_checks, mqc_checks = parse_export_selection(
+            json_body, data_source
+        )
     except ValueError as exc:
-        return JsonResponse({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {"message": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    # If source is raw_data, this will be set to none
+    # Raw data does not use summary aggregation.
     if data_source == 'raw_data':
         aggregation = None
 
     data_interval_seconds = None
-    if data_source == 'raw_data' and 'data_interval' in json_body:  # a number with the data interval in seconds. Only required for raw_data
-        data_interval_seconds = json_body['data_interval']
-    elif data_source == 'raw_data':
-        data_interval_seconds = 300
+    if data_source == 'raw_data':
+        data_interval_seconds = json_body.get('data_interval', 300)
 
-    created_data_file_ids = []
+    # Parse and validate the selected date range.
+    # Raw/hourly: UTC timestamps.
+    # Daily/monthly/yearly: station-local calendar boundaries.
+    # All ranges are start-inclusive and end-exclusive.
+    try:
+        start_boundary, end_boundary = tasks.parse_export_date_range(
+            data_source, start_date, end_date
+        )
+    except ValueError as exc:
+        return JsonResponse(
+            {"message": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    # format start and end date NOTE: START and END dates are all understood to be in UTC.
-    start_date_formatted = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
-    end_date_formatted = datetime.datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
-
-    # Attach UTC timezone info
-    start_date_formatted = start_date_formatted.replace(tzinfo=datetime.timezone.utc)
-    end_date_formatted = end_date_formatted.replace(tzinfo=datetime.timezone.utc)
-
-    if start_date_formatted > end_date_formatted:
-        message = 'The initial date must be on or before the final date.'
-        return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
-
-    days_interval = (end_date_formatted - start_date_formatted).days
+    # Store timestamps or calendar markers in the existing DateTimeFields.
+    start_date_formatted = tasks.export_metadata_datetime(start_boundary)
+    end_date_formatted = tasks.export_metadata_datetime(end_boundary)
 
     data_source_dict = {
         "raw_data": "Raw Data",
@@ -554,73 +566,125 @@ def ScheduleDataExport(request):
 
     data_source_description = data_source_dict[data_source]
 
-    prepared_by = None
     if request.user.first_name and request.user.last_name:
         prepared_by = f'{request.user.first_name} {request.user.last_name}'
     else:
         prepared_by = request.user.username
 
+    created_data_file_ids = []
+
     for station_id in station_ids:
+
+        # Summary exports can request multiple aggregations.
+        # Raw-data exports create one file per station.
         if aggregation:
             for agg in aggregation:
-                newfile = DataFile.objects.create(ready=False, 
-                                                  initial_date=start_date_formatted, 
-                                                  final_date=end_date_formatted,
-                                                  source=data_source_description, 
-                                                  prepared_by=prepared_by,
-                                                  interval_in_seconds=data_interval_seconds,
-                                                  aqc_checks = aqc_checks,
-                                                  mqc_checks = mqc_checks,
-                                                  export_mode=export_mode)
-                
-                DataFileStation.objects.create(datafile=newfile, station_id=station_id)
+                newfile = DataFile.objects.create(
+                    ready=False,
+                    initial_date=start_date_formatted,
+                    final_date=end_date_formatted,
+                    source=data_source_description,
+                    prepared_by=prepared_by,
+                    interval_in_seconds=data_interval_seconds,
+                    aqc_checks=aqc_checks,
+                    mqc_checks=mqc_checks,
+                    export_mode=export_mode,
+                )
+
+                DataFileStation.objects.create(
+                    datafile=newfile,
+                    station_id=station_id,
+                )
 
                 try:
                     for variable_id in variable_ids:
                         variable = Variable.objects.get(pk=variable_id)
-                        DataFileVariable.objects.create(datafile=newfile, variable=variable)
+                        DataFileVariable.objects.create(
+                            datafile=newfile,
+                            variable=variable,
+                        )
 
-                    tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, agg, aqc_checks, mqc_checks, displayUTC, export_mode=export_mode)
+                    tasks.export_data.delay(
+                        station_id,
+                        data_source,
+                        start_date,
+                        end_date,
+                        variable_ids,
+                        newfile.id,
+                        agg,
+                        aqc_checks,
+                        mqc_checks,
+                        displayUTC,
+                        export_mode=export_mode,
+                    )
+
                     created_data_file_ids.append(newfile.id)
-                except Exception as err:
-                    # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
-                    # this shows that the operation failed
-                    # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not"
-                    # this prevents a possible error state from mascarading as a "processing" status
 
+                except Exception as err:
+                    # A failed scheduling operation must not remain Processing.
                     newfile.ready_at = datetime.datetime.now(pytz.utc)
                     newfile.save(update_fields=["ready_at"])
+
+                    logger.exception(
+                        f"Failed to schedule data export {newfile.id}: {err}"
+                    )
+
         else:
-            newfile = DataFile.objects.create(ready=False, 
-                                              initial_date=start_date_formatted, 
-                                              final_date=end_date_formatted,
-                                              source=data_source_description, 
-                                              prepared_by=prepared_by,
-                                              interval_in_seconds=data_interval_seconds,
-                                              aqc_checks = aqc_checks,
-                                              mqc_checks = mqc_checks,
-                                              export_mode=export_mode
-                                            )
-            
-            DataFileStation.objects.create(datafile=newfile, station_id=station_id)
+            newfile = DataFile.objects.create(
+                ready=False,
+                initial_date=start_date_formatted,
+                final_date=end_date_formatted,
+                source=data_source_description,
+                prepared_by=prepared_by,
+                interval_in_seconds=data_interval_seconds,
+                aqc_checks=aqc_checks,
+                mqc_checks=mqc_checks,
+                export_mode=export_mode,
+            )
+
+            DataFileStation.objects.create(
+                datafile=newfile,
+                station_id=station_id,
+            )
 
             try:
                 for variable_id in variable_ids:
                     variable = Variable.objects.get(pk=variable_id)
-                    DataFileVariable.objects.create(datafile=newfile, variable=variable)
+                    DataFileVariable.objects.create(
+                        datafile=newfile,
+                        variable=variable,
+                    )
 
-                tasks.export_data.delay(station_id, data_source, start_date, end_date, variable_ids, newfile.id, aggregation, aqc_checks, mqc_checks, displayUTC, export_mode=export_mode)
+                tasks.export_data.delay(
+                    station_id,
+                    data_source,
+                    start_date,
+                    end_date,
+                    variable_ids,
+                    newfile.id,
+                    aggregation,
+                    aqc_checks,
+                    mqc_checks,
+                    displayUTC,
+                    export_mode=export_mode,
+                )
+
                 created_data_file_ids.append(newfile.id)
-            except Exception as err:
-                # if an error occuers udpate the datafile ready_at option whilst leaving ready = false
-                # this shows that the operation failed
-                # the function DataExportFiles users both "ready" and "ready_at to determin whether an error occured or not
-                # this prevents a possible error state from mascarading as a "processing" status
 
+            except Exception as err:
+                # Mark the request as failed instead of leaving it Processing.
                 newfile.ready_at = datetime.datetime.now(pytz.utc)
                 newfile.save(update_fields=["ready_at"])
 
-    return JsonResponse({'data': created_data_file_ids}, status=status.HTTP_200_OK)
+                logger.exception(
+                    f"Failed to schedule data export {newfile.id}: {err}"
+                )
+
+    return JsonResponse(
+        {'data': created_data_file_ids},
+        status=status.HTTP_200_OK,
+    )
+
 
 # ######################################################################################
 
@@ -3619,301 +3683,155 @@ def MonthlyFormUpdate(request):
 @wx_mapped_permission_required
 def MonthlyFormDelete(request):
     """
-    Delete monthly capture data for one selected day.
+    Delete one or multiple monthly capture days in a single request.
 
-    IMPORTANT:
-    This delete is based on the station's local day, not exact datetime equality.
+    Backward compatible:
+        Old: POST .../delete/?station_id=1&date=2026-10&day=5
+             body: {"variable_ids": [10, 16]}
+        New: POST .../delete/?station_id=1&date=2026-10
+             body: {"days": [5, 6, 7], "variable_ids": [10, 16]}
 
-    Why?
-        raw_data.datetime is a full timestamp.
-        The monthly form shows one row per station-local day.
-        So deleting a row should delete all matching station/variable records
-        within that local day.
-
-    Performance notes:
-        - Uses datetime range filtering:
-              datetime >= day_start
-              datetime < day_end
-
-          This is faster than:
-              (datetime + offset)::date = local_date
-
-        - Does not use SELECT COUNT before DELETE.
-        - Does not use DELETE ... RETURNING.
-        - Uses cursor.rowcount to report how many rows were deleted.
+    Uses one database connection and transaction for all selected days.
+    Keeps the original date-range predicates for index/chunk pruning.
     """
+    from time import perf_counter
+    from contextlib import closing
 
-    request_date_str = request.GET.get('date')      # Expected format: YYYY-MM
-    day = request.GET.get('day')                    # Expected: 1-31 depending on month
+    started = perf_counter()
+    date_str = request.GET.get('date')
     station_id = request.GET.get('station_id')
-    variable_id_list = request.data.get('variable_ids')
+    variable_ids = request.data.get('variable_ids')
 
-    logger.info(
-        "MonthlyFormDelete called | date=%s | day=%s | station_id=%s | variable_ids=%s",
-        request_date_str,
-        day,
-        station_id,
-        variable_id_list,
-    )
+    # Accept the original single-day endpoint as well as the new batch payload.
+    raw_days = request.data.get('days')
+    if raw_days is None:
+        raw_day = request.GET.get('day')
+        raw_days = [raw_day] if raw_day is not None else None
 
-    # ---------------------------------------------------------------------
-    # 1. Basic request validation
-    # ---------------------------------------------------------------------
-    if not request_date_str or day is None or not station_id or variable_id_list is None:
-        message = "Invalid request. 'date', 'day', 'station_id', and 'variable_ids' must be provided."
-
-        logger.warning("MonthlyFormDelete validation failed | %s", message)
-
+    if not date_str or not station_id or raw_days is None or variable_ids is None:
         return JsonResponse(
-            {
-                "success": False,
-                "message": message,
-                "received": {
-                    "date": request_date_str,
-                    "day": day,
-                    "station_id": station_id,
-                    "variable_ids": variable_id_list,
-                },
-            },
-            status=status.HTTP_400_BAD_REQUEST
+            {'success': False, 'message': 'date, station_id, day/days and variable_ids are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ---------------------------------------------------------------------
-    # 2. Parse selected month and selected day
-    # ---------------------------------------------------------------------
+    if not isinstance(raw_days, (list, tuple)) or not raw_days:
+        return JsonResponse(
+            {'success': False, 'message': 'days must be a nonempty list.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not isinstance(variable_ids, (list, tuple)):
+        return JsonResponse(
+            {'success': False, 'message': 'variable_ids must be a list.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
-        month_start = datetime.datetime.strptime(request_date_str, '%Y-%m')
-        day = int(day)
-
-    except ValueError:
-        message = "Invalid date/day format. Expected date='YYYY-MM' and day as integer."
-
-        logger.warning(
-            "MonthlyFormDelete date parse failed | date=%s | day=%s",
-            request_date_str,
-            day,
-        )
-
+        month_start = datetime.datetime.strptime(date_str, '%Y-%m')
+        station_pk = int(station_id)
+        days = sorted({int(value) for value in raw_days})
+        selected_variable_ids = sorted({int(value) for value in variable_ids})
+    except (ValueError, TypeError):
         return JsonResponse(
-            {
-                "success": False,
-                "message": message,
-                "received": {
-                    "date": request_date_str,
-                    "day": day,
-                },
-            },
-            status=status.HTTP_400_BAD_REQUEST
+            {'success': False, 'message': 'Invalid date, station, day or variable ID.'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Reject invalid dates like February 30.
     days_in_month = calendar.monthrange(month_start.year, month_start.month)[1]
-
-    if day < 1 or day > days_in_month:
-        message = f"Day must be between 1 and {days_in_month}. Received: {day}"
-
-        logger.warning("MonthlyFormDelete invalid day | %s", message)
-
+    if any(day < 1 or day > days_in_month for day in days):
         return JsonResponse(
-            {
-                "success": False,
-                "message": message,
-            },
-            status=status.HTTP_400_BAD_REQUEST
+            {'success': False, 'message': f'Days must be between 1 and {days_in_month}.'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ---------------------------------------------------------------------
-    # 3. Validate variable IDs
-    # ---------------------------------------------------------------------
     try:
-        variable_id_list = [int(v) for v in variable_id_list]
-
-    except (TypeError, ValueError):
-        message = "Invalid variable_ids. All variable IDs must be integers."
-
-        logger.warning(
-            "MonthlyFormDelete invalid variable_ids | variable_ids=%s",
-            variable_id_list,
-        )
-
-        return JsonResponse(
-            {
-                "success": False,
-                "message": message,
-                "received_variable_ids": variable_id_list,
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # ---------------------------------------------------------------------
-    # 4. Fetch station so we can use its UTC offset
-    # ---------------------------------------------------------------------
-    try:
-        station = Station.objects.get(id=station_id)
-
+        station = Station.objects.get(id=station_pk)
     except Station.DoesNotExist:
-        message = "Station not found"
-
-        logger.warning(
-            "MonthlyFormDelete station not found | station_id=%s",
-            station_id,
-        )
-
         return JsonResponse(
-            {
-                "success": False,
-                "message": message,
-                "station_id": station_id,
-            },
-            status=status.HTTP_400_BAD_REQUEST
+            {'success': False, 'message': 'Station not found.'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ---------------------------------------------------------------------
-    # 5. Build station-local day range
-    # ---------------------------------------------------------------------
-    datetime_offset = pytz.FixedOffset(station.utc_offset_minutes)
+    offset = pytz.FixedOffset(station.utc_offset_minutes)
+    day_ranges = []
+    for day in days:
+        local_day = month_start.replace(day=day)
+        day_start = offset.localize(local_day)
+        day_ranges.append((day, local_day.date(), day_start,
+                           day_start + datetime.timedelta(days=1)))
 
-    local_day = month_start.replace(
-        day=day,
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
+    delete_sql = '''
+        DELETE FROM raw_data
+        WHERE station_id = %s
+          AND is_daily = TRUE
+          AND variable_id = ANY(%s)
+          AND datetime >= %s
+          AND datetime < %s
+    '''
 
-    # Example:
-    #   local_day = 2026-05-02 00:00
-    #   station offset = -360
-    #
-    #   day_start = 2026-05-02 00:00:00-06:00
-    #   day_end   = 2026-05-03 00:00:00-06:00
-    day_start = datetime_offset.localize(local_day)
-    day_end = day_start + datetime.timedelta(days=1)
+    summary_sql = '''
+        INSERT INTO wx_dailysummarytask
+            (station_id, date, created_at, updated_at)
+        SELECT %s, days.local_date, NOW(), NOW()
+        FROM UNNEST(%s::date[]) AS days(local_date)
+        ON CONFLICT DO NOTHING
+    '''
 
-    local_date = local_day.date()
-
-    logger.info(
-        "MonthlyFormDelete prepared | station_id=%s | station_offset=%s | local_date=%s | day_start=%s | day_end=%s | variable_ids=%s",
-        station_id,
-        station.utc_offset_minutes,
-        local_date,
-        day_start,
-        day_end,
-        variable_id_list,
-    )
-
-    queries = {
-        # Delete rows matching the selected station-local day.
-        #
-        # We intentionally do not use:
-        #   datetime = exact_datetime
-        #
-        # and we also avoid:
-        #   (datetime + offset)::date = local_date
-        #
-        # because this range version is much faster.
-        "delete_raw_data": """
-            DELETE FROM raw_data
-            WHERE station_id = %s
-              AND is_daily = TRUE
-              AND variable_id = ANY(%s)
-              AND datetime >= %s
-              AND datetime < %s
-        """,
-
-        # Queue daily summary recalculation for the selected local day.
-        "create_daily_summary": """
-            INSERT INTO wx_dailysummarytask (
-                station_id,
-                date,
-                created_at,
-                updated_at
-            )
-            VALUES (%s, %s, now(), now())
-            ON CONFLICT DO NOTHING
-        """,
-    }
-
-    response_payload = {
-        "success": True,
-        "message": "",
-        "station_id": station_id,
-        "station_offset_minutes": station.utc_offset_minutes,
-        "date": request_date_str,
-        "day": day,
-        "local_date": str(local_date),
-        "day_start": str(day_start),
-        "day_end": str(day_end),
-        "variable_ids": variable_id_list,
-        "deleted_rows": 0,
-    }
+    deleted_total = 0
+    deleted_by_day = {}
+    local_dates = []
 
     try:
-        with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
+        # Close the connection explicitly after commit/rollback.
+        with closing(psycopg2.connect(settings.SURFACE_CONNECTION_STRING)) as conn, conn:
             with conn.cursor() as cursor:
+                for day, local_date, day_start, day_end in day_ranges:
+                    cursor.execute(delete_sql, (
+                        station_pk, selected_variable_ids, day_start, day_end,
+                    ))
+                    count = cursor.rowcount
+                    deleted_total += count
+                    deleted_by_day[str(local_date)] = count
+                    local_dates.append(local_date)
 
-                # ---------------------------------------------------------
-                # Delete matching rows
-                # ---------------------------------------------------------
-                cursor.execute(
-                    queries["delete_raw_data"],
-                    [
-                        station_id,
-                        variable_id_list,
-                        day_start,
-                        day_end,
-                    ]
-                )
+                # One summary-task insertion for the selected dates.
+                # As in the original endpoint, selected dates are queued even
+                # when no rows matched the DELETE.
+                cursor.execute(summary_sql, (station_pk, local_dates))
 
-                deleted_count = cursor.rowcount
-                response_payload["deleted_rows"] = deleted_count
+            # psycopg2's connection context commits, or rolls back on failure.
 
-                if deleted_count > 0:
-                    response_payload["message"] = f"Deleted {deleted_count} database row(s)."
-                else:
-                    response_payload["message"] = "No matching database rows were deleted."
-
-                logger.info(
-                    "MonthlyFormDelete deleted rows | deleted_rows=%s | station_id=%s | local_date=%s | day_start=%s | day_end=%s | variable_ids=%s",
-                    deleted_count,
-                    station_id,
-                    local_date,
-                    day_start,
-                    day_end,
-                    variable_id_list,
-                )
-
-                # ---------------------------------------------------------
-                # Queue daily summary recalculation
-                # ---------------------------------------------------------
-                # This is queued even if deleted_count is 0.
-                # That is harmless and keeps behavior simple.
-                cursor.execute(
-                    queries["create_daily_summary"],
-                    [station_id, local_date]
-                )
-
-            conn.commit()
-
-    except Exception as e:
-        logger.error(
-            "MonthlyFormDelete failed | error=%s | debug=%s",
-            repr(e),
-            response_payload,
-        )
-
+    except Exception:
+        logger.exception('MonthlyFormDelete failed | station=%s | days=%s', station_pk, days)
         return JsonResponse(
-            {
-                "success": False,
-                "message": "Monthly delete failed",
-                "error": repr(e),
-                "debug": response_payload,
-            },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {'success': False, 'message': 'Monthly delete failed.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    return Response(response_payload, status=status.HTTP_200_OK)
+    elapsed = perf_counter() - started
+    logger.info(
+        'MonthlyFormDelete finished | station=%s | days=%d | deleted=%d | seconds=%.3f',
+        station_pk, len(days), deleted_total, elapsed,
+    )
 
+    # Preserve existing response fields for the legacy one-day caller.
+    single = day_ranges[0] if len(day_ranges) == 1 else None
+    return Response({
+        'success': True,
+        'message': f'Deleted {deleted_total} database row(s).' if deleted_total
+                   else 'No matching database rows were deleted.',
+        'station_id': station_pk,
+        'station_offset_minutes': station.utc_offset_minutes,
+        'date': date_str,
+        'day': single[0] if single else None,
+        'days': days,
+        'local_date': str(single[1]) if single else None,
+        'day_start': str(single[2]) if single else None,
+        'day_end': str(single[3]) if single else None,
+        'variable_ids': selected_variable_ids,
+        'deleted_rows': deleted_total,
+        'deleted_by_day': deleted_by_day,
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -3945,6 +3863,8 @@ def monthly_capture_update_empty_col(request):
 
     because PostgreSQL/Timescale can use datetime indexes and chunk pruning.
     """
+
+    from contextlib import closing
 
     request_date_str = request.GET.get('date')      # Expected format: YYYY-MM
     station_id = request.GET.get('station_id')
@@ -4040,136 +3960,91 @@ def monthly_capture_update_empty_col(request):
         """,
 
         # Repair StationVariable.last_data_* using the latest remaining raw_data row.
-        "update_last_data_from_remaining_raw_data": """
+        # For each affected StationVariable, use one indexed lookup for the
+        # latest remaining observation; also clears fields if none remain.
+        "refresh_last_data": """
             WITH latest AS (
-                SELECT DISTINCT ON (station_id, variable_id)
-                    station_id,
-                    variable_id,
-                    measured,
-                    code,
-                    datetime
-                FROM raw_data
-                WHERE station_id = %s
-                  AND variable_id = ANY(%s)
-                ORDER BY station_id, variable_id, datetime DESC
+                SELECT
+                    sv.station_id,
+                    sv.variable_id,
+                    rd.datetime,
+                    rd.measured,
+                    rd.code
+                FROM wx_stationvariable AS sv
+                LEFT JOIN LATERAL (
+                    SELECT rd.datetime, rd.measured, rd.code
+                    FROM raw_data AS rd
+                    WHERE rd.station_id = sv.station_id
+                      AND rd.variable_id = sv.variable_id
+                    ORDER BY rd.datetime DESC
+                    LIMIT 1
+                ) AS rd ON TRUE
+                WHERE sv.station_id = %s
+                  AND sv.variable_id = ANY(%s)
             )
-            UPDATE wx_stationvariable sv
+            UPDATE wx_stationvariable AS sv
             SET last_data_datetime = latest.datetime,
                 last_data_value = latest.measured,
                 last_data_code = latest.code
             FROM latest
             WHERE sv.station_id = latest.station_id
               AND sv.variable_id = latest.variable_id
-        """,
-
-        # If no raw_data remains for a variable, clear last_data_*.
-        "clear_last_data_if_no_remaining_raw_data": """
-            UPDATE wx_stationvariable sv
-            SET last_data_datetime = NULL,
-                last_data_value = NULL,
-                last_data_code = NULL
-            WHERE sv.station_id = %s
-              AND sv.variable_id = ANY(%s)
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM raw_data rd
-                  WHERE rd.station_id = sv.station_id
-                    AND rd.variable_id = sv.variable_id
+              AND (
+                  sv.last_data_datetime IS DISTINCT FROM latest.datetime
+                  OR sv.last_data_value IS DISTINCT FROM latest.measured
+                  OR sv.last_data_code IS DISTINCT FROM latest.code
               )
         """
     }
+
+    # Validate every day before starting a transaction. The original code
+    # validated inside the transaction, which could commit earlier deletions
+    # if a later day had invalid input and returned a 400 response.
+    normalized_days = []
+    for day_key, variable_id_list in empty_cols_data.items():
+        try:
+            day = int(day_key)
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {"success": False, "message": f"Invalid day value: {day_key}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if day < 1 or day > days_in_month:
+            return JsonResponse(
+                {"success": False, "message": f"Day must be between 1 and {days_in_month}. Received: {day}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(variable_id_list, (list, tuple)):
+            return JsonResponse(
+                {"success": False, "message": f"variable_ids for day {day} must be a list."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not variable_id_list:
+            continue
+
+        try:
+            variable_id_list = [int(value) for value in variable_id_list]
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {"success": False, "message": f"Invalid variable_ids for day {day}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        local_day = month_start.replace(day=day)
+        day_start = datetime_offset.localize(local_day)
+        day_end = day_start + datetime.timedelta(days=1)
+        normalized_days.append((local_day.date(), variable_id_list, day_start, day_end))
 
     deleted_total = 0
     deleted_by_day = {}
 
     try:
-        with psycopg2.connect(settings.SURFACE_CONNECTION_STRING) as conn:
+        with closing(psycopg2.connect(settings.SURFACE_CONNECTION_STRING)) as conn, conn:
             with conn.cursor() as cursor:
-
-                # Loop through each day that had cleared cells.
-                for day_key, variable_id_list in empty_cols_data.items():
-
-                    # -----------------------------------------------------
-                    # 4. Validate day
-                    # -----------------------------------------------------
-                    try:
-                        day = int(day_key)
-                    except (TypeError, ValueError):
-                        return JsonResponse(
-                            {
-                                "success": False,
-                                "message": f"Invalid day value: {day_key}"
-                            },
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                    if day < 1 or day > days_in_month:
-                        return JsonResponse(
-                            {
-                                "success": False,
-                                "message": f"Day must be between 1 and {days_in_month}. Received: {day}"
-                            },
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                    # -----------------------------------------------------
-                    # 5. Validate variable IDs for this day
-                    # -----------------------------------------------------
-                    if variable_id_list is None:
-                        return JsonResponse(
-                            {
-                                "success": False,
-                                "message": f"variable_ids must be provided for day {day}."
-                            },
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                    if not isinstance(variable_id_list, (list, tuple)):
-                        return JsonResponse(
-                            {
-                                "success": False,
-                                "message": f"variable_ids for day {day} must be a list."
-                            },
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                    # Nothing was cleared for this day.
-                    if not variable_id_list:
-                        continue
-
-                    try:
-                        variable_id_list = [int(v) for v in variable_id_list]
-                    except (TypeError, ValueError):
-                        return JsonResponse(
-                            {
-                                "success": False,
-                                "message": f"Invalid variable_ids for day {day}. All variable IDs must be integers."
-                            },
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                    # -----------------------------------------------------
-                    # 6. Build station-local day range
-                    # -----------------------------------------------------
-                    # Example:
-                    #   date=2026-05, day=2, station UTC offset=-360
-                    #
-                    #   day_start = 2026-05-02 00:00:00-06
-                    #   day_end   = 2026-05-03 00:00:00-06
-                    #
-                    # PostgreSQL can compare these directly to raw_data.datetime.
-                    local_day = month_start.replace(
-                        day=day,
-                        hour=0,
-                        minute=0,
-                        second=0,
-                        microsecond=0
-                    )
-
-                    day_start = datetime_offset.localize(local_day)
-                    day_end = day_start + datetime.timedelta(days=1)
-
-                    local_date = local_day.date()
+                for local_date, variable_id_list, day_start, day_end in normalized_days:
 
                     # -----------------------------------------------------
                     # 7. Find affected StationVariable rows before delete
@@ -4216,7 +4091,7 @@ def monthly_capture_update_empty_col(request):
                     # -----------------------------------------------------
                     # 9. Queue daily summary recalculation (only something was deleted)
                     # -----------------------------------------------------
-                    if deleted_count == 0:
+                    if deleted_count > 0:
                         cursor.execute(
                             queries["create_daily_summary"],
                             [station_id, local_date]
@@ -4227,12 +4102,7 @@ def monthly_capture_update_empty_col(request):
                     # -----------------------------------------------------
                     if affected_variable_ids:
                         cursor.execute(
-                            queries["update_last_data_from_remaining_raw_data"],
-                            [station_id, affected_variable_ids]
-                        )
-
-                        cursor.execute(
-                            queries["clear_last_data_if_no_remaining_raw_data"],
+                            queries["refresh_last_data"],
                             [station_id, affected_variable_ids]
                         )
 
@@ -4264,6 +4134,7 @@ def monthly_capture_update_empty_col(request):
         },
         status=status.HTTP_200_OK
     )
+
 
 
 

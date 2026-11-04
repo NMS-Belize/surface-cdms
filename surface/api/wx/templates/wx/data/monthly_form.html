@@ -171,7 +171,6 @@
                 <v-dialog v-model="confirmDeleteDialog" max-width="440">
                     <v-card>
                         <v-card-title class="mc-dialog-title">
-                            <v-icon left color="error">mdi-delete-alert-outline</v-icon>
                             Delete selected observations?
                         </v-card-title>
                         <v-divider></v-divider>
@@ -182,10 +181,10 @@
                         </v-card-text>
                         <v-card-actions class="px-5 pb-4">
                             <v-spacer></v-spacer>
-                            <v-btn text color="grey darken-2" class="mc-action-btn"
+                            <v-btn color="info" class="mc-action-btn"
                                    @click="confirmDeleteDialog = false">Cancel</v-btn>
                             <v-btn depressed color="error" class="mc-action-btn"
-                                   @click="confirmDelete">Delete observations</v-btn>
+                                   @click="confirmDelete">Delete</v-btn>
                         </v-card-actions>
                     </v-card>
                 </v-dialog>
@@ -1422,7 +1421,6 @@
                     this.confirmDeleteDialog = true;
                 },
 
-                
                 async confirmDelete() {
                     this.confirmDeleteDialog = false;
                     this.loading = true;
@@ -1430,51 +1428,37 @@
                     const { stationId, date } = this.requestedData;
 
                     try {
-                        const calls = this.pendingDeleteDays.map(day => {
-                            const url = `/wx/data/capture/monthly/delete/`
-                                + `?station_id=${stationId}`
-                                + `&date=${date}`
-                                + `&day=${day}`;
+                        // Send all selected days in a single request.
+                        const url = `/wx/data/capture/monthly/delete/?station_id=${stationId}&date=${date}`;
 
-                            return axios.post(url, {
-                                variable_ids: this.variableIds
-                            });
+                        const response = await axios.post(url, {
+                            days: this.pendingDeleteDays,
+                            variable_ids: this.variableIds
                         });
 
-                        const results = await Promise.all(calls);
+                        const deletedRows = response.data.deleted_rows || 0;
 
-                        console.log("Monthly delete results:", results.map(r => r.data));
-
-                        const totalDeletedRows = results.reduce((total, result) => {
-                            return total + (result.data.deleted_rows || 0);
-                        }, 0);
-
-                        if (totalDeletedRows > 0) {
-                            this.snackbar = {
-                                show: true,
-                                message: `Deleted ${totalDeletedRows} database row(s).`,
-                                color: 'green'
-                            };
-                        } else {
-                            this.snackbar = {
-                                show: true,
-                                message: 'No matching data was deleted.',
-                                color: 'orange'
-                            };
-                        }
+                        this.snackbar = {
+                            show: true,
+                            message: deletedRows > 0
+                                ? `Deleted ${deletedRows} database row(s).`
+                                : 'No matching data was deleted.',
+                            color: deletedRows > 0 ? 'green' : 'orange'
+                        };
 
                         if (this.gridApi) {
                             this.gridApi.deselectAll();
                         }
 
+                        // Refresh the monthly table after deletion.
                         await this.fetchData();
 
-                    } catch (err) {
-                        console.error("Bulk delete error:", err);
+                    } catch (error) {
+                        console.error('Monthly bulk delete error:', error);
 
                         this.snackbar = {
                             show: true,
-                            message: "Error deleting rows. Check console",
+                            message: 'Error deleting rows. Check console.',
                             color: 'red'
                         };
 

@@ -1,211 +1,243 @@
-{% extends "base.html" %} {% block content %} {% load static %} {% load wx_filters %}
+{% extends "base.html" %}
+{% block content %}
+{% load static %}
+{% load wx_filters %}
 
-<div class="srf-container" style="max-height: 280px">
-  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-    <span class="srf-display-1 text-uppercase">Data Import</span><br /><br />
-  </div>
+<div class="srf-container di-page">
 
-  <div class="srf-flex justify-content-between srf-padding" id="app" v-cloak>
+  <div id="app" class="di-app" v-cloak>
+    <header class="di-page-heading">
+      <span class="srf-display-1 text-uppercase">Data Import</span>
+      <p>Upload observation files, choose how they are processed, and review import history.</p>
+    </header>
+
     <v-app>
-        <div>
-            <form class="col l12">
-                <!-- decoder selection -->
-                <v-row dense justify="start" class="mb-3">
-                  <v-col cols="12" md="2">
+      <div class="di-main">
+
+        <!-- The original loading flag still controls a single page overlay. -->
+        <v-overlay :value="loading">
+          <v-progress-circular indeterminate size="64"></v-progress-circular>
+        </v-overlay>
+
+        <div class="di-import-layout">
+          <section class="di-panel di-upload-panel">
+            <div class="di-panel-heading">
+              <div class="di-panel-heading-left">
+                <div class="di-panel-icon"><v-icon size="22">mdi-cloud-upload-outline</v-icon></div>
+                <div>
+                  <h2>Upload observation files</h2>
+                  <p>Select a decoder and add one or more files for import.</p>
+                </div>
+              </div>
+              <span class="di-step-label">FILE IMPORT</span>
+            </div>
+
+            <div class="di-panel-content">
+              <form class="di-form" @submit.prevent>
+                <div class="di-field-heading">
+                  <label>Decoder format</label>
+                  <span>Choose the format that matches your files.</span>
+                </div>
+
+                <div class="di-decoder-select">
                   <v-select
                     v-model="selectedDecoder"
                     :items="decoderOptions"
                     item-text="text"
                     item-value="value"
-                    label="Decoder Format"
+                    label="Select decoder"
                     outlined
                     dense
+                    hide-details="auto"
                   ></v-select>
-                  </v-col>
-                </v-row>
+                </div>
 
-                <h6 class="">Attachments</h6>
-                <!--UPLOAD-->
-                <v-row dense justify="center" class="mb-3 mt-3 dropbox">         
-                  
-                  <input 
-                    type="file" 
-                    multiple 
-                    :name="uploadFieldName" 
-                    :disabled="isSaving" 
-                    @change="handleFileChange" 
-                    accept=".xlsx, .txt, .wlk, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/plain, application/octet-stream" 
+                <div class="di-field-heading di-attachment-heading">
+                  <label>Attachments</label>
+                  <span>Choose multiple files or drag them into the area below.</span>
+                </div>
+
+                <!-- Full-area native file input retains the original check/upload flow. -->
+                <div class="di-dropzone dropbox" :class="{ 'di-dropzone-busy': isSaving }">
+                  <input
+                    type="file"
+                    multiple
+                    :name="uploadFieldName"
+                    :disabled="isSaving"
+                    @change="handleFileChange"
+                    accept=".xlsx, .txt, .wlk, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/plain, application/octet-stream"
                     class="input-file"
+                    aria-label="Choose observation files to upload"
                   >
+                  <div v-if="!isSaving" class="di-dropzone-content">
+                    <div class="di-cloud-icon"><v-icon size="34">mdi-cloud-upload-outline</v-icon></div>
+                    <div class="di-dropzone-title"><strong>Choose files</strong> or drag and drop here</div>
+                    <p>Accepted file types</p>
+                    <div class="di-format-tags">
+                      <span class="di-tag di-tag-xlsx">XLSX</span>
+                      <span class="di-tag di-tag-wlk">WLK</span>
+                      <span class="di-tag di-tag-txt">TXT</span>
+                    </div>
+                    <div class="di-dropzone-limit">Maximum combined file size: <strong>15 MB</strong></div>
+                  </div>
+                  <div v-else class="di-dropzone-content di-uploading-state">
+                    <v-progress-circular indeterminate color="primary" size="32"></v-progress-circular>
+                    <strong>Uploading [[ fileCount ]] file(s)…</strong>
+                    <p>Checking the selected files.</p>
+                  </div>
+                </div>
 
-                  <p v-if="!isSaving" style="font-size: small;">
-                    <i class="material-icons-outlined">cloud_upload</i><br>
-                    <span style="color: rgb(64, 130, 246); font-weight: bold;">Choose file</span> or <b>drag here</b><br>
-                      Supported file type(s): 
-                      <span style="color: #2f8c59; font-weight: bolder;">XLSX</span> , 
-                      <span style="color: #9a1fff; font-weight: bolder;">WLK</span> , 
-                      <span style="color: #6a6a6a; font-weight: bolder;">TXT</span><br>
-                    <span style="color: red;">Upload limit: Total files size not exceeding 15.00 MB</span>
-                  </p>
+                <!-- File list remains bound to uploadedFiles and removeFile(). -->
+                <div v-if="uploadedFiles.length > 0" class="di-staged-files">
+                  <div class="di-staged-heading">
+                    <div class="di-staged-title">
+                      <v-icon size="18">mdi-attachment</v-icon>
+                      <strong>Selected files</strong>
+                    </div>
+                    <span>[[ uploadedFiles.length ]] file(s)</span>
+                  </div>
+                  <div
+                    v-for="file_obj in uploadedFiles"
+                    v-bind:key="file_obj[0]"
+                    class="di-file-row file-item"
+                  >
+                    <div class="di-file-symbol"><v-icon size="19">mdi-file-document-outline</v-icon></div>
+                    <span v-text="file_obj[0]" class="di-file-name file-name" :title="file_obj[0]"></span>
+                    <span class="di-file-size file-size">[[ file_obj[1] ]] MB</span>
+                    <i
+                      class="material-icons remove-btn di-file-remove"
+                      @click="removeFile(file_obj[0])"
+                      title="Remove file"
+                      role="button"
+                      tabindex="0"
+                      @keydown.enter.prevent="removeFile(file_obj[0])"
+                    >close</i>
+                  </div>
+                </div>
 
-                  <p v-if="isSaving" style="font-size: small;">
-                    Uploading <span v-text="fileCount"></span> files...
-                  </p>
-                </v-row>
-
-                <!-- Toggle btns -->
-                <v-row dense justify="start" class="mb-3">
-                  <!-- Override Data on Conflict selector -->
-                  <v-col cols="3">
-                    <v-switch
+                <div class="di-options-section">
+                  <div class="di-options-title">Import options</div>
+                  <div class="di-options-grid">
+                    <div class="di-option">
+                      <v-switch
                         v-model="overrideData"
                         label="Override Data on Conflict"
                         inset
-                    ></v-switch>
-                  </v-col>
-
-                  <!-- Manually Validate Toggle selector -->
-                  <v-col cols="3">
-                    <v-switch
-                        v-if="selectedDecoder==='default'"
+                        hide-details
+                        class="di-switch"
+                      ></v-switch>
+                      <p>Replace existing observations when matching data is imported.</p>
+                    </div>
+                    <div v-if="selectedDecoder === 'default'" class="di-option">
+                      <v-switch
                         v-model="manuallyReviewedData"
                         label="Manually Reviewed Data"
                         inset
-                    ></v-switch>
-                  </v-col>
-                </v-row>
-
-                <!-- action btns -->
-                <v-row dense justify="start" class="mb-3">
-                  <!-- Reset Button -->
-                  {% if request|has_any_feature_permission:"manual-data-import:read" %}
-                  <v-col class="text-center" cols="auto">
-                      <v-btn
-                        outlined
-                        @click="reset"
-                        color="secondary"
-                        :disabled="!showBtn"
-                      >
-                        Reset
-                        <i class="material-icons right">cached</i>
-                      </v-btn>
-                  </v-col>
-                  {% endif %}
-
-                  <!-- Upload Button -->
-                   {% if request|has_any_feature_permission:"manual-data-import:write" %}
-                  <v-col class="text-center" cols="auto">
-                    <v-btn
-                      outlined
-                      color="primary"
-                      :disabled="!showBtn"
-                      @click="importManualDataFile"
-                    >
-                      Upload
-                      <i class="material-icons right">upload</i>
-                    </v-btn>
-                  </v-col>
-                  {% endif %}
-
-                  <div class="tooltip-container">
-                    <!-- Info Button -->
-                    <v-col class="text-center" cols="auto">
-                      <v-icon
-                        outlined
-                        color="warning"
-                        large
-                      >
-                        info
-                      </v-icon> 
-                    </v-col>
-
-                    <!-- Info Message -->
-                    <v-col cols="auto">
-                      <span class="custom_tooltip">
-                        <!-- File upload works <span style="color: red;">ONLY</span> for Manual stations -->
-                        
-                        <!-- <br /><br /> -->
-
-                        <span style="font-weight: bold; font-size: medium;">Decoder Format Expected File Types:</span>
-                        
-                        <br /><br />
-
-                        Default - <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span><br />
-                        R Format - <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span><br />
-                        F2000 - <span style="color: #2f8c59; font-weight: bolder;">.XLSX</span><br />
-                        DAVIS - <span style="color: #9a1fff; font-weight: bolder;">.WLK</span> <span style="color: #6a6a6a; font-weight: bolder;">.TXT</span>
-
-                        <!-- <br /><br /> -->
-                      </span>
-                    </v-col>
+                        hide-details
+                        class="di-switch"
+                      ></v-switch>
+                      <p>Mark imported observations as manually reviewed.</p>
+                    </div>
                   </div>
+                </div>
 
-                </v-row>
+                <div class="di-actions">
+                  {% if request|has_any_feature_permission:"manual-data-import:write" %}
+                  <v-btn
+                    color="primary"
+                    depressed
+                    :disabled="!showBtn"
+                    @click="importManualDataFile"
+                    class="di-import-btn"
+                    type="button"
+                  >
+                    <v-icon left size="19">mdi-upload</v-icon>
+                    Import files
+                  </v-btn>
+                  {% endif %}
+                  {% if request|has_any_feature_permission:"manual-data-import:read" %}
+                  <v-btn
+                    outlined
+                    color="secondary"
+                    :disabled="!showBtn"
+                    @click="reset"
+                    class="di-reset-btn"
+                    type="button"
+                  >
+                    <v-icon left size="19">mdi-refresh</v-icon>
+                    Reset
+                  </v-btn>
+                  {% endif %}
+                </div>
 
-                <!-- display any errors -->
-                <v-alert v-model="request_error" dismissible type="error" class="mt-5">
-                  <p>
-                    <span v-html="request_error_message"></span>
-                  </p>
+                <v-alert v-model="request_error" dismissible type="error" class="di-error-alert">
+                  <span v-html="request_error_message"></span>
                 </v-alert>
+              </form>
+            </div>
+          </section>
 
-                <!--uploaded files-->
-                <v-row dense justify="center" class="mb-3 mt-5">
+          <!-- A visible guide replaces the old awkward hover tooltip. -->
+          <aside class="di-aside">
+            <section class="di-panel di-guide-panel">
+              <div class="di-guide-title">
+                <v-icon size="20">mdi-information-outline</v-icon>
+                <h3>File format guide</h3>
+              </div>
+              <p class="di-guide-intro">Use the file type supported by your selected decoder.</p>
+              <div class="di-guide-row">
+                <span>Default</span><span class="di-guide-formats"><span class="di-tag di-tag-xlsx">XLSX</span></span>
+              </div>
+              <div class="di-guide-row">
+                <span>R Format</span><span class="di-guide-formats"><span class="di-tag di-tag-xlsx">XLSX</span></span>
+              </div>
+              <div class="di-guide-row">
+                <span>F2000</span><span class="di-guide-formats"><span class="di-tag di-tag-xlsx">XLSX</span></span>
+              </div>
+              <div class="di-guide-row">
+                <span>DAVIS</span>
+                <span class="di-guide-formats"><span class="di-tag di-tag-wlk">WLK</span><span class="di-tag di-tag-txt">TXT</span></span>
+              </div>
+              <div class="di-guide-footnote">
+                <v-icon size="17" style="color: red !important;">mdi-information-outline</v-icon>
+                <span>Maximum total file size per upload: 15 MB.</span>
+              </div>
+            </section>
+            <div class="di-aside-tip">
+              <v-icon size="19" style="color: #7c6638 !important;">mdi-lightbulb-outline</v-icon>
+              <span>Files are checked when selected. Use <strong>Import files</strong> to begin processing them.</span>
+            </div>
+          </aside>
+        </div>
 
-                  <v-overlay :value="loading">
-                    <v-progress-circular indeterminate size="64"></v-progress-circular>
-                  </v-overlay>
+        <section class="di-panel di-history-panel">
+          <div class="di-panel-heading">
+            <div class="di-panel-heading-left">
+              <div class="di-panel-icon"><v-icon size="22">mdi-file-document-multiple-outline</v-icon></div>
+              <div>
+                <h2>Import history</h2>
+                <p>Browse previously uploaded manual data files and their status.</p>
+              </div>
+            </div>
+            <span class="di-record-count">[[ documents.length ]] files</span>
+          </div>
 
-                  <v-col cols="12" v-for="file_obj in uploadedFiles" v-bind:key="file_obj[0]" class="file-item d-flex align-center">
-
-                    <i class="material-icons">attach_file</i>
-
-                    <span v-text="file_obj[0]" class="file-name"></span>
-
-                    <span class="file-size">([[ file_obj[1] ]] MB)</span>
-
-                    <i class="material-icons remove-btn ml-auto" @click="removeFile(file_obj[0])">close</i>
-
-                  </v-col>
-
-                </v-row>
-                
-
-            </form>
-
-            <v-divider class="pa-3"></v-divider>
-
-
-            <!-- manual station data files sections start! -->
-            
-            
-          
-            
-            <!-- output files -->
+          <div class="di-history-content">
+            <!-- Preserve the original Vuetify tab and the exact existing data table. -->
             <v-tabs
               v-if="documents.length > 0"
               v-model="data_files_model"
               centered
               slider-color="green"
-              class="mb-9"
+              class="di-history-tabs"
             >
               <v-tab :key="1" :href="`#tab-1`" >
                 Manual Data Files
               </v-tab>
-
             </v-tabs>
-
             <v-tabs-items v-model="data_files_model">
-              <v-tab-item
-                :key="1"
-                :value="`tab-1`"
-              >
-
-                <v-row dense v-if="documents.length > 0" justify="center">
-                <!-- <v-row dense justify="center"> -->
-                  <v-overlay :value="loading">
-                    <v-progress-circular indeterminate size="64"></v-progress-circular>
-                  </v-overlay>
+              <v-tab-item :key="1" :value="`tab-1`">
+                <v-row dense v-if="documents.length > 0" justify="center" class="di-documents-table-row">
                   <v-data-table
                     ref="documents_table"
                     :headers="documents_headers"
@@ -273,20 +305,22 @@
 
                   </v-data-table>
                 </v-row>
-
               </v-tab-item>
             </v-tabs-items>
-                
-            
-            
-            
-            <!-- manual station data files sections end! -->
-        </div>
+            <div v-if="documents.length === 0" class="di-history-empty">
+              <div class="di-history-empty-icon"><v-icon size="30">mdi-file-document-outline</v-icon></div>
+              <strong>No imported files to display</strong>
+              <p>When files have been imported, you can review them here.</p>
+            </div>
+          </div>
+        </section>
+      </div>
     </v-app>
   </div>
 </div>
 
-{% endblock %} {% block localjavascript %}
+{% endblock %}
+{% block localjavascript %}
 
 <script>
     const STATUS_INITIAL = 0, STATUS_SAVING = 1, STATUS_SUCCESS = 2, STATUS_FAILED = 3;
@@ -708,99 +742,598 @@
     })();
 </script>
 
-<!-- SASS styling -->
 <style>
-  .dropbox {
-    outline: 2px dashed grey; /* the dash box */
-    border-radius: 20px;
-    outline-offset: -7px;
-    background: rgba(200, 225, 294, 0.169);
-    color: dimgray;
-    padding: 10px 10px;
-    min-height: 200px; /* minimum height */
-    position: relative;
-    cursor: pointer;
+/* Data Import — scoped to this page to avoid changing other SURFACE screens. */
+.di-page {
+  padding-bottom: 38px;
+  color: #262626;
+}
+.di-page .di-page-heading {
+  padding: 12px 16px 18px;
+}
+.di-page .di-page-heading p {
+  margin: 6px 0 0;
+  color: #666666;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.di-page .di-app .v-application {
+  background: transparent !important;
+}
+.di-page .di-app .v-application--wrap {
+  min-height: 0;
+}
+.di-page .di-main {
+  padding: 0 16px;
+  width: 100%;
+}
+.di-page .di-import-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 285px;
+  align-items: start;
+  gap: 20px;
+}
+.di-page .di-panel {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  box-shadow: 0 3px 16px rgba(0, 0, 0, .035);
+  overflow: hidden;
+}
+.di-page .di-panel-heading {
+  padding: 20px 23px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #ebebeb;
+}
+.di-page .di-panel-heading-left {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+.di-page .di-panel-icon {
+  width: 43px;
+  height: 43px;
+  border: 1px solid #e5e5e5;
+  background: #f5f5f5;
+  border-radius: 10px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+.di-page .di-panel-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #262626;
+}
+.di-page .di-panel-heading p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: #737373;
+  line-height: 1.45;
+}
+.di-page .di-step-label,
+.di-page .di-record-count {
+  color: #525252;
+  background: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  white-space: nowrap;
+  border-radius: 7px;
+  padding: 6px 9px;
+}
+.di-page .di-record-count {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.di-page .di-panel-content {
+  padding: 23px;
+}
+.di-page .di-form {
+  margin: 0;
+}
+.di-page .di-field-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 9px;
+}
+.di-page .di-field-heading label {
+  color: #303030;
+  font-size: 13px;
+  font-weight: 700;
+}
+.di-page .di-field-heading span {
+  color: #737373;
+  font-size: 12px;
+}
+.di-page .di-decoder-select {
+  max-width: 355px;
+  margin-bottom: 21px;
+}
+.di-page .di-decoder-select .v-input__slot {
+  background: #fff;
+  border-radius: 8px;
+}
+.di-page .di-attachment-heading {
+  margin-bottom: 12px;
+}
+.di-page .di-dropzone {
+  position: relative;
+  width: 100%;
+  min-height: 222px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  background: #fafafa;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 15px;
+  text-align: center;
+  transition: border-color .18s ease, background .18s ease;
+}
+.di-page .di-dropzone:hover,
+.di-page .di-dropzone:focus-within {
+  border-color: #a3a3a3;
+  background: #f5f5f5;
+}
+.di-page .di-dropzone.di-dropzone-busy {
+  opacity: .82;
+  cursor: progress;
+}
+.di-page .di-dropzone .input-file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+  font-size: 0;
+}
+.di-page .di-dropzone .input-file:disabled {
+  cursor: not-allowed;
+}
+.di-page .di-dropzone-content {
+  width: 100%;
+  pointer-events: none;
+}
+.di-page .di-cloud-icon {
+  width: 57px;
+  height: 57px;
+  margin: 0 auto 11px;
+  background: #f1f1f1;
+  border: 1px solid #e5e5e5;
+  border-radius: 15px;
+  display: grid;
+  place-items: center;
+}
+.di-page .di-dropzone-title {
+  color: #292929;
+  font-size: 14px;
+  font-weight: 500;
+}
+.di-page .di-dropzone-title strong {
+  font-weight: 700;
+  color: #1976d2;
+}
+.di-page .di-dropzone-content > p {
+  margin: 12px 0 8px;
+  color: #737373;
+  font-size: 11.5px;
+}
+.di-page .di-format-tags {
+  display: flex;
+  gap: 7px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.di-page .di-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  line-height: 1.35;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .025em;
+  border-radius: 5px;
+  border: 1px solid transparent;
+}
+/* Color-coded file types improve recognition without tinting the page. */
+.di-page .di-tag-xlsx {
+  color: #23774a;
+  background: #edf8f0;
+  border-color: #cce9d6;
+}
+.di-page .di-tag-wlk {
+  color: #7b3eb5;
+  background: #f5effb;
+  border-color: #e6d6f5;
+}
+.di-page .di-tag-txt {
+  color: #545c66;
+  background: #f1f3f5;
+  border-color: #dce1e6;
+}
+.di-page .di-dropzone-limit {
+  font-size: 11px;
+  color: #737373;
+  margin-top: 11px;
+}
+.di-page .di-dropzone-limit strong {
+  color: #525252;
+}
+.di-page .di-uploading-state {
+  display: flex;
+  gap: 12px;
+  flex-direction: column;
+  align-items: center;
+  color: #454545;
+  font-size: 13px;
+}
+.di-page .di-staged-files {
+  margin-top: 20px;
+  background: #fff;
+}
+.di-page .di-staged-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.di-page .di-staged-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: #303030;
+}
+.di-page .di-staged-heading > span {
+  font-size: 11px;
+  color: #737373;
+}
+.di-page .di-file-row {
+  width: 100%;
+  margin: 0 0 7px;
+  padding: 8px 12px;
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+}
+.di-page .di-file-symbol {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #f5f5f5;
+  flex: 0 0 auto;
+}
+.di-page .di-file-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: #333333;
+}
+.di-page .di-file-size {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #737373;
+  margin: 0;
+}
+.di-page .di-file-remove {
+  font-size: 18px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  color: #a33333;
+  border-radius: 5px;
+  padding: 3px;
+}
+.di-page .di-file-remove:hover {
+  color: #b42333;
+  background: #fff1f1;
+}
+.di-page .di-options-section {
+  border-top: 1px solid #ebebeb;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.di-page .di-options-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #303030;
+  margin-bottom: 14px;
+}
+.di-page .di-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.di-page .di-option {
+  min-width: 0;
+  padding: 10px 13px;
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 9px;
+}
+.di-page .di-option .di-switch {
+  margin: 0;
+  padding: 0;
+}
+.di-page .di-option .v-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #444444;
+}
+.di-page .di-option p {
+  margin: 4px 0 0 0;
+  color: #737373;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.di-page .di-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding-top: 22px;
+}
+.di-page .di-actions .v-btn {
+  border-radius: 7px;
+  font-size: 12px;
+  letter-spacing: .02em;
+  text-transform: none;
+  font-weight: 700;
+  height: 37px;
+}
+.di-page .di-error-alert {
+  margin: 17px 0 0;
+  border-radius: 8px;
+}
+.di-page .di-guide-panel {
+  padding: 21px 20px 18px;
+}
+.di-page .di-guide-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.di-page .di-guide-title h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #303030;
+}
+.di-page .di-guide-intro {
+  color: #737373;
+  font-size: 11.5px;
+  line-height: 1.55;
+  margin: 0 0 17px;
+}
+.di-page .di-guide-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 0;
+  border-top: 1px solid #ebebeb;
+  color: #444444;
+  font-size: 12px;
+  font-weight: 600;
+}
+.di-page .di-guide-formats {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.di-page .di-guide-footnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 13px 0 0;
+  margin-top: 5px;
+  border-top: 1px solid #ebebeb;
+  color: red;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.di-page .di-aside-tip {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 14px 8px 0;
+  color: #7c6638;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.di-page .di-aside-tip .v-icon {
+  flex: 0 0 auto;
+}
+.di-page .di-history-panel {
+  margin-top: 22px;
+}
+.di-page .di-history-content {
+  padding: 8px 21px 23px;
+}
+.di-page .di-history-tabs {
+  margin-bottom: 15px;
+}
+.di-page .di-history-tabs .v-tab {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.di-page .di-history-content .v-tabs-items {
+  background: transparent;
+}
+.di-page .di-documents-table-row {
+  margin: 0;
+}
+.di-page .di-documents-table-row .v-data-table {
+  width: 100%;
+  border: 1px solid #e5e5e5;
+  border-radius: 9px;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+.di-page .di-documents-table-row .v-data-table th {
+  color: #666666;
+  font-size: 11px;
+  font-weight: 700;
+  background: #fafafa;
+}
+.di-page .di-documents-table-row .v-data-table td {
+  color: #444444;
+  font-size: 12px;
+}
+.di-page .recently-added-file > td {
+  background: #f7f7f7 !important;
+}
+.di-page .di-history-empty {
+  min-height: 185px;
+  padding: 29px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.di-page .di-history-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #f5f5f5;
+  margin-bottom: 10px;
+}
+.di-page .di-history-empty strong {
+  font-size: 13px;
+  color: #333333;
+}
+.di-page .di-history-empty p {
+  font-size: 11.5px;
+  color: #737373;
+  margin: 5px 0 0;
+}
+@media (max-width: 1020px) {
+  .di-page .di-import-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
-  
-  .input-file {
-    opacity: 0; /* invisible but it's there! */
-    width: 100%;
-    height: 200px;
-    position: absolute;
-    cursor: pointer;
+  .di-page .di-aside {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
   }
-  
-  .dropbox:hover {
-    background: rgba(200, 225, 294, 0.469); /* when mouse over to the drop zone, change color */
+  .di-page .di-guide-panel {
+    padding: 17px 20px;
   }
-  
-  .dropbox p {
-    font-size: 1.2em;
-    text-align: center;
-    padding: 50px 0;
+  .di-page .di-guide-row {
+    max-width: 540px;
   }
-
-  /* .file-list {
-    border-radius: 8px;
-    padding: 10px;
-    background: #f8f9fa;
-  } */
-
-  .file-item {
-    padding: 8px;
-    height: 50px;
-    border: 1px solid #ddd;
-    margin-bottom: 5px;
-    border-radius: 6px;
-    background: #fff;
+}
+@media (max-width: 620px) {
+  .di-page .di-main {
+    padding: 0 7px;
   }
-
-  .file-icon {
-    margin-right: 8px;
-    color: #007bff;
+  .di-page .di-page-heading {
+    padding: 9px 7px 15px;
   }
-
-  .file-name {
-    color: #007bff;
-    text-decoration: none;
-  }
-
-  .file-size {
-    font-size: 0.9em;
-    color: #666;
-    margin-left: 8px;
-  }
-
-  .remove-btn {
-    cursor: pointer;
-    color: #d9534f;
-    border-radius: 50%;
-    padding: 4px;
-  }
-
-  .remove-btn:hover {
-    background-color: #d9544f7b;
-  }
-
-  .custom_tooltip {
-    display: none;
-    width: 300px;
-    position: absolute;
-    transform: translateX(-50%);
-    left: 650%;
-    z-index: 100;
-    background: #F8F9FA;
-    border-radius: 8px;
+  .di-page .di-panel-heading {
     padding: 16px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    font-size: 14px;
-    color: #5F6368;
-    line-height: 1.5;
   }
+  .di-page .di-panel-heading p {
+    font-size: 11px;
+  }
+  .di-page .di-step-label {
+    display: none;
+  }
+  .di-page .di-panel-content {
+    padding: 17px;
+  }
+  .di-page .di-decoder-select {
+    max-width: none;
+  }
+  .di-page .di-dropzone {
+    min-height: 214px;
+    padding: 20px 9px;
+  }
+  .di-page .di-options-grid {
+    grid-template-columns: 1fr;
+  }
+  .di-page .di-history-content {
+    padding: 8px 12px 16px;
+  }
+}
 
-  .tooltip-container:hover .custom_tooltip {
-    display: block;
-  }
+/* Decorative icons are neutral; the primary Import action keeps its accent. */
+.di-page .di-panel-icon .v-icon,
+.di-page .di-cloud-icon .v-icon,
+.di-page .di-guide-title .v-icon,
+.di-page .di-guide-footnote .v-icon,
+.di-page .di-staged-title .v-icon,
+.di-page .di-file-symbol .v-icon,
+.di-page .di-aside-tip .v-icon,
+.di-page .di-history-empty-icon .v-icon {
+  color: #595959 !important;
+}
+
+/* Neutral secondary action, regardless of the global Vuetify secondary color. */
+.di-page .di-reset-btn.v-btn {
+  color: #404040 !important;
+  border-color: #d4d4d4 !important;
+  background: #fff !important;
+}
+.di-page .di-reset-btn.v-btn:hover {
+  background: #f5f5f5 !important;
+}
+
+/* Keep hover and keyboard-focus feedback without blue-washing the drop area. */
+.di-page .di-dropzone:hover {
+  border-color: #a3a3a3;
+  background: #f5f5f5;
+}
+.di-page .di-dropzone:focus-within {
+  border-color: #1976d2;
+  background: #fafafa;
+}
+
+/* Small, purposeful accents keep the UI expressive and the canvas white. */
+.di-page .di-upload-panel .di-panel-icon {
+  background: #edf8f0;
+  border-color: #d3e9d9;
+}
+.di-page .di-upload-panel .di-panel-icon .v-icon {
+  color: #2e8055 !important;
+}
+.di-page .di-history-panel .di-panel-icon {
+  background: #f1f5fc;
+  border-color: #dce6f5;
+}
+.di-page .di-history-panel .di-panel-icon .v-icon {
+  color: #426eaa !important;
+}
+.di-page .di-guide-title .v-icon {
+  color: #96722e !important;
+}
 </style>
 
 {% endblock %}
