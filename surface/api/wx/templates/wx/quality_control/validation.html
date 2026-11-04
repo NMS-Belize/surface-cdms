@@ -588,6 +588,32 @@
                   <v-card-text> 
                     <!-- Metadata container -->
                     <div class="metadata-container mb-5">
+                      <!-- Selected station -->
+                      <div class="mb-1">
+                          <v-btn
+                              x-small
+                              depressed
+                              outlined
+                              color="purple"
+                          >
+                              <!-- <v-icon x-small left>mdi-map-marker-outline</v-icon> -->
+                              [[ selectedStationName ]]
+                          </v-btn>
+                      </div>
+
+                      <!-- Selected variable -->
+                      <div class="mb-3">
+                          <v-btn
+                              x-small
+                              depressed
+                              outlined
+                              color="orange"
+                          >
+                              <!-- <v-icon x-small left>mdi-chart-line</v-icon> -->
+                              [[ selectedVariableName ]]
+                          </v-btn>
+                      </div>
+
                       <div>
                         <span class="label-text">Date/Hour:</span>
                         [[ aqcDetailsMetadata.datetime ]]
@@ -994,6 +1020,22 @@
         },
         baseURL() {
           return "/";
+        },
+
+        selectedStationName() {
+            const station = this.stations.find(
+                station => station.id === this.currentSelection.stationId
+            );
+
+            return station ? station.label : 'No station selected';
+        },
+
+        selectedVariableName() {
+            const variable = this.variables.find(
+                variable => variable.variable === this.currentSelection.variableId
+            );
+
+            return variable ? variable.variable_name : 'No variable selected';
         },
 
 
