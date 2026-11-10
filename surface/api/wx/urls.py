@@ -41,7 +41,6 @@ urlpatterns = [
     path('api/range_threshold/', views.range_threshold_view), # For synop and daily data capture ONLY RETURNS THE RANGE FOR MANUAL STATIONS
     path('api/available_data/', views.AvailableDataView.as_view()),
     path('api/user_info/', views.UserInfo.as_view()),
-    path('api/data_export/', views.AppDataExportView.as_view()),
     path('api/intervals/', views.IntervalViewSet.as_view({'get': 'list'})),
     path('api/station_report/', views.station_report_data, name='station_report_data'), # Station Report
     path('api/variable-report/', views.variable_report_data, name='variable-report-data'), # Variable Report

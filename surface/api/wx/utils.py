@@ -315,427 +315,321 @@ def get_monthly_or_yearly(search_type, station, variable, search_date_start, sea
     return response
 
 
+
+
 def get_raw_data(search_type, search_value, search_value2, search_date_start, search_date_end, source='raw_data'):
-    sql_string = ""
+    response = {'results': {}, 'messages': []}
 
-    response = {
-        'results': {},
-        'messages': [],
+    valid_sources = {
+        'raw_data', 'hourly_summary', 'daily_summary',
+        'monthly_summary', 'yearly_summary',
     }
+    if source not in valid_sources:
+        response['messages'].append('Invalid report source.')
+        return response
+
+    if search_type not in ('variable', 'station', 'stationvariable'):
+        response['messages'].append('Invalid search type.')
+        return response
+
+    # Keep the request formats expected by the existing report pages.
+    date_formats = (
+        ('%Y-%m-%d',) if source in ('daily_summary', 'monthly_summary', 'yearly_summary')
+        else ('%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%MZ')
+    )
+
+    def parse_date(value):
+        for date_format in date_formats:
+            try:
+                return datetime.datetime.strptime(value, date_format)
+            except (TypeError, ValueError):
+                pass
+        raise ValueError('Unsupported date format: {}'.format(value))
 
     try:
-        if (source == 'daily_summary' or source == 'monthly_summary' or source == 'yearly_summary'):
-            start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%d')
-        else:
-            start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%dT%H:%M:%SZ')
+        start_date = parse_date(search_date_start)
+        end_date = parse_date(search_date_end)
     except ValueError as err:
-        try:
-            start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%dT%H:%MZ')
-        except ValueError as err:
-            message = 'ValueError: {}'.format(err)
-            response['messages'].append(message)
-            return response
+        response['messages'].append('ValueError: {}'.format(err))
+        return response
 
-    try:
-        if (source == 'daily_summary' or source == 'monthly_summary' or source == 'yearly_summary'):
-            end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%d')
-        else:
-            end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%dT%H:%M:%SZ')
-    except ValueError as err:
-        try:
-            end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%dT%H:%MZ')
-        except ValueError as err:
-            message = 'ValueError: {}'.format(err)
-            response['messages'].append(message)
-            return response
+    if end_date < start_date:
+        response['messages'].append('End date cannot precede start date.')
+        return response
 
-    delta = end_date - start_date
+    date_column = {
+        'daily_summary': 'day',
+        'monthly_summary': 'date',
+        'yearly_summary': 'date',
+    }.get(source, 'datetime')
 
     if source == 'raw_data':
-        value_variable = sql.Identifier('measured')
-        # max_days = 15
-    elif source == 'hourly_summary':
-        value_variable = sql.SQL(', ').join(map(sql.Identifier, ['min_value', 'max_value', 'avg_value', 'sum_value']))
-        # max_days = 30
-    elif source == 'daily_summary':
-        value_variable = sql.SQL(', ').join(map(sql.Identifier, ['min_value', 'max_value', 'avg_value', 'sum_value']))
-        # max_days = 365
-    elif source == 'monthly_summary' or source == 'yearly_summary':
-        value_variable = sql.SQL(', ').join(map(sql.Identifier, ['min_value', 'max_value', 'avg_value', 'sum_value']))
-        # max_days = None
-    # else:
-    #     return get_monthly_or_yearly(search_type, search_value, search_value2, search_date_start, search_date_end, source)
+        # A validated reading must use consisted, even if it is null.
+        # Do not fall back to measured and do not use manual_flag.
+        value_columns = sql.SQL(
+            'CASE WHEN a.is_validated IS TRUE THEN a.consisted ELSE a.measured END'
+        )
+        quality_columns = sql.SQL(', q.name AS quality_flag, q.color AS flag_color')
+        quality_join = sql.SQL('''
+            LEFT JOIN wx_qualityflag q
+              ON q.id = CASE
+                WHEN a.is_validated IS TRUE THEN a.validated_flag
+                ELSE a.quality_flag
+              END
+        ''')
+    else:
+        # Preserve the original column order used by the reporting views.
+        value_columns = sql.SQL(', ').join(
+            sql.SQL('a.{}').format(sql.Identifier(column))
+            for column in ('min_value', 'max_value', 'avg_value', 'sum_value')
+        )
+        quality_columns = sql.SQL('')
+        quality_join = sql.SQL('')
 
-    datetime_variable = sql.Identifier('datetime')
-    if source == 'daily_summary':
-        datetime_variable = sql.Identifier('day')
-    if source == 'monthly_summary' or source == 'yearly_summary':
-        datetime_variable = sql.Identifier('date')
+    if search_type == 'variable':
+        condition = sql.SQL('d.id = %s')
+        params = [search_value]
+    elif search_type == 'station':
+        condition = sql.SQL('a.station_id = %s')
+        params = [search_value]
+    else:
+        condition = sql.SQL('a.station_id = %s AND a.variable_id = %s')
+        params = [search_value, search_value2]
 
-    # if max_days is not None and delta.days > max_days:  # Restrict queries to max two days
-    #     message = 'Interval between search_date_start and search_date_end is greater than two days.'
-    #     response['messages'].append(message)
-    #     return response
+    query = sql.SQL('''
+        SELECT a.station_id,
+               a.variable_id,
+               b.symbol,
+               b.name,
+               c.name,
+               c.symbol,
+               EXTRACT(EPOCH FROM a.{date_column}),
+               d.name,
+               b.color,
+               b.default_representation,
+               b.sampling_operation_id
+               {quality_columns},
+               {value_columns}
+        FROM {table} a
+        JOIN wx_variable b ON a.variable_id = b.id
+        JOIN wx_unit c ON b.unit_id = c.id
+        JOIN wx_measurementvariable d ON b.measurement_variable_id = d.id
+        {quality_join}
+        WHERE {condition}
+          AND a.{date_column} >= %s
+          AND a.{date_column} <= %s
+        ORDER BY a.{date_column}
+    ''').format(
+        date_column=sql.Identifier(date_column),
+        quality_columns=quality_columns,
+        value_columns=value_columns,
+        table=sql.Identifier(source),
+        quality_join=quality_join,
+        condition=condition,
+    )
+    params.extend([search_date_start, search_date_end])
 
-    if search_type is not None and search_type == 'variable':
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    for row in rows:
+        group_name = row[7]     # Measurement variable
+        series_name = row[2]    # Variable symbol
+
+        if group_name not in response['results']:
+            response['results'][group_name] = {}
+
+        if series_name not in response['results'][group_name]:
+            response['results'][group_name][series_name] = {
+                'color': row[8],
+                'default_representation': row[9],
+                'data': [],
+                'unit': row[5],
+            }
+
+        obj = {
+            'station': row[0],
+            'date': row[6] * 1000,
+            'variable': series_name,
+            'measurementvariable': group_name,
+        }
 
         if source == 'raw_data':
-            sql_string = """
-                SELECT station_id,
-                    variable_id,
-                    b.symbol,
-                    b.name,
-                    c.name,
-                    c.symbol,
-                    extract(epoch from {}),
-                    d.name,
-                    b.color,
-                    b.default_representation,
-                    b.sampling_operation_id,
-                    q.name as quality_flag,
-                    q.color as flag_color,
-                    {}
-                FROM {} a
-                JOIN wx_variable b ON a.variable_id=b.id
-                JOIN wx_unit c ON b.unit_id=c.id
-                JOIN wx_measurementvariable d ON b.measurement_variable_id=d.id
-                JOIN wx_qualityflag q ON a.quality_flag=q.id
-            WHERE d.id=%s 
-            AND {} >= %s 
-            AND {} <= %s"""
+            # row[13] is the CASE-selected consisted/measured value.
+            value = row[13]
+            obj['value'] = round(value, 2) if value is not None else None
+            obj['quality_flag'] = row[11]  # Effective QC name
+            obj['flag_color'] = row[12]    # Effective QC color
         else:
-            sql_string = """
-                SELECT station_id,
-                    variable_id,
-                    b.symbol,
-                    b.name,
-                    c.name,
-                    c.symbol,
-                    extract(epoch from {}),
-                    d.name,
-                    b.color,
-                    b.default_representation,
-                    b.sampling_operation_id,
-                    {}
-                FROM {} a
-                JOIN wx_variable b ON a.variable_id=b.id
-                JOIN wx_unit c ON b.unit_id=c.id
-                JOIN wx_measurementvariable d ON b.measurement_variable_id=d.id
-            WHERE d.id=%s 
-            AND {} >= %s 
-            AND {} <= %s"""
+            # Summary columns: MIN[11], MAX[12], AVG[13], SUM[14].
+            value_index = {3: 11, 4: 12, 6: 14, 7: 14}.get(row[10], 13)
+            value = row[value_index]
+            obj['value'] = round(value, 2) if value is not None else None
 
-    if search_type is not None and search_type == 'station':
-        if source == 'raw_data':
-            sql_string = """
-            SELECT station_id,
-                   variable_id,
-                   b.symbol,
-                   b.name,
-                   c.name,
-                   c.symbol,
-                   extract(epoch from {}),
-                   d.name,
-                   b.color,
-                   b.default_representation,
-                   b.sampling_operation_id,
-                   q.name as quality_flag,
-                   q.color as flag_color,
-                   {}
-            FROM {} a
-            JOIN wx_variable b ON a.variable_id=b.id
-            JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_measurementvariable d ON b.measurement_variable_id=d.id
-            JOIN wx_qualityflag q ON a.quality_flag=q.id
-            WHERE station_id=%s 
-              AND {} >= %s 
-              AND {} <= %s
-        """
-        else:
-            sql_string = """
-                SELECT station_id,
-                    variable_id,
-                    b.symbol,
-                    b.name,
-                    c.name,
-                    c.symbol,
-                    extract(epoch from {}),
-                    d.name,
-                    b.color,
-                    b.default_representation,
-                    b.sampling_operation_id,
-                    {}
-            FROM {} a
-            JOIN wx_variable b ON a.variable_id=b.id
-            JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_measurementvariable d ON b.measurement_variable_id=d.id
-            WHERE station_id=%s 
-              AND {} >= %s 
-              AND {} <= %s
-        """
-
-    if search_type is not None and search_type == 'stationvariable':
-        sql_string = """
-            SELECT station_id,
-                   variable_id,
-                   b.symbol,
-                   b.name,
-                   c.name,
-                   c.symbol,
-                   extract(epoch from {}),
-                   d.name,
-                   b.color,
-                   b.default_representation,
-                   b.sampling_operation_id,
-                   {}
-            FROM {} a
-            JOIN wx_variable b ON a.variable_id=b.id
-            JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_measurementvariable d ON b.measurement_variable_id=d.id
-            WHERE station_id=%s 
-              AND variable_id=%s 
-              AND {} >= %s 
-              AND {} <= %s
-        """
-
-    if sql_string:
-        sql_string += " ORDER BY {}"
-
-        with connection.cursor() as cursor:
-
-            if search_type is not None and search_type == 'stationvariable':
-                cursor.execute(sql.SQL(sql_string).format(datetime_variable, value_variable, sql.Identifier(source),
-                                                          datetime_variable, datetime_variable, datetime_variable),
-                               (search_value, search_value2, search_date_start, search_date_end))
-            else:
-                cursor.execute(sql.SQL(sql_string).format(datetime_variable, value_variable, sql.Identifier(source),
-                                                          datetime_variable, datetime_variable, datetime_variable),
-                               (search_value, search_date_start, search_date_end))
-
-            print(sql.SQL(sql_string).format(datetime_variable, value_variable, sql.Identifier(source),
-                                                          datetime_variable, datetime_variable, datetime_variable),
-                               (search_value, search_value2, search_date_start, search_date_end))
-
-            rows = cursor.fetchall()
-
-            for row in rows:
-
-                if not row[7] in response['results'].keys():
-                    response['results'][row[7]] = {}
-
-                if not row[2] in response['results'][row[7]].keys():
-                    response['results'][row[7]][row[2]] = {
-                        'color': row[8],
-                        'default_representation': row[9],
-                        'data': [],
-                        'unit': row[5],
-                    }
-
-                obj = {
-                    'station': row[0],
-                    'date': row[6] * 1000,
-                    # 'year': row[6].year,
-                    # 'month': row[6].month,
-                    # 'day': row[6].day,
-                    'variable': row[2],
-                    'measurementvariable': row[7],
-                }
-                # if source != "daily_summary":
-                #     obj['hour'] = row[6].hour
-                #     obj['minute'] = row[6].minute
-
-                if source == 'raw_data':
-                    obj['value'] = round(row[13], 2)
-                    obj['quality_flag'] = row[11]
-                    obj['flag_color'] = row[12]
-                else:
-                    if row[10] in [6, 7]:
-                        obj['value'] = round(row[14], 2)  # sum_value
-                    elif row[10] == 3:
-                        obj['value'] = round(row[11], 2)  # min_value
-                    elif row[10] == 4:
-                        obj['value'] = round(row[12], 2)  # max_value
-                    else:
-                        obj['value'] = round(row[13], 2)  # avg_value
-
-                # obj['variable']['symbol'] = row[2]
-                # obj['variable']['name'] = row[3]
-                # obj['variable']['unit_name'] = row[4]
-                # obj['variable']['unit_symbol'] = row[5]
-
-                response['results'][row[7]][row[2]]['data'].append(obj)
-
-            return response
+        response['results'][group_name][series_name]['data'].append(obj)
 
     return response
 
 
-def get_station_raw_data(search_type, search_values, search_value2, search_date_start, search_date_end, search_filter,
-                         source='raw_data'):
-    sql_string = ""
+def get_station_raw_data(search_type, search_values, search_value2, search_date_start,
+                         search_date_end, search_filter, source='raw_data'):
+    response = {'results': {}, 'messages': []}
 
-    response = {
-        'results': {},
-        'messages': [],
+    valid_sources = {
+        'raw_data', 'hourly_summary', 'daily_summary',
+        'monthly_summary', 'yearly_summary',
     }
-
-    try:
-        if (source == 'daily_summary' or source == 'monthly_summary' or source == 'yearly_summary'):
-            start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%d')
-        else:
-            start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%dT%H:%M:%SZ')
-    except ValueError as err:
-        try:
-            start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%dT%H:%MZ')
-        except ValueError as err:
-            message = 'ValueError: {}'.format(err)
-            response['messages'].append(message)
-            return response
-
-    try:
-        if (source == 'daily_summary' or source == 'monthly_summary' or source == 'yearly_summary'):
-            end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%d')
-        else:
-            end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%dT%H:%M:%SZ')
-    except ValueError as err:
-        try:
-            end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%dT%H:%MZ')
-        except ValueError as err:
-            message = 'ValueError: {}'.format(err)
-            response['messages'].append(message)
-            return response
-
-    delta = end_date - start_date
-
-    if source == 'raw_data':
-        value_variable = sql.Identifier('measured')
-        max_days = 7
-    elif source == 'hourly_summary':
-        value_variable = sql.SQL(', ').join(map(sql.Identifier, ['min_value', 'max_value', 'avg_value', 'sum_value']))
-        max_days = 30
-    elif source == 'daily_summary':
-        value_variable = sql.SQL(', ').join(map(sql.Identifier, ['min_value', 'max_value', 'avg_value', 'sum_value']))
-        max_days = 365
-    elif source == 'monthly_summary' or source == 'yearly_summary':
-        value_variable = sql.SQL(', ').join(map(sql.Identifier, ['min_value', 'max_value', 'avg_value', 'sum_value']))
-        max_days = None
-    # else:
-    #     return get_monthly_or_yearly(search_type, search_value, search_value2, search_date_start, search_date_end, source)
-
-    datetime_variable = sql.Identifier('datetime')
-    if source == 'daily_summary':
-        datetime_variable = sql.Identifier('day')
-    if source == 'monthly_summary' or source == 'yearly_summary':
-        datetime_variable = sql.Identifier('date')
-
-    if max_days is not None and delta.days > max_days:  # Restrict queries to max two days
-        message = 'Interval between search_date_start and search_date_end is greater than two days.'
-        response['messages'].append(message)
+    if source not in valid_sources:
+        response['messages'].append('Invalid report source.')
         return response
 
-    if search_type is not None and search_type == 'variable':
+    # This function is the multi-station variable-report query.
+    if search_type != 'variable':
+        response['messages'].append('Invalid search type.')
+        return response
+
+    variable_ids = tuple(search_values or ())
+    station_ids = tuple(search_filter or ())
+    if not variable_ids or not station_ids:
+        response['messages'].append('At least one variable and station are required.')
+        return response
+
+    date_formats = (
+        ('%Y-%m-%d',) if source in ('daily_summary', 'monthly_summary', 'yearly_summary')
+        else ('%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%MZ')
+    )
+
+    def parse_date(value):
+        for date_format in date_formats:
+            try:
+                return datetime.datetime.strptime(value, date_format)
+            except (TypeError, ValueError):
+                pass
+        raise ValueError('Unsupported date format: {}'.format(value))
+
+    try:
+        start_date = parse_date(search_date_start)
+        end_date = parse_date(search_date_end)
+    except ValueError as err:
+        response['messages'].append('ValueError: {}'.format(err))
+        return response
+
+    if end_date < start_date:
+        response['messages'].append('End date cannot precede start date.')
+        return response
+
+    max_days = {
+        'raw_data': 7,
+        'hourly_summary': 30,
+        'daily_summary': 365,
+        'monthly_summary': None,
+        'yearly_summary': None,
+    }[source]
+    if max_days is not None and (end_date - start_date) > datetime.timedelta(days=max_days):
+        response['messages'].append(
+            'The maximum number of days for a {} report is {}.'.format(
+                source.replace('_', ' '), max_days
+            )
+        )
+        return response
+
+    date_column = {
+        'daily_summary': 'day',
+        'monthly_summary': 'date',
+        'yearly_summary': 'date',
+    }.get(source, 'datetime')
+
+    if source == 'raw_data':
+        value_columns = sql.SQL(
+            'CASE WHEN a.is_validated IS TRUE THEN a.consisted ELSE a.measured END'
+        )
+        quality_columns = sql.SQL(', q.name AS quality_flag, q.color AS flag_color')
+        quality_join = sql.SQL('''
+            LEFT JOIN wx_qualityflag q
+              ON q.id = CASE
+                WHEN a.is_validated IS TRUE THEN a.validated_flag
+                ELSE a.quality_flag
+              END
+        ''')
+    else:
+        value_columns = sql.SQL(', ').join(
+            sql.SQL('a.{}').format(sql.Identifier(column))
+            for column in ('min_value', 'max_value', 'avg_value', 'sum_value')
+        )
+        quality_columns = sql.SQL('')
+        quality_join = sql.SQL('')
+
+    query = sql.SQL('''
+        SELECT a.station_id,
+               a.variable_id,
+               s.name,
+               b.name,
+               c.name,
+               c.symbol,
+               EXTRACT(EPOCH FROM a.{date_column}),
+               b.name,
+               b.color,
+               b.default_representation,
+               b.sampling_operation_id
+               {quality_columns},
+               {value_columns}
+        FROM {table} a
+        JOIN wx_variable b ON a.variable_id = b.id
+        JOIN wx_unit c ON b.unit_id = c.id
+        JOIN wx_stationvariable sv
+          ON sv.station_id = a.station_id AND sv.variable_id = a.variable_id
+        JOIN wx_station s ON s.id = sv.station_id
+        {quality_join}
+        WHERE a.variable_id IN %s
+          AND a.{date_column} >= %s
+          AND a.{date_column} <= %s
+          AND a.station_id IN %s
+        ORDER BY a.{date_column}
+    ''').format(
+        date_column=sql.Identifier(date_column),
+        quality_columns=quality_columns,
+        value_columns=value_columns,
+        table=sql.Identifier(source),
+        quality_join=quality_join,
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, (variable_ids, search_date_start, search_date_end, station_ids))
+        rows = cursor.fetchall()
+
+    for row in rows:
+        group_name = row[7]   # Variable name
+        series_name = row[2]  # Station name
+
+        if group_name not in response['results']:
+            response['results'][group_name] = {}
+
+        if series_name not in response['results'][group_name]:
+            response['results'][group_name][series_name] = {
+                'color': row[8],
+                'default_representation': row[9],
+                'data': [],
+                'unit': row[5],
+            }
+
+        obj = {
+            'station': row[0],
+            'date': row[6] * 1000,
+            'variable': series_name,
+            'measurementvariable': group_name,
+        }
+
         if source == 'raw_data':
-            sql_string = """
-                SELECT a.station_id,
-                    a.variable_id,
-                    s.name,
-                    b.name,
-                    c.name,
-                    c.symbol,
-                    extract(epoch from {}),
-                    b.name,
-                    b.color,
-                    b.default_representation,
-                    b.sampling_operation_id,
-                    q.name as quality_flag,
-                    q.color as flag_color,
-                    {}
-                FROM {} a
-                JOIN wx_variable b ON a.variable_id=b.id
-                JOIN wx_unit c ON b.unit_id=c.id
-                JOIN wx_qualityflag q ON a.quality_flag=q.id
-                JOIN wx_stationvariable sv ON b.id=sv.variable_id and a.station_id=sv.station_id
-                JOIN wx_station s ON sv.station_id=s.id
-            WHERE a.variable_id in %s 
-            AND {} >= %s 
-            AND {} <= %s
-            AND a.station_id in %s"""
+            value = row[13]  # CASE-selected consisted/measured value
+            obj['value'] = round(value, 2) if value is not None else None
+            obj['quality_flag'] = row[11]
+            obj['flag_color'] = row[12]
         else:
-            sql_string = """
-            SELECT a.station_id,
-                   a.variable_id,
-                   s.name,
-                   b.name,
-                   c.name,
-                   c.symbol,
-                   extract(epoch from {}),
-                   b.name,
-                   b.color,
-                   b.default_representation,
-                   b.sampling_operation_id,
-                   {}
-            FROM {} a
-            JOIN wx_variable b ON a.variable_id=b.id
-            JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_stationvariable sv ON b.id=sv.variable_id and a.station_id=sv.station_id
-            JOIN wx_station s ON sv.station_id=s.id
-        WHERE a.variable_id in %s 
-          AND {} >= %s 
-          AND {} <= %s
-          AND a.station_id in %s"""
+            value_index = {3: 11, 4: 12, 6: 14, 7: 14}.get(row[10], 13)
+            value = row[value_index]
+            obj['value'] = round(value, 2) if value is not None else None
 
-    if sql_string:
-        sql_string += " ORDER BY {}"
-
-        with connection.cursor() as cursor:
-
-            if search_type is not None and search_type == 'stationvariable':
-                cursor.execute(sql.SQL(sql_string).format(datetime_variable, value_variable, sql.Identifier(source),
-                                                          datetime_variable, datetime_variable, datetime_variable),
-                               (search_values, search_value2, search_date_start, search_date_end, search_filter))
-            else:
-                cursor.execute(sql.SQL(sql_string).format(datetime_variable, value_variable, sql.Identifier(source),
-                                                          datetime_variable, datetime_variable, datetime_variable),
-                               (search_values, search_date_start, search_date_end, search_filter))
-
-            rows = cursor.fetchall()
-
-            for row in rows:
-
-                if not row[7] in response['results'].keys():
-                    response['results'][row[7]] = {}
-
-                if not row[2] in response['results'][row[7]].keys():
-                    response['results'][row[7]][row[2]] = {
-                        'color': row[8],
-                        'default_representation': row[9],
-                        'data': [],
-                        'unit': row[5],
-                    }
-
-                obj = {
-                    'station': row[0],
-                    'date': row[6] * 1000,
-                    'variable': row[2],
-                    'measurementvariable': row[7],
-                }
-
-                if source == 'raw_data':
-                    obj['value'] = round(row[13], 2)
-                    obj['quality_flag'] = row[11]
-                    obj['flag_color'] = row[12]
-                else:
-                    if row[10] in [6, 7]:
-                        obj['value'] = round(row[14], 2)  # sum_value
-                    elif row[10] == 3:
-                        obj['value'] = round(row[11], 2)  # min_value
-                    elif row[10] == 4:
-                        obj['value'] = round(row[12], 2)  # max_value
-                    else:
-                        obj['value'] = round(row[13], 2)  # avg_value
-
-                response['results'][row[7]][row[2]]['data'].append(obj)
-
-            return response
+        response['results'][group_name][series_name]['data'].append(obj)
 
     return response

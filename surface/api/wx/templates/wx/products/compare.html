@@ -1,1233 +1,938 @@
-{% extends "base.html" %} {% block content %} {% load wx_filters %}
-<div class="srf-container">
+{% extends "base.html" %}
+{% load wx_filters %}
+{% block title %}Surface - Station Compare{% endblock %}
 
-  <!-- page title -->
-  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-    <span class="srf-display-1 text-uppercase">Station Compare</span><br><br>
-  </div>
-
+{% block content %}
+<div class="srf-container sc-page">
   <div id="app" v-cloak>
-    <v-app>
-      <v-content fluid fill-height style="background: white">
-          <v-layout column>
-            <v-layout fluid>
-              <h6>Station Filters</h6>
-            </v-layout>
-            <v-layout fluid>
-              <v-flex lg2>
-                <v-autocomplete
-                  item-text="name"
-                  item-value="name"
-                  v-model="filter.stationAdminRegion"
-                  :items="stationAdminRegionList"
-                  label="Administrative Region"
-                  autocomplete="off"
-                  clearable
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex lg2 pl-5>
-                <v-autocomplete
-                  item-text="name"
-                  item-value="name"
-                  v-model="filter.stationWatershed"
-                  :items="stationWatershedList"
-                  label="Watershed"
-                  autocomplete="off"
-                  clearable
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex lg2 pl-5>
-                <v-autocomplete
-                  item-text="name"
-                  item-value="id"
-                  v-model="filter.stationProfile"
-                  :items="stationProfileList"
-                  label="Profile"
-                  autocomplete="off"
-                  clearable
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex lg1 pl-5>
-                <v-switch
-                  v-model="filter.isActive"
-                  @change="invertValue(filter.isActive)"
-                  label="Active"
-                ></v-switch>
-              </v-flex>
-              <v-flex lg1>
-                <v-switch
-                  v-model="filter.isAutomatic"
-                  @change="invertValue(filter.isAutomatic)"
-                  label="Automatic"
-                ></v-switch>
-              </v-flex>
-              <v-flex lg2>
-                <v-btn
-                  class="ml-2"
-                  outlined
-                  justify-end
-                  color="primary"
-                  @click="selectAllStations"
-                  >Select All</v-btn
-                >
-              </v-flex>
-            </v-layout>
-              <v-layout column fluid>
-                <v-layout mt-3>
-                  <v-flex lg9>
-                    <v-autocomplete
-                      :items="stationList"
-                      v-model="stationRequest.selectedStations"
-                      :search-input.sync="searchStations"
-                      label="Stations"
-                      required
-                      hint="*Required"
-                      :rules="simpleTextFieldsRules"
-                      autocomplete="off"
-                      chips
-                      deletable-chips
-                      small-chips
-                      multiple
-                      clearable
-                      return-object
-                    ></v-autocomplete>
-                  </v-flex>
-                </v-layout>
-                <v-layout>
-                  <v-flex lg9>
-                    <v-autocomplete
-                      :items="variable_list"
-                      :search-input.sync="searchVariables"
-                      item-text="variable_name"
-                      item-value="variable"
-                      v-model="stationRequest.selectedVariables"
-                      label="Variables"
-                      required
-                      hint="*Required"
-                      return-object
-                      :rules="simpleTextFieldsRules"
-                      autocomplete="off"
-                      chips
-                      deletable-chips
-                      small-chips
-                      multiple
-                      clearable
-                    ></v-autocomplete>
-                  </v-flex>
-                </v-layout>
-                <v-layout>
-                  <v-flex lg3>
-                    <v-autocomplete
-                      :items="distributionTypeItems"
-                      item-text="label"
-                      item-value="value"
-                      v-model="stationRequest.selectedDistributionType"
-                      label="Distribution Type"
-                      :rules="simpleTextFieldsRules"
-                      autocomplete="off"
-                    ></v-autocomplete>
-                  </v-flex>
-                  <v-flex pl-5 lg3>
-                    <v-autocomplete
-                      :items="timescales"
-                      item-text="label"
-                      item-value="value"
-                      v-model="stationRequest.timescale"
-                      v-on:change="changeTimescale"
-                      label="Time resolution"
-                      autocomplete="off"
-                    ></v-autocomplete>
-                  </v-flex>
-                  <v-flex 
-                    pl-5
-                    lg3
-                    style="flex-direction: row; display: flex; align-items: center;"
+    <v-app class="sc-app">
+      <main class="sc-shell">
+        <header class="sc-page-header">
+          <div>
+            <h1 class="srf-display-1 text-uppercase">Station Compare</h1>
+            <p>Compare station observations across variables, time resolutions, and reporting periods.</p>
+          </div>
+        </header>
+
+        <!-- Station filters -->
+        <section class="sc-panel sc-filter-panel" aria-label="Station filters">
+          <div class="sc-section-heading">
+            <div class="sc-heading-identity">
+              <span class="sc-heading-icon"><v-icon size="19">mdi-filter-variant</v-icon></span>
+              <div>
+                <h2>Station filters</h2>
+                <p>Refine the list of stations available for comparison.</p>
+              </div>
+            </div>
+            <span class="sc-count-chip">[[ stationList.length ]] available</span>
+          </div>
+
+          <div class="sc-filter-grid">
+            <v-autocomplete
+              v-model="filter.stationAdminRegion"
+              :items="stationAdminRegionList"
+              item-text="name"
+              item-value="name"
+              label="Administrative region"
+              autocomplete="off" clearable outlined dense hide-details="auto"
+            ></v-autocomplete>
+            <v-autocomplete
+              v-model="filter.stationWatershed"
+              :items="stationWatershedList"
+              item-text="name"
+              item-value="name"
+              label="Watershed"
+              autocomplete="off" clearable outlined dense hide-details="auto"
+            ></v-autocomplete>
+            <v-autocomplete
+              v-model="filter.stationProfile"
+              :items="stationProfileList"
+              item-text="name"
+              item-value="id"
+              label="Station profile"
+              autocomplete="off" clearable outlined dense hide-details="auto"
+            ></v-autocomplete>
+          </div>
+          <div class="sc-filter-footer">
+            <div class="sc-switches">
+              <v-switch v-model="filter.isActive" label="Active stations" color="primary" inset hide-details class="ma-0"></v-switch>
+              <v-switch v-model="filter.isAutomatic" label="Automatic stations" color="primary" inset hide-details class="ma-0"></v-switch>
+            </div>
+            <div class="sc-filter-actions">
+              <v-btn text color="primary" class="text-none" @click="clearStationFilters">
+                <v-icon left>mdi-filter-remove-outline</v-icon> Clear filters
+              </v-btn>
+              <v-btn outlined color="primary" class="text-none" @click="selectAllStations" :disabled="!stationList.length || loading">
+                <v-icon left>mdi-check-all</v-icon> Select all filtered
+              </v-btn>
+            </div>
+          </div>
+        </section>
+
+        <!-- Data series builder -->
+        <section class="sc-panel sc-builder-panel" aria-label="Add data series">
+          <div class="sc-section-heading">
+            <div class="sc-heading-identity">
+              <span class="sc-heading-icon"><v-icon size="19">mdi-tune-variant</v-icon></span>
+              <div>
+                <h2>Add data series</h2>
+                <p>Select stations and variables, configure the display, then add them to your comparison.</p>
+              </div>
+            </div>
+          </div>
+
+          <form class="sc-builder-form" @submit.prevent="onAdd">
+            <div class="sc-form-label">MEASUREMENTS</div>
+            <div class="sc-selection-grid">
+              <v-autocomplete
+                v-model="stationRequest.selectedStations"
+                :items="stationList"
+                :search-input.sync="searchStations"
+                item-text="text"
+                item-value="id"
+                label="Stations"
+                placeholder="Choose one or more stations"
+                return-object multiple chips deletable-chips small-chips clearable
+                autocomplete="off" outlined dense hide-details="auto"
+              ></v-autocomplete>
+              <v-autocomplete
+                v-model="stationRequest.selectedVariables"
+                :items="variable_list"
+                :search-input.sync="searchVariables"
+                item-text="variable_name"
+                item-value="variable"
+                label="Variables"
+                placeholder="Choose one or more variables"
+                return-object multiple chips deletable-chips small-chips clearable
+                autocomplete="off" outlined dense hide-details="auto"
+              ></v-autocomplete>
+            </div>
+            <div class="sc-selection-status">
+              <span>[[ (stationRequest.selectedStations || []).length ]] stations selected</span>
+              <span class="sc-separator">•</span>
+              <span>[[ (stationRequest.selectedVariables || []).length ]] variables selected</span>
+              <span v-if="seriesCount" class="sc-request-preview">[[ seriesCount ]] series to add</span>
+            </div>
+
+            <div class="sc-form-label sc-subsection">SERIES APPEARANCE</div>
+            <div class="sc-config-grid">
+              <v-select
+                v-model="stationRequest.selectedDistributionType"
+                :items="distributionTypeItems"
+                item-text="label" item-value="value"
+                prepend-inner-icon="mdi-chart-line"
+                label="Display type" outlined dense hide-details="auto"
+              ></v-select>
+              <v-select
+                v-model="stationRequest.timescale"
+                :items="timescales"
+                item-text="label" item-value="value"
+                label="Time resolution" @change="changeTimescale"
+                outlined dense hide-details="auto"
+              ></v-select>
+              <div class="sc-color-control">
+                <input id="color_btn" type="color" v-model="stationRequest.color" class="sc-color-picker" aria-label="Pick series color">
+                <v-text-field
+                  v-model="stationRequest.color"
+                  label="Series color" outlined dense hide-details="auto"
+                  class="sc-color-text"
+                  @click="clickColor"
+                ></v-text-field>
+              </div>
+            </div>
+
+            <div class="sc-form-label sc-subsection">REPORTING PERIOD</div>
+            <div class="sc-period-grid">
+              <div class="sc-period-card">
+                <div class="sc-period-caption"><span class="sc-period-dot sc-period-start"></span><strong>From</strong><span>Start of period</span></div>
+                <div class="sc-period-fields" :class="{ 'sc-single-field': !showTimeFields }">
+                  <v-menu v-model="menu1" :close-on-content-click="false" transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="stationRequest.begin_date" v-on="on" label="Start date" prepend-inner-icon="mdi-calendar-month-outline" outlined dense required hide-details="auto"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="stationRequest.begin_date" @input="menu1 = false" :type="getDatepickFormat()" :allowed-dates="allowedDates"></v-date-picker>
+                  </v-menu>
+                  <v-select v-if="showTimeFields" v-model="stationRequest.begin_time" :items="hours" label="Start time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-select>
+                </div>
+              </div>
+              <div class="sc-period-card">
+                <div class="sc-period-caption"><span class="sc-period-dot sc-period-end"></span><strong>To</strong><span>End of period</span></div>
+                <div class="sc-period-fields" :class="{ 'sc-single-field': !showTimeFields }">
+                  <v-menu v-model="menu2" :close-on-content-click="false" transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="stationRequest.end_date" v-on="on" label="End date" prepend-inner-icon="mdi-calendar-month-outline" outlined dense required hide-details="auto"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="stationRequest.end_date" @input="menu2 = false" :type="getDatepickFormat()" :allowed-dates="allowedDates"></v-date-picker>
+                  </v-menu>
+                  <v-select v-if="showTimeFields" v-model="stationRequest.end_time" :items="hours" label="End time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-select>
+                </div>
+              </div>
+            </div>
+
+            <div class="sc-builder-footer">
+              <div class="sc-builder-help">
+                <v-icon size="17" color="primary" style="color: rgb(245, 104, 104) !important;">mdi-information-outline</v-icon>
+                <span style="color: rgb(245, 104, 104);">Missing readings (-99.9) appear in the table but are excluded from statistics and chart values.</span>
+              </div>
+              <v-btn type="submit" color="primary" depressed class="sc-add-btn text-none" :loading="loading" :disabled="$v.stationRequest.$invalid || !seriesCount || loading">
+                <v-icon left>mdi-plus</v-icon> Add [[ seriesCount || '' ]] series
+              </v-btn>
+            </div>
+          </form>
+        </section>
+
+        <div class="sc-feedback">
+          <v-alert v-model="request_error" type="error" dismissible dense>[[ request_error_message ]]</v-alert>
+          <div v-if="loading" class="sc-progress-panel">
+            <div class="sc-progress-line"><v-progress-circular indeterminate color="primary" size="22" width="3"></v-progress-circular>
+              <div><strong>Retrieving comparison data</strong><span>Fetching [[ seriesCount ]] station-variable combinations…</span></div>
+            </div>
+            <v-progress-linear indeterminate color="primary" height="3" class="mt-4"></v-progress-linear>
+          </div>
+        </div>
+
+        <!-- Comparison workspace -->
+        <section class="sc-workspace" aria-label="Comparison workspace">
+          <div class="sc-workspace-header">
+            <div><h2>Comparison workspace</h2><p>Manage your series, customize the chart, and inspect the underlying observations.</p></div>
+            <span class="sc-workspace-counter" v-if="tableItems.length">[[ tableItems.length ]] active series</span>
+          </div>
+          <div class="sc-workspace-panel sc-panel">
+            <v-tabs v-model="activeTab" show-arrows color="primary" background-color="transparent" class="sc-tabs">
+              <v-tab class="text-none"><v-icon left small>mdi-format-list-bulleted-square</v-icon> Data series</v-tab>
+              <v-tab class="text-none"><v-icon left small>mdi-cog-outline</v-icon> Options</v-tab>
+              <v-tab class="text-none"><v-icon left small>mdi-chart-line</v-icon> Chart</v-tab>
+              <v-tab class="text-none"><v-icon left small>mdi-table-large</v-icon> Data table</v-tab>
+            </v-tabs>
+
+            <v-tabs-items v-model="activeTab" class="sc-tab-items">
+              <!-- Series manager -->
+              <v-tab-item>
+                <div class="sc-tab-body">
+                  <div class="sc-toolbar">
+                    <div><h3>Added data series</h3><p>Change colors or chart types, and remove unwanted series.</p></div>
+                    <div class="sc-toolbar-actions">
+                      {% if request|has_any_feature_permission:"product-compare:write" %}
+                      <v-menu bottom offset-y :disabled="!tableItems.length">
+                        <template v-slot:activator="{ on, attrs }">
+                          <v-btn outlined color="success" class="text-none" :disabled="!tableItems.length" v-bind="attrs" v-on="on"><v-icon left small>mdi-download-outline</v-icon> Export <v-icon right small>mdi-chevron-down</v-icon></v-btn>
+                        </template>
+                        <v-list dense><v-list-item v-for="option in exportItems" :key="option.value" @click="exportAs(option.value)"><v-list-item-title>[[ option.title ]]</v-list-item-title></v-list-item></v-list>
+                      </v-menu>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="sc-series-actions">
+                    <v-text-field v-model="search" label="Search series" prepend-inner-icon="mdi-magnify" clearable outlined dense hide-details="auto" class="sc-series-search"></v-text-field>
+                    <span class="sc-selection-count">[[ selectedItems.length ]] selected / [[ tableItems.length ]] total</span>
+                    <div class="sc-series-delete">
+                      {% if request|has_any_feature_permission:"product-compare:delete" %}
+                      <v-btn outlined color="error" class="text-none" :disabled="!selectedItems.length || loading" @click="deleteSelected"><v-icon left small>mdi-delete-outline</v-icon> Delete selected</v-btn>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <v-data-table
+                    v-model="selectedItems"
+                    :headers="headers"
+                    :items="tableItems"
+                    :search="search"
+                    item-key="generatedId"
+                    show-select
+                    :items-per-page="10"
+                    :footer-props="{ 'items-per-page-options': [10, 25, 50, -1] }"
+                    class="sc-series-table"
+                    :no-data-text="'No data series added yet. Use the form above to add your first comparison.'"
                   >
-                    <input
-                      type="color"
-                      v-model="stationRequest.color"
-                      id="color_btn"
-                    />
-                    <v-text-field
-                      class="ml-2"
-                      name="color"
-                      label="Color"
-                      type="text"
-                      v-model="stationRequest.color"
-                      @click="clickColor()"
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </v-flex>
-                </v-layout>
-                <v-layout mt-3 mb-5>
-                  <v-flex lg3 class="d-flex justify-between">
-                    <v-menu
-                      :close-on-content-click="false"
-                      v-model="menu1"
-                      :nudge-right="40"
-                      transition="scale-transition"
-                      offset-y
-                      class="max-50"
-                    >
-                      <template v-slot:activator="{ on }">
-                        <v-text-field
-                          v-model="stationRequest.begin_date"
-                          label="Start date"
-                          prepend-icon="event"
-                          v-on="on"
-                          required
-                          hint="*Required"
-                          :rules="simpleTextFieldsRules"
-                        ></v-text-field>
-                      </template>
-                      <v-date-picker
-                        name="begin_date"
-                        v-model="stationRequest.begin_date"
-                        @input="menu1 = false"
-                        :type='getDatepickFormat()'
-                        :allowed-dates="allowedDates"
-                      ></v-date-picker>
-                    </v-menu>
-                    <v-select
-                      v-if="stationRequest.timescale === 'hourlysummaries' || stationRequest.timescale === 'rawdata'"
-                      v-model="stationRequest.begin_time"
-                      label="Initial time"
-                      :items="hours"
-                      prepend-icon="access_time"
-                      required
-                    ></v-select>
-                    <template v-slot:activator="{ on }">
-                      <v-text-field
-                        v-model="stationRequest.begin_time"
-                        label="Initial time"
-                        prepend-icon="access_time"
-                        v-on="on"
-                        :disabled="!(stationRequest.timescale === 'hourlysummaries' || stationRequest.timescale === 'rawdata')"
-                      ></v-text-field>
+                    <template v-slot:item.type="{ item }">
+                      <v-select v-model="item.type" :items="distributionTypeItems" item-text="label" item-value="value" dense outlined hide-details="auto" class="sc-type-select" @change="updateDistributionType(item)"></v-select>
                     </template>
-                    </v-menu>
-                  </v-flex>
-                  <v-flex lg3 pl-5 class="d-flex justify-between">
-                    <v-menu
-                      :close-on-content-click="false"
-                      v-model="menu2"
-                      :nudge-right="40"
-                      transition="scale-transition"
-                      offset-y
-                      class="max-50"
-                    >
-                      <template v-slot:activator="{ on }">
-                        <v-text-field
-                          v-model="stationRequest.end_date"
-                          label="Final date"
-                          prepend-icon="event"
-                          v-on="on"
-                          required
-                          hint="*Required"
-                          :rules="simpleTextFieldsRules"
-                        ></v-text-field>
-                      </template>
-                      <v-date-picker
-                        name="end_date"
-                        v-model="stationRequest.end_date"
-                        @input="menu2 = false"
-                        :type='getDatepickFormat()'
-                        :allowed-dates="allowedDates"
-                      ></v-date-picker>
-                    </v-menu>
-                    <v-select
-                      v-if="stationRequest.timescale === 'hourlysummaries' || stationRequest.timescale === 'rawdata'"
-                      v-model="stationRequest.end_time"
-                      label="Final time"
-                      :items="hours"
-                      prepend-icon="access_time"
-                      required
-                    ></v-select>
-                    <template v-slot:activator="{ on }">
-                      <v-text-field
-                        v-model="stationRequest.end_time"
-                        label="Final time"
-                        prepend-icon="access_time"
-                        v-on="on"
-                        :disabled="!(stationRequest.timescale === 'hourlysummaries' || stationRequest.timescale === 'rawdata')"
-                      ></v-text-field>
+                    <template v-slot:item.color="{ item }">
+                      <div class="sc-series-color"><input type="color" v-model="item.color" :aria-label="'Change color for ' + item.variableName" @change="createTraces"></div>
                     </template>
-                    </v-menu>
-                  </v-flex>
-                  <v-flex mt-5 lg1 pl-5 class="d-flex justify-between">
-                    <v-btn
-                      justify-end
-                      outlined
-                      color="primary"
-                      small
-                      @click="onAdd"
-                      :disabled="$v.stationRequest.$invalid"
-                      >ADD SERIES</v-btn
-                    >
-                  </v-flex>
-                </v-layout>
-                <v-alert
-                  v-model="request_error"
-                  dismissible
-                  type="error"
-                >
-                  [[ request_error_message ]]
-                </v-alert>
-                <v-overlay :value="loading">
-                  <v-progress-circular indeterminate size="64"></v-progress-circular>
-                </v-overlay>
-                <v-layout mt-3>
-                  <v-tabs>
-                    <v-tab key="1">Data Series</v-tab>
-                    <v-tab key="2">Options</v-tab>
-                    <v-tab key="3">Chart</v-tab>
-                    <v-tab key="4">Data Table</v-tab>
+                    <template v-slot:item.action="{ item }">
+                      {% if request|has_any_feature_permission:"product-compare:delete" %}
+                      <v-btn icon small color="error" :aria-label="'Remove ' + item.variableName" @click="onRemove(item)"><v-icon small>mdi-delete-outline</v-icon></v-btn>
+                      {% endif %}
+                    </template>
+                  </v-data-table>
+                </div>
+              </v-tab-item>
 
-                    <v-tab-item key="1">
-                      <v-layout mt-3>
-                        <v-flex shrink>
-                          <v-menu transition="slide-y-transition" bottom>
-                            <template v-slot:activator="{ on }">
+              <!-- Chart options -->
+              <v-tab-item>
+                <div class="sc-tab-body">
+                  <div class="sc-toolbar"><div><h3>Chart options</h3><p>Choose the title and subtitle displayed above your comparison chart.</p></div></div>
+                  <div class="sc-option-fields">
+                    <v-text-field v-model="title" label="Chart title" prepend-inner-icon="mdi-format-title" outlined dense hide-details="auto" placeholder="e.g. Temperature comparison"></v-text-field>
+                    <v-text-field v-model="subtitle" label="Chart subtitle" prepend-inner-icon="mdi-text-short" outlined dense hide-details="auto" placeholder="Optional description"></v-text-field>
+                  </div>
+                </div>
+              </v-tab-item>
 
-                              {% if request|has_any_feature_permission:"product-compare:write" %}
-                              <v-btn v-on="on" outlined medium color="export">
-                                Export
-                              </v-btn>
-                              {% endif %}
+              <!-- Chart -->
+              <v-tab-item>
+                <div class="sc-tab-body">
+                  <div class="sc-toolbar"><div><h3>Station comparison chart</h3><p>Compare your configured series. Drag over the chart to zoom into a period.</p></div><span v-if="tableItems.length" class="sc-muted-chip">[[ tableItems.length ]] series</span></div>
+                  <div v-if="!hasChartData" class="sc-workspace-empty"><v-icon size="44" color="blue-grey lighten-2">mdi-chart-box-outline</v-icon><h4>No chart data yet</h4><p>Add one or more data series with observations to display the chart.</p></div>
+                  <highcharts v-else :options="chartOptions" class="sc-highcharts"></highcharts>
+                </div>
+              </v-tab-item>
 
-                            </template>
-                            <v-list>
-                              <v-list-item
-                                v-for="(item, i) in exportItems"
-                                :key="i"
-                                @click="exportAs(item.value)"
-                              >
-                                <v-list-item-content>
-                                  <v-list-item-title>
-                                    [[ item.title ]]
-                                  </v-list-item-title>
-                                </v-list-item-content>
-                              </v-list-item>
-                            </v-list>
-                          </v-menu>
-                        </v-flex>
-                      </v-layout>
-                      <v-layout column fluid>
-                        <v-layout mt-5>
-                          <v-flex lg6>
-                            <v-text-field
-                              type="text"
-                              v-model="search"
-                              label="Search"
-                              clearable
-                            ></v-text-field>
-                          </v-flex>
-                          <v-flex pl-3 pt-8 lg3>
-                            <span>[[selectedItems.length]] of [[tableItems.length]] items selected</span>
-                          </v-flex>
-                          <v-spacer></v-spacer>
-
-                            <!-- delete selected button -->
-                            {% if request|has_any_feature_permission:"product-compare:delete" %}
-                            <v-btn @click="deleteSelected" justify-end outlined medium color="error">Delete Selected</v-btn>
-                            {% endif %}
-
-                          </v-flex>
-                        </v-layout>
-                        <v-data-table v-model="selectedItems" flat :headers="headers" :items="tableItems" :search="search" item-key="index" show-select>
-                          <template v-slot:item.color="{ item }">
-                            <input
-                              type="color"
-                              v-model="item.color"
-                              id="color_btn_item"
-                              v-on:change="createTraces()"
-                            />     
-                          </template>
-                          <template v-slot:item.type="{ item }">
-                            <v-autocomplete
-                              :items="distributionTypeItems"
-                              item-text="label"
-                              item-value="value"
-                              v-model="item.type"
-                              autocomplete="off"
-                              v-on:change="updateDistributionType(item)"
-                            ></v-autocomplete>
-                          </template>
-
-                          <template v-slot:item.action="{ item }">
-
-                            <!-- delete icon -->
-                            {% if request|has_any_feature_permission:"product-compare:delete" %}
-                            <v-icon small @click="onRemove(item)">
-                              delete
-                            </v-icon>
-                            {% endif %}
-
-                          </template>
-
-                        </v-data-table>
-                      </v-layout>
-                    </v-tab-item>
-                    <v-tab-item key="2">
-                      <v-layout ml-3 column style="width: 75%">
-                        <v-flex my-2 mt-3>
-                          <v-text-field
-                            type="text"
-                            v-model="title"
-                            name="title"
-                            label="Title"
-                          ></v-text-field>
-                        </v-flex>
-                        <v-flex my-2>
-                          <v-text-field
-                            type="text"
-                            v-model="subtitle"
-                            name="title"
-                            label="Subtitle"
-                          ></v-text-field>
-                        </v-flex>
-                      </v-layout>
-                    </v-tab-item>
-                    <v-tab-item key="3">
-                      <v-layout ml-3 mt-3 column>
-                        <highcharts :options="chartOptions"></highcharts>
-                      </v-layout>
-                    </v-tab-item>
-                    <v-tab-item key="4">
-                      <v-layout column style="width: 100%; height: 100vh;">
-                        <v-flex md7 style="overflow: auto">
-                          <div class="limit-table ml-3 " mt-3>
-                            <table
-                              class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mt-3"
-                              calculate-widths
-                              dense
-                            >
-                              <thead>
-                                <tr>
-                                  <th class="mdl-data-table__cell--non-numeric">
-                                    Date
-                                  </th>
-                                  <th v-for="(element) in tableItems" :key="element.id">
-                                    [[ element.station ]] <br>
-                                    [[ element.variableName ]] ([[ element.symbol ]]) -
-                                    ([[timescalesSet[element.timescale] ]])
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr v-for="(data) in tableData" :key="data.date">
-                                  <td class="mdl-data-table__cell--non-numeric">
-                                    [[ data.formatedDate ]]
-                                  </td>
-                                  <td
-                                    v-for="(value, index) in data.values"
-                                    :key="index"
-                                  >
-                                    [[ value ]]
-                                  </td>
-                                </tr>
-                                <tr
-                                  v-for="(value) in elementsStats"
-                                  :key="value.label"
-                                >
-                                  <td style="text-align: left">
-                                    [[ value.label ]]
-                                  </td>
-                                  <td
-                                    v-for="(td, index) in selectedElements"
-                                    :key="index"
-                                  >
-                                    [[ value.values[td] ]]
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-                        </v-flex>
-                      </v-layout>
-                    </v-tab-item>
-                  </v-tabs>
-                </v-layout>
-              </v-layout>
-          </v-layout>
-      </v-content>
+              <!-- Observation table -->
+              <v-tab-item>
+                <div class="sc-tab-body">
+                  <div class="sc-toolbar"><div><h3>Comparison data table</h3><p>Timestamp-aligned measurements with summary statistics for every series.</p></div>
+                    {% if request|has_any_feature_permission:"product-compare:write" %}
+                    <v-btn outlined color="success" class="text-none" :disabled="!tableItems.length" @click="exportAs('csv')"><v-icon left small>mdi-download-outline</v-icon> Download CSV</v-btn>
+                    {% endif %}
+                  </div>
+                  <div v-if="!tableItems.length" class="sc-workspace-empty"><v-icon size="44" color="blue-grey lighten-2">mdi-table-large</v-icon><h4>No observations to compare</h4><p>Add station and variable combinations above to populate the table.</p></div>
+                  <template v-else>
+                    <div class="sc-table-wrap">
+                      <v-data-table
+                        :headers="comparisonHeaders"
+                        :items="tableData"
+                        item-key="date"
+                        :items-per-page="50"
+                        :footer-props="{ 'items-per-page-options': [25, 50, 100, 300, -1] }"
+                        class="sc-comparison-table"
+                        no-data-text="No measurements were returned for the selected data series."
+                      >
+                        <template v-slot:item="{ item }">
+                          <tr>
+                            <td class="sc-date-cell">[[ item.formatedDate ]]</td>
+                            <td v-for="series in tableItems" :key="series.generatedId" class="sc-number-cell" :class="{ 'sc-missing-cell': isMissingValue(item['col_' + series.generatedId]) }">
+                              [[ formatTableValue(item['col_' + series.generatedId]) ]]
+                            </td>
+                          </tr>
+                        </template>
+                      </v-data-table>
+                    </div>
+                    <div class="sc-statistics">
+                      <div class="sc-statistics-header"><h4>Summary statistics</h4><span>Excludes missing values (-99.9)</span></div>
+                      <div class="sc-stats-scroll">
+                        <table class="sc-stats-table">
+                          <thead><tr><th>Statistic</th><th v-for="series in tableItems" :key="series.generatedId">[[ series.station ]] — [[ series.variableName ]]</th></tr></thead>
+                          <tbody><tr v-for="stat in elementsStats" :key="stat.label"><th>[[ stat.label ]]</th><td v-for="series in tableItems" :key="series.generatedId">[[ stat.values[series.generatedId] == null ? '—' : stat.values[series.generatedId] ]]</td></tr></tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </v-tab-item>
+            </v-tabs-items>
+          </div>
+        </section>
+      </main>
     </v-app>
   </div>
-
-  {% endblock %} {% block localjavascript %}
-
-  <script>
-    Vue.use(HighchartsVue.default);
-    Vue.use(window.vuelidate.default);
-    Vue.use(window.pdfMake);
-
-    const { required, minLength } = window.validators;
-
-    new Vue({
-      el: "#app",
-      vuetify: new Vuetify(),
-      delimiters: ["[[", "]]"],
-      validations: {
-        stationRequest: {
-          selectedStations: { required },
-          selectedVariables: { required },
-          selectedDistributionType: { required },
-          color: { required },
-          timescale: { required },
-          begin_date: { required },
-          end_date: { required }
-        }
-      },
-      data: {
-        filter: {
-          isActive: true,
-          isAutomatic: true
-        },
-        selectedItems: [],
-        hours: (function() {
-        const hours = [];
-          hours.length = 24;
-          hours.fill('');
-          return hours.map((el, index) => `${index < 10 ? '0' : ''}${index}:00`);
-        })(),
-        searchStations: null,
-        searchVariables: null,
-        search: "",
-        timezone: "{{ TIMEZONE_NAME|escapejs }}",
-        request_error:false,
-        request_error_message: '',
-        dataByVariable: {},
-        variableItems: [],
-        distributionTypeItems: [],
-        timescalesSet: {},
-        loading: false,
-        variable_list: [
-          {% for variable in variable_list %}
-            {
-              variable: {{ variable.id }},
-              variable_name: "{{ variable.name }}",
-              unit_symbol: "{{ variable.unit.symbol }}"
-            },
-          {% endfor %}
-        ],
-        timescales: [
-          {
-            label: "Raw Data",
-            value: "rawdata"
-          },
-          {
-            label: "Hourly",
-            value: "hourlysummaries"
-          },
-          {
-            label: "Daily",
-            value: "dailysummaries"
-          },
-          {
-            label: "Monthly",
-            value: "monthlysummaries"
-          },
-          {
-            label: "Yearly",
-            value: "yearlysummaries"
-          }
-        ],
-        distributionTypeItems: [
-          {
-            label: "Line",
-            value: "line"
-          },
-          {
-            label: "Bars",
-            value: "column"
-          },
-          {
-            label: "Points",
-            value: "point"
-          },
-          {
-            label: "Spline",
-            value: "spline"
-          }
-        ],
-        menu1: false,
-        menu2: false,
-        menu3: false,
-        menu4: false,
-        tableItems: [],
-        headers: [
-          {
-            text: "Timescale",
-            align: "left",
-            sortable: true,
-            value: "timescale_desc"
-          },
-          {
-            text: "Start date",
-            align: "left",
-            sortable: true,
-            value: "start_datetime_formated"
-          },
-          {
-            text: "End date",
-            align: "left",
-            sortable: true,
-            value: "end_datetime_formated"
-          },
-          {
-            text: "Station",
-            align: "center",
-            sortable: true,
-            value: "station"
-          },
-          {
-            text: "Element",
-            align: "center",
-            sortable: true,
-            value: "variableName"
-          },
-          {
-            text: "Type",
-            align: "center",
-            sortable: true,
-            value: "type"
-          },
-          {
-            text: "Color",
-            align: "center",
-            sortable: false,
-            value: "color"
-          },
-          {
-            text: "Action",
-            align: "center",
-            sortable: false,
-            value: "action"
-          }
-        ],
-        exportItems: [
-          // { title: "PDF", icon: "fas fa-file-pdf", value: "pdf" },
-          { title: "CSV", icon: "fas fa-file-csv", value: "csv" },
-          // { title: 'EXCEL', icon: 'fas fa-file-excel', value: 'excel' },
-          // { title: 'PRINT', icon: 'fas fa-print', value: 'print' }
-        ],
-        title: "",
-        subtitle: "",
-        layout: {},
-        stationRequest: {
-          selectedStations: null,
-          selectedVariables: null,
-          selectedDistributionType: 'line',
-          color: "#000000",
-          timescale: "dailysummaries",
-          begin_date: moment().format('YYYY-MM-DD'),
-          end_date: moment().add(1, 'days').format('YYYY-MM-DD'),
-          begin_time: "00:00",
-          end_time: "00:00"
-        },
-        index: 0,
-        counter:0,
-        tableData: {},
-        elementsStats: [],
-        stations: [
-          {% for station in station_list %}
-          { id: {{ station.id }},
-            text: "{{ station.name | safe }} - {{ station.code }}",
-            name: "{{ station.name | safe }}",
-            code: "{{ station.code }}",
-            region: "{{ station.region | safe }}",
-            watershed: "{{ station.watershed | safe }}",
-            profile: "{{ station.profile.id | safe }}",
-            is_automatic: {{ station.is_automatic | lower }},
-            is_active: {{ station.is_active | lower }},
-          },
-          {% endfor %}
-        ],
-        simpleTextFieldsRules: [
-          v => (v !== undefined && v !== "") || "This field is required"
-        ],
-        stationProfileList: [
-          {% for station_profile in station_profile_list %}
-          {id: {{ station_profile.id }}, name: "{{ station_profile.name }}" },
-          {% endfor %}
-        ],
-        stationWatershedList: [
-          {% for station_watershed in station_watershed_list %}
-          {id: {{ station_watershed.id }}, name: "{{ station_watershed.watershed }}" },
-          {% endfor %}
-        ],
-        stationAdminRegionList: [
-          {% for station_admin_region in station_admin_region_list %}
-          {id: {{ station_admin_region.id }}, name: "{{ station_admin_region.name }}" },
-          {% endfor %}
-        ],
-      },
-      watch: {
-        station (newSelectedArray, oldSelectedArray) {
-          this.searchStations = '';
-        },
-        variables (newSelectedArray, oldSelectedArray) {
-          this.searchVariables = '';
-        }
-      },
-      computed: {
-        chartOptions() {
-          return Object.assign(
-            {},
-            {
-              chart: {
-                zoomType: "xy"
-              },
-              title: {
-                text: this.title
-              },
-              subtitle: {
-                text: this.subtitle
-              },
-              xAxis: {
-                type: "datetime"
-              },
-              tooltip: {
-                shared: true
-              },
-              legend: {
-                layout: "horizontal",
-                align: "center",
-                verticalAlign: "bottom"
-              },
-              time: {
-                timezone: this.timezone
-              },
-              series: []
-            },
-            this.layout
-          );
-        },
-        stationList () {
-          let filteredStations = this.stations;
-
-          if(this.filter.stationAdminRegion)
-            filteredStations = filteredStations.filter(station => station.region == this.filter.stationAdminRegion);
-
-          if(this.filter.stationWatershed)
-            filteredStations = filteredStations.filter(station => station.watershed == this.filter.stationWatershed);
-
-          if(this.filter.stationProfile)
-            filteredStations = filteredStations.filter(station => station.profile == this.filter.stationProfile);
-
-          filteredStations = filteredStations.filter(station => this.filter.isAutomatic == station.is_automatic);
-
-          filteredStations = filteredStations.filter(station => this.filter.isActive == station.is_active);
-
-          return filteredStations;
-        }
-      },
-      methods: {
-        getAll(path, url, oldData = []) {
-          return fetch(`/${path}`)
-            .then(res => {
-              if(!res.ok)   
-                return res.json().then(err => Promise.reject(err));
-
-              if (!res.body) {
-                return { next: null, results: [] };
-              }
-
-              return res.json();
-            })
-            .then(async data => {
-              if(data.results != null) {
-                const values = [...oldData, ...data.results];
-                if (!!data.next) {
-                  return await getAll(
-                    context,
-                    path,
-                    `/${path}/${data.next.substr(
-                      data.next.indexOf(`/${path}`)
-                    )}`,
-                    values
-                  );
-                }
-                return values;
-              }
-            });
-        },
-        changeTimescale(){
-          if(this.stationRequest.timescale === 'monthlysummaries') {
-            this.stationRequest.begin_date = moment().format('YYYY-MM')
-            this.stationRequest.end_date = moment().add(1, 'month').format('YYYY-MM')
-          } else if(this.stationRequest.timescale === 'yearlysummaries') {
-            this.stationRequest.begin_date = moment().format('YYYY-01')
-            this.stationRequest.end_date = moment().add(1, 'year').format('YYYY-01')
-          }
-        },
-        clickColor() {
-          document.getElementById("color_btn").click();
-        },
-        deleteSelected(){
-          this.selectedItems.forEach(item => this.onRemove(item));
-          this.selectedItems = [];
-        },
-        createTableData() {
-          const dates = this.tableItems
-            .filter(e => e.records != null)
-            .map(e => e.records.map(e => e.date))
-            .reduce((p, c) => [...p, ...c], []);
-
-          const dateSet = new Set(dates);
-          const datesToObject = Array.from(dateSet).sort().map(date => ({
-            date,
-            formatedDate: this.formatDatetimeForDataTable(moment.utc(date).tz(this.timezone)),
-            values: []
-          }));
-
-          this.tableData = datesToObject.map(date => {
-            this.tableItems.forEach(item => {
-              if(item.records == null){
-                date.values.push('-');
-              } else {
-                const record = item.records.find(e => e.date === date.date) || {values: '-'};
-                date.values.push(record.values);
-              }
-            });
-            return date;
-          });
-        },
-        updateDistributionType(item){
-          item.chartTrace.type = "" + item.type;
-          item.chartTrace.additionalConfig = {};
-
-          if (item.type === "point") {
-            (item.chartTrace.type = "spline"),
-              (item.chartTrace.additionalConfig = {
-                lineWidth: 0,
-                marker: {
-                  enabled: true,
-                  radius: 2
-                },
-                states: {
-                  hover: {
-                    lineWidthPlus: 0
-                  }
-                }
-              });
-          } else if (
-            item.type === "line"
-          ) {
-            item.chartTrace.additionalConfig = {
-              lineWidth: 2,
-              marker: {
-                enabled: false
-              }
-            };
-          } else if (
-            item.type === "spline"
-          ) {
-            item.chartTrace.additionalConfig = {
-              lineWidth: 2,
-              marker: {
-                enabled: false
-              }
-            };
-          }
-          this.createTraces();
-        },
-        createTraces() {
-          this.traces = [];
-          const layout = {};
-          const axes = Array.from(new Set(this.tableItems.map(e => `${e.symbol}`)));
-          this.layout = {
-            yAxis: axes
-              .map(e => this.tableItems.filter(e => e.records != null).find(item => item.symbol === e))
-              .map((value, index) => ({
-                title: {
-                  text: value.symbol
-                },
-                labels: {
-                  format: `{value} ${value.symbol}`
-                },
-                opposite: index % 2 === 1
-              })),
-            series: this.tableItems.filter(e => e.records != null).map((value, index) =>
-              Object.assign(
-                {},
-                {
-                  name: value.chartTrace.name,
-                  type: value.chartTrace.type,
-                  data: value.chartTrace.y,
-                  yAxis: axes.indexOf(`${value.symbol}`),
-                  tooltip: {
-                    valueSuffix: ` ${value.symbol}`,
-                    valueDecimals: 2
-                  },
-                  color: value.color
-                },
-                value.chartTrace.additionalConfig
-              )
-            )
-          };
-        },
-        getDatepickFormat(){
-          return this.stationRequest.timescale === 'yearlysummaries' || this.stationRequest.timescale === 'monthlysummaries' ? 'month': 'date';
-        },
-        allowedDates(val){
-          if(this.stationRequest.timescale === 'yearlysummaries')
-            return val.split('-')[1] == '01' // just january
-          return true;
-        },
-        onAdd() {
-          let start_datetime = moment(`${this.stationRequest.begin_date} ${this.stationRequest.begin_time}`)
-          let end_datetime = moment(`${this.stationRequest.end_date} ${this.stationRequest.end_time}`)
-          this.stationRequest.selectedStations.forEach(station => {
-            this.stationRequest.selectedVariables.forEach(variable => {
-              this.getSummaries(this.stationRequest, start_datetime, end_datetime, variable, station);
-            });
-          });
-        },
-        generateItemId(index){
-          return ""+index;
-        },
-        formatDatetimeForRequest(datetime){
-          if (this.stationRequest.timescale === "hourlysummaries" || this.stationRequest.timescale === "rawdata")
-            return datetime.clone().tz(this.timezone, true).utc().format('YYYY-MM-DDTHH:mm:ss[Z]');
-          else
-            return datetime.clone().tz(this.timezone, true).format('YYYY-MM-DD');
-        },
-        formatDatetimeForDataTable(datetime){
-          return datetime.clone().format('YYYY-MM-DD HH:mm:ss');
-        },
-        formatReceivedData(datetime){
-          if (this.stationRequest.timescale === "dailysummaries" || this.stationRequest.timescale === "monthlysummaries" || this.stationRequest.timescale === "yearlysummaries")
-            return moment.utc(datetime).tz(this.timezone, true).valueOf();
-          else
-            return moment.utc(datetime).valueOf();
-        },
-        getSummaries(requestParameters, start_datetime, end_datetime, element, station) {
-          this.loading = true;
-          const params = `&search_date_start=${this.formatDatetimeForRequest(start_datetime)}&search_date_end=${this.formatDatetimeForRequest(end_datetime)}`;
-
-          this.request_error = false;
-          this.request_error_message = '';
-
-          this.getAll(`api/${requestParameters.timescale}/?search_type=stationvariable&search_value=${station.id}&search_value2=${element.variable}${params}`
-          ).then(response => {
-            this.counter++;
-            let currentTableItem = {
-              id: Symbol(this.index),
-              generatedId: this.generateItemId(this.counter),
-              variableId: element.variable,
-              index: this.index,
-              timescale: this.stationRequest.timescale,
-              timescale_desc: this.timescalesSet[this.stationRequest.timescale],
-              start_datetime,
-              end_datetime,
-              start_datetime_formated: this.formatDatetimeForDataTable(start_datetime),
-              end_datetime_formated: this.formatDatetimeForDataTable(end_datetime),
-              station: station.name,
-              variableName: element.variable_name || "",
-              symbol: element.unit_symbol || "",
-              type: "" + this.stationRequest.selectedDistributionType,
-              color: this.stationRequest.color,
-              chartTrace: {}
-            }
-            this.index++;
-            this.tableItems.push(currentTableItem);
-
-            const records = [];
-            const selectedVariableId = element.variable;
-
-            if(response != null) {
-              response.forEach(summaryData => {
-                records.push({
-                  date: this.formatReceivedData(summaryData.date),
-                  values: summaryData.value
-                })
-
-                this.dataByVariable[currentTableItem.generatedId] = this.dataByVariable[currentTableItem.generatedId] || [];
-                this.dataByVariable[currentTableItem.generatedId].push(summaryData.value);
-              });
-
-              currentTableItem.records = records;
-
-              const x = records.map(record => record.date);
-              const y = records.map((record, index) => [
-                +x[index],
-                record.values
-              ]);
-
-              currentTableItem.chartTrace = {
-                x,
-                y,
-                name: `${currentTableItem.station} - ${currentTableItem.variableName} (${currentTableItem.symbol}) (${currentTableItem.timescale_desc})`,
-                type: "" + this.stationRequest.selectedDistributionType,
-                additionalConfig: {}
-              };
-
-              if (this.stationRequest.selectedDistributionType === "point") {
-                (currentTableItem.chartTrace.type = "spline"),
-                  (currentTableItem.chartTrace.additionalConfig = {
-                    lineWidth: 0,
-                    marker: {
-                      enabled: true,
-                      radius: 2
-                    },
-                    states: {
-                      hover: {
-                        lineWidthPlus: 0
-                      }
-                    }
-                  });
-              } else if (
-                this.stationRequest.selectedDistributionType === "line"
-              ) {
-                currentTableItem.chartTrace.additionalConfig = {
-                  marker: {
-                    enabled: false
-                  }
-                };
-              }
-            } else {
-              this.dataByVariable[currentTableItem.generatedId] = [];
-            }
-
-            this.selectedElements = this.tableItems.map(e => e.generatedId);
-            this.elementsStats = this.aggregateData(
-              this.dataByVariable,
-              this.selectedElements
-            );
-
-            this.createTraces();
-            this.createTableData();
-            this.loading = false;
-          })
-          .catch(res => {
-              this.loading = false;
-              this.request_error = true;
-              this.request_error_message = res.message;
-            });
-        },
-        onRemove(removed_item) {
-          this.tableItems = this.tableItems.filter(item => item !== removed_item);
-          this.dataByVariable[
-            removed_item.generatedId
-          ] = [];
-          this.index--;
-          this.createTraces();
-          this.selectedElements = this.tableItems.map(e => {
-            return e.generatedId
-          });
-          this.elementsStats = this.aggregateData(
-            this.dataByVariable,
-            this.selectedElements
-          );
-          this.createTableData();
-        },
-        selectAllStations(){
-          this.stationRequest.selectedStations = Array.from(this.stationList);
-        },
-        invertValue(bool){
-          bool = !bool;
-        },
-        aggregateData(dataByVariable, selectedElements) {
-          const calc = (cb, fixed) => Object.keys(dataByVariable)
-              .filter(e => selectedElements.indexOf(e) > -1)
-              .filter(e => dataByVariable[e].length)
-              .map(e => {
-                return {
-                  key: e,
-                  value: cb(dataByVariable[e]).toFixed(fixed)
-                };
-              })
-              .reduce((p, c) => Object.assign({}, p, { [c.key]: c.value }), {});
-
-          const elementStats = [
-            {
-              label: "MIN",
-              values: calc(arr => arr.reduce((p, c) => (p < c ? p : c), Infinity), 2)
-            },
-            {
-              label: "MAX",
-              values: calc(
-                arr => arr.reduce((p, c) => (p > c ? p : c), -99999999),
-                2
-              )
-            },
-            {
-              label: "AVG",
-              values: calc(
-                arr => arr.reduce((p, c) => p + c, 0) / arr.length,
-                2
-              )
-            },
-            {
-              label: "SUM",
-              values: calc(arr => arr.reduce((p, c) => p + c, 0), 2)
-            },
-            {
-              label: "COUNT",
-              values: calc(arr => arr.length, 0)
-            },
-            {
-              label: "STANDARD DEVIATION",
-              values: calc(arr => {
-                const sum = arr.reduce((p, c) => p + c, 0);
-                const avg = sum / arr.length;
-                return Math.sqrt(
-                  arr
-                    .map(i => Math.pow(i - avg, 2))
-                    .reduce((p, c) => p + c, 0) / arr.length
-                );
-              }, 2)
-            }
-          ];
-
-          return elementStats;
-        },
-        exportAs(value) {
-          const values = this.tableData;
-          headers = ['Date']
-          headers.push(this.tableItems.map(item => item.station + ' - ' + item.variableName + ' (' + item.symbol + ') - (' + item.timescale_desc + ')'));
-          
-          let compareDate = "";
-          if(values.length){
-            let smallestDate = values[0]['formatedDate'];
-            let biggerDate = values[values.length-1]['formatedDate'];
-            compareDate = `${smallestDate} - ${biggerDate}`;
-          }
-
-          const exportEngine = {
-            pdf: () =>
-              this.exportAsPDF(
-                this.headers
-                  .slice(0, this.headers.length - 1)
-                  .map(e => ({ text: e.text, style: "tableHeader" })),
-                {
-                  title: `Surface Station Compare Report`,
-                  values
-                }
-              ),
-            csv: () =>
-              this.exportAsCSV(
-                headers.join(','),
-                values.map(value => {
-                  vvalues = [value.formatedDate];
-                  for(var i=0; i<value.values.length; i++){
-                    vvalues.push(value.values[i]);
-                  }
-                  return vvalues;
-                }),
-                `Surface Station Compare ${compareDate}`
-              )
-          };
-
-          exportEngine[value]();
-        },
-        exportAsPDF(headers, { title, values }, moreInfo = null) {
-          const docDefinition = this.pdfTemplate(
-            headers,
-            { title, values },
-            moreInfo
-          );
-          createPdf(docDefinition).open("");
-        },
-
-        pdfTemplate: (
-          headers,
-          { title, values },
-          additionalContent = null
-        ) => ({
-          pageOrientation: "landscape",
-          content: [
-            {
-              text: `${title}\n\n`,
-              style: "header"
-            },
-            ...(additionalContent || []),
-            {
-              text: [
-                { text: "Document created at: ", bold: true },
-                new Date().toLocaleString()
-              ]
-            },
-            {
-              text: [
-                { text: "Number of rows: ", bold: true },
-                values.length,
-                "\n"
-              ]
-            },
-            {
-              text: "\n\n\n"
-            },
-            {
-              table: {
-                headerRows: 1,
-                body: [headers, ...values]
-              }
-            }
-          ],
-          styles: {
-            header: {
-              fontSize: 18,
-              bold: true,
-              alignment: "center"
-            },
-            tableHeader: {
-              fontSize: 14,
-              bold: true
-            }
-          }
-        }),
-        exportAsCSV(headers, values, filename = null) {
-          const data = this.normalize(values.join("\n"));
-          const csvContent = `${headers} \n${data}`;
-          const blob = new Blob(
-            [new Uint8Array([0xef, 0xbb, 0xbf]), csvContent],
-            {
-              type: "text/csv;charset=utf-8"
-            }
-          );
-
-          const link = document.createElement("a");
-          document.body.appendChild(link);
-          link.setAttribute("href", URL.createObjectURL(blob));
-          link.setAttribute("download", `${filename || "surface-report"}.csv`);
-          link.click();
-          link.remove();
-        },
-        normalize(value) {
-          const replaces = [
-            [/[áàâãªä]/giu, "a"],
-            [/[ÁÀÂÃÄ]/giu, "A"],
-            [/[ÍÌÎÏ]/giu, "I"],
-            [/[íìîï]/giu, "i"],
-            [/[éèêë]/giu, "e"],
-            [/[ÉÈÊË]/giu, "E"],
-            [/[óòôõºö]/giu, "o"],
-            [/[ÓÒÔÕÖ]/giu, "O"],
-            [/[úùûü]/giu, "u"],
-            [/[ÚÙÛÜ]/giu, "U"],
-            [/ç/gi, "c"],
-            [/Ç/gi, "C"],
-            [/ñ/gi, "n"],
-            [/Ñ/gi, "N"]
-          ];
-          return replaces.reduce((p, c) => p.replace(c[0], c[1]), value);
-        },
-        updateTimescale(){
-          if (this.stationRequest.timescale !== "hourlysummaries" && this.stationRequest.timescale !== "rawdata") {
-            this.stationRequest.begin_time = "00:00";
-            this.stationRequest.end_time = "00:00";
-          }
-        },
-      },
-
-      mounted() {
-        this.timescales.forEach(time => {
-          this.timescalesSet[time.value] = time.label;
-        });
-      }
-    });
-  </script>
 </div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  'use strict';
+
+  Vue.use(HighchartsVue.default);
+  Vue.use(window.vuelidate.default);
+  const { required } = window.validators;
+
+  new Vue({
+    el: '#app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    validations: {
+      stationRequest: {
+        selectedStations: { required },
+        selectedVariables: { required },
+        selectedDistributionType: { required },
+        color: { required },
+        timescale: { required },
+        begin_date: { required },
+        end_date: { required }
+      }
+    },
+    data: {
+      filter: { stationAdminRegion: null, stationWatershed: null, stationProfile: null, isActive: true, isAutomatic: true },
+      selectedItems: [],
+      activeTab: 0,
+      hours: Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`),
+      searchStations: null,
+      searchVariables: null,
+      search: '',
+      timezone: '{{ TIMEZONE_NAME|escapejs }}',
+      request_error: false,
+      request_error_message: '',
+      loading: false,
+      title: '',
+      subtitle: '',
+      layout: {},
+      tableItems: [],
+      tableData: [],
+      elementsStats: [],
+      selectedElements: [],
+      counter: 0,
+      menu1: false,
+      menu2: false,
+      stationRequest: {
+        selectedStations: [],
+        selectedVariables: [],
+        selectedDistributionType: 'line',
+        color: '#2563eb',
+        timescale: 'dailysummaries',
+        begin_date: moment().format('YYYY-MM-DD'),
+        end_date: moment().add(1, 'days').format('YYYY-MM-DD'),
+        begin_time: '00:00',
+        end_time: '00:00'
+      },
+      variable_list: [
+        {% for variable in variable_list %}
+        {
+          variable: {{ variable.id }},
+          variable_name: '{{ variable.name|escapejs }}',
+          unit_symbol: '{{ variable.unit.symbol|escapejs }}'
+        },
+        {% endfor %}
+      ],
+      stations: [
+        {% for station in station_list %}
+        {
+          id: {{ station.id }},
+          text: '{{ station.name|escapejs }} - {{ station.code|escapejs }}',
+          name: '{{ station.name|escapejs }}',
+          code: '{{ station.code|escapejs }}',
+          region: '{{ station.region|escapejs }}',
+          watershed: '{{ station.watershed|escapejs }}',
+          profile: '{{ station.profile.id|default_if_none:"" }}',
+          is_automatic: {{ station.is_automatic|yesno:'true,false' }},
+          is_active: {{ station.is_active|yesno:'true,false' }}
+        },
+        {% endfor %}
+      ],
+      stationProfileList: [
+        {% for station_profile in station_profile_list %}
+        { id: {{ station_profile.id }}, name: '{{ station_profile.name|escapejs }}' },
+        {% endfor %}
+      ],
+      stationWatershedList: [
+        {% for station_watershed in station_watershed_list %}
+        { id: {{ station_watershed.id }}, name: '{{ station_watershed.watershed|escapejs }}' },
+        {% endfor %}
+      ],
+      stationAdminRegionList: [
+        {% for station_admin_region in station_admin_region_list %}
+        { id: {{ station_admin_region.id }}, name: '{{ station_admin_region.name|escapejs }}' },
+        {% endfor %}
+      ],
+      timescales: [
+        { label: 'Raw Data', value: 'rawdata' },
+        { label: 'Hourly', value: 'hourlysummaries' },
+        { label: 'Daily', value: 'dailysummaries' },
+        { label: 'Monthly', value: 'monthlysummaries' },
+        { label: 'Yearly', value: 'yearlysummaries' }
+      ],
+      distributionTypeItems: [
+        { label: 'Line', value: 'line' },
+        { label: 'Bars', value: 'column' },
+        { label: 'Points', value: 'point' },
+        { label: 'Spline', value: 'spline' }
+      ],
+      headers: [
+        { text: 'Timescale', value: 'timescale_desc', align: 'start' },
+        { text: 'Start date', value: 'start_datetime_formated', align: 'start' },
+        { text: 'End date', value: 'end_datetime_formated', align: 'start' },
+        { text: 'Station', value: 'station', align: 'start' },
+        { text: 'Variable', value: 'variableName', align: 'start' },
+        { text: 'Type', value: 'type', align: 'start', sortable: false },
+        { text: 'Color', value: 'color', align: 'center', sortable: false },
+        { text: '', value: 'action', align: 'end', sortable: false }
+      ],
+      exportItems: [ { title: 'Download CSV', value: 'csv' } ]
+    },
+    computed: {
+      stationList() {
+        return this.stations.filter(station => {
+          if (this.filter.stationAdminRegion && station.region !== this.filter.stationAdminRegion) return false;
+          if (this.filter.stationWatershed && station.watershed !== this.filter.stationWatershed) return false;
+          if (this.filter.stationProfile && String(station.profile) !== String(this.filter.stationProfile)) return false;
+          if (station.is_automatic !== this.filter.isAutomatic) return false;
+          if (station.is_active !== this.filter.isActive) return false;
+          return true;
+        });
+      },
+      showTimeFields() {
+        return this.stationRequest.timescale === 'rawdata' || this.stationRequest.timescale === 'hourlysummaries';
+      },
+      seriesCount() {
+        return (this.stationRequest.selectedStations || []).length * (this.stationRequest.selectedVariables || []).length;
+      },
+      hasChartData() {
+        return this.tableItems.some(item => item.records && item.records.length > 0);
+      },
+      comparisonHeaders() {
+        return [
+          { text: 'Date / time', value: 'date', sortable: true, align: 'start' },
+          ...this.tableItems.map(item => ({
+            text: `${item.station} · ${item.variableName} (${item.symbol}) · ${item.timescale_desc}`,
+            value: `col_${item.generatedId}`,
+            sortable: true,
+            align: 'end'
+          }))
+        ];
+      },
+      chartOptions() {
+        return Object.assign({
+          chart: { zoomType: 'x', backgroundColor: '#ffffff', spacing: [18, 14, 18, 14] },
+          title: { text: this.title || null },
+          subtitle: { text: this.subtitle || null },
+          xAxis: { type: 'datetime' },
+          tooltip: { shared: true },
+          legend: { layout: 'horizontal', align: 'center', verticalAlign: 'bottom' },
+          time: { timezone: this.timezone },
+          credits: { enabled: false },
+          series: []
+        }, this.layout, { title: { text: this.title || null }, subtitle: { text: this.subtitle || null } });
+      }
+    },
+    watch: {
+      'stationRequest.selectedStations'() { this.searchStations = ''; },
+      'stationRequest.selectedVariables'() { this.searchVariables = ''; }
+    },
+    methods: {
+      clearStationFilters() {
+        this.filter.stationAdminRegion = null;
+        this.filter.stationWatershed = null;
+        this.filter.stationProfile = null;
+        this.filter.isActive = true;
+        this.filter.isAutomatic = true;
+      },
+      selectAllStations() {
+        // Only the currently filtered stations are selected.
+        this.stationRequest.selectedStations = this.stationList.slice();
+      },
+      changeTimescale() {
+        const scale = this.stationRequest.timescale;
+        if (scale === 'monthlysummaries') {
+          this.stationRequest.begin_date = moment().format('YYYY-MM');
+          this.stationRequest.end_date = moment().add(1, 'month').format('YYYY-MM');
+        } else if (scale === 'yearlysummaries') {
+          this.stationRequest.begin_date = moment().format('YYYY-01');
+          this.stationRequest.end_date = moment().add(1, 'year').format('YYYY-01');
+        } else if (!/^\d{4}-\d{2}-\d{2}$/.test(this.stationRequest.begin_date)) {
+          this.stationRequest.begin_date = moment().format('YYYY-MM-DD');
+          this.stationRequest.end_date = moment().add(1, 'days').format('YYYY-MM-DD');
+        }
+        this.updateTimescale();
+      },
+      updateTimescale() {
+        if (!this.showTimeFields) {
+          this.stationRequest.begin_time = '00:00';
+          this.stationRequest.end_time = '00:00';
+        }
+      },
+      getDatepickFormat() {
+        return ['monthlysummaries', 'yearlysummaries'].includes(this.stationRequest.timescale) ? 'month' : 'date';
+      },
+      allowedDates(value) {
+        return this.stationRequest.timescale !== 'yearlysummaries' || value.split('-')[1] === '01';
+      },
+      clickColor() {
+        document.getElementById('color_btn').click();
+      },
+      parseDateTime(date, time) {
+        const parsed = moment(date, ['YYYY-MM-DD', 'YYYY-MM'], true);
+        if (!parsed.isValid()) return parsed;
+        const parts = (time || '00:00').split(':');
+        return parsed.hours(Number(parts[0])).minutes(Number(parts[1] || 0)).seconds(0).milliseconds(0);
+      },
+      formatDatetimeForRequest(datetime, scale) {
+        if (scale === 'hourlysummaries' || scale === 'rawdata') {
+          return datetime.clone().tz(this.timezone, true).utc().format('YYYY-MM-DDTHH:mm:ss[Z]');
+        }
+        return datetime.clone().format('YYYY-MM-DD');
+      },
+      formatReceivedData(datetime, scale) {
+        if (['dailysummaries', 'monthlysummaries', 'yearlysummaries'].includes(scale)) {
+          return moment.utc(datetime).tz(this.timezone, true).valueOf();
+        }
+        return moment.utc(datetime).valueOf();
+      },
+      formatDatetimeForDataTable(datetime, scale) {
+        const d = moment.utc(datetime).tz(this.timezone);
+        if (scale === 'yearlysummaries') return d.format('YYYY');
+        if (scale === 'monthlysummaries') return d.format('YYYY-MM');
+        if (scale === 'dailysummaries') return d.format('YYYY-MM-DD');
+        return d.format('YYYY-MM-DD HH:mm');
+      },
+      async getAll(path) {
+        // DRF may return a single results array or a paginated {results,next} object.
+        let nextUrl = `/${String(path).replace(/^\/+/, '')}`;
+        const all = [];
+        while (nextUrl) {
+          const response = await fetch(nextUrl);
+          if (!response.ok) {
+            let detail = `Request failed (${response.status}).`;
+            try {
+              const body = await response.json();
+              detail = body.detail || body.message || detail;
+            } catch (ignored) {}
+            throw new Error(detail);
+          }
+          const body = await response.json();
+          if (Array.isArray(body)) return all.concat(body);
+          if (!body || !Array.isArray(body.results)) return all;
+          all.push(...body.results);
+          nextUrl = body.next ? new URL(body.next, window.location.origin).toString() : null;
+        }
+        return all;
+      },
+      async onAdd() {
+        if (this.loading || this.$v.stationRequest.$invalid || !this.seriesCount) return;
+        const snapshot = {
+          timescale: this.stationRequest.timescale,
+          selectedDistributionType: this.stationRequest.selectedDistributionType,
+          color: this.stationRequest.color,
+          begin_date: this.stationRequest.begin_date,
+          end_date: this.stationRequest.end_date,
+          begin_time: this.stationRequest.begin_time,
+          end_time: this.stationRequest.end_time
+        };
+        const start = this.parseDateTime(snapshot.begin_date, snapshot.begin_time);
+        const end = this.parseDateTime(snapshot.end_date, snapshot.end_time);
+        if (!start.isValid() || !end.isValid() || end.isBefore(start)) {
+          this.request_error_message = 'Please provide a valid reporting period. The end must not be before the start.';
+          this.request_error = true;
+          return;
+        }
+        const tasks = [];
+        (this.stationRequest.selectedStations || []).forEach(station => {
+          (this.stationRequest.selectedVariables || []).forEach(variable => {
+            tasks.push({ station, variable });
+          });
+        });
+        this.loading = true;
+        this.request_error = false;
+        const errors = [];
+        try {
+          // Small batches prevent hundreds of simultaneous API connections.
+          for (let i = 0; i < tasks.length; i += 5) {
+            const batch = tasks.slice(i, i + 5);
+            const results = await Promise.all(batch.map(task =>
+              this.getSummaries(snapshot, start, end, task.variable, task.station)
+                .catch(error => { errors.push(`${task.station.name} / ${task.variable.variable_name}: ${error.message}`); return null; })
+            ));
+            results.filter(Boolean).forEach(item => this.tableItems.push(item));
+            this.rebuildReport();
+          }
+        } finally {
+          this.loading = false;
+        }
+        if (errors.length) {
+          this.request_error_message = `${errors.length} series could not be loaded. ${errors.slice(0, 2).join('; ')}`;
+          this.request_error = true;
+        }
+        if (this.tableItems.length) this.activeTab = 0;
+      },
+      async getSummaries(params, start, end, variable, station) {
+        const scale = params.timescale;
+        const query = `api/${encodeURIComponent(scale)}/?search_type=stationvariable` +
+          `&search_value=${encodeURIComponent(station.id)}` +
+          `&search_value2=${encodeURIComponent(variable.variable)}` +
+          `&search_date_start=${encodeURIComponent(this.formatDatetimeForRequest(start, scale))}` +
+          `&search_date_end=${encodeURIComponent(this.formatDatetimeForRequest(end, scale))}`;
+        const data = await this.getAll(query);
+        const records = data.map(observation => ({
+          date: this.formatReceivedData(observation.date, scale),
+          values: observation.value
+        })).filter(item => Number.isFinite(item.date)).sort((a, b) => a.date - b.date);
+        const generatedId = String(++this.counter);
+        return {
+          generatedId,
+          timescale: scale,
+          timescale_desc: (this.timescales.find(t => t.value === scale) || {}).label || scale,
+          start_datetime_formated: start.format('YYYY-MM-DD HH:mm'),
+          end_datetime_formated: end.format('YYYY-MM-DD HH:mm'),
+          station: station.name,
+          variableName: variable.variable_name || '',
+          symbol: variable.unit_symbol || '',
+          variableId: variable.variable,
+          type: params.selectedDistributionType,
+          color: params.color,
+          records
+        };
+      },
+      isMissingValue(value) {
+        return value === -99.9 || value === '-99.9';
+      },
+      validNumber(value) {
+        // Missing (-99.9), null, blank, and nonfinite readings are not statistics.
+        if (value === null || value === undefined || value === '') return null;
+        const numeric = Number(value);
+        return Number.isFinite(numeric) && numeric !== -99.9 ? numeric : null;
+      },
+      formatTableValue(value) {
+        if (value === undefined || value === null || value === '') return '—';
+        return value;
+      },
+      rebuildReport() {
+        this.selectedElements = this.tableItems.map(item => item.generatedId);
+        this.createTableData();
+        this.elementsStats = this.aggregateData();
+        this.createTraces();
+      },
+      createTableData() {
+        const allDates = new Set();
+        const lookups = this.tableItems.map(item => {
+          const map = new Map();
+          (item.records || []).forEach(record => {
+            allDates.add(record.date);
+            map.set(record.date, record.values);
+          });
+          return map;
+        });
+        const dates = Array.from(allDates).sort((a, b) => a - b);
+        this.tableData = dates.map(date => {
+          const row = {
+            date,
+            formatedDate: this.formatDatetimeForDataTable(date, this.tableItems[0] ? this.tableItems[0].timescale : '')
+          };
+          this.tableItems.forEach((series, index) => {
+            row[`col_${series.generatedId}`] = lookups[index].has(date) ? lookups[index].get(date) : null;
+          });
+          return row;
+        });
+      },
+      aggregateData() {
+        const statistics = [
+          { label: 'MIN', key: 'min' },
+          { label: 'MAX', key: 'max' },
+          { label: 'AVG', key: 'avg' },
+          { label: 'SUM', key: 'sum' },
+          { label: 'COUNT', key: 'count' },
+          { label: 'STANDARD DEVIATION', key: 'stddev' }
+        ];
+        const values = {};
+        this.tableItems.forEach(series => {
+          const valid = (series.records || []).map(record => this.validNumber(record.values)).filter(value => value !== null);
+          if (!valid.length) {
+            values[series.generatedId] = { min: '—', max: '—', avg: '—', sum: '—', count: 0, stddev: '—' };
+            return;
+          }
+          const count = valid.length;
+          const sum = valid.reduce((a, b) => a + b, 0);
+          const avg = sum / count;
+          const stddev = Math.sqrt(valid.reduce((total, value) => total + Math.pow(value - avg, 2), 0) / count);
+          values[series.generatedId] = {
+            min: valid.reduce((a, b) => a < b ? a : b, Infinity).toFixed(2),
+            max: valid.reduce((a, b) => a > b ? a : b, -Infinity).toFixed(2),
+            avg: avg.toFixed(2),
+            sum: sum.toFixed(2),
+            count,
+            stddev: stddev.toFixed(2)
+          };
+        });
+        return statistics.map(stat => ({
+          label: stat.label,
+          values: Object.fromEntries(this.tableItems.map(series => [series.generatedId, values[series.generatedId][stat.key]]))
+        }));
+      },
+      updateDistributionType(item) {
+        this.createTraces();
+      },
+      createTraces() {
+        const active = this.tableItems.filter(item => item.records && item.records.length > 0);
+        const units = Array.from(new Set(active.map(item => item.symbol)));
+        this.layout = {
+          yAxis: units.map((unit, index) => ({
+            title: { text: unit || null },
+            labels: { format: `{value} ${unit}` },
+            opposite: index % 2 === 1
+          })),
+          series: active.map(item => {
+            const plotType = item.type === 'point' ? 'spline' : item.type;
+            const extra = item.type === 'point'
+              ? { lineWidth: 0, marker: { enabled: true, radius: 3 }, states: { hover: { lineWidthPlus: 0 } } }
+              : ['line', 'spline'].includes(item.type)
+                ? { lineWidth: 2, marker: { enabled: false } }
+                : {};
+            return Object.assign({
+              name: `${item.station} - ${item.variableName} (${item.symbol}) (${item.timescale_desc})`,
+              type: plotType,
+              data: item.records.map(record => [record.date, this.validNumber(record.values)]),
+              yAxis: units.indexOf(item.symbol),
+              color: item.color,
+              tooltip: { valueSuffix: ` ${item.symbol}`, valueDecimals: 2 },
+              connectNulls: false
+            }, extra);
+          })
+        };
+      },
+      onRemove(item) {
+        this.tableItems = this.tableItems.filter(row => row.generatedId !== item.generatedId);
+        this.selectedItems = this.selectedItems.filter(row => row.generatedId !== item.generatedId);
+        this.rebuildReport();
+      },
+      deleteSelected() {
+        const chosen = new Set(this.selectedItems.map(item => item.generatedId));
+        this.tableItems = this.tableItems.filter(item => !chosen.has(item.generatedId));
+        this.selectedItems = [];
+        this.rebuildReport();
+      },
+      csvEscape(value) {
+        const string = value === null || value === undefined ? '' : String(value);
+        return /[",\n\r]/.test(string) ? `"${string.replace(/"/g, '""')}"` : string;
+      },
+      exportAs(value) {
+        if (value !== 'csv' || !this.tableItems.length) return;
+        const headers = ['Date / time'].concat(this.tableItems.map(item =>
+          `${item.station} - ${item.variableName} (${item.symbol}) - ${item.timescale_desc}`
+        ));
+        const rows = this.tableData.map(row => [row.formatedDate].concat(
+          this.tableItems.map(item => row[`col_${item.generatedId}`])
+        ));
+        const range = this.tableData.length
+          ? `${this.tableData[0].formatedDate} - ${this.tableData[this.tableData.length - 1].formatedDate}`
+          : 'No data';
+        this.exportAsCSV(headers, rows, `Surface Station Compare ${range}`);
+      },
+      exportAsCSV(headers, rows, filename) {
+        const csv = [headers, ...rows].map(row => row.map(this.csvEscape).join(',')).join('\r\n');
+        const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename || 'surface-station-compare'}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+    }
+  });
+</script>
+
+<style>
+  [v-cloak] { display: none; }
+  /* Neutral white page to match Station Report and Variable Report */
+  .sc-page { background: #fff !important; padding: 35px !important; max-height: none !important; }
+  .sc-page .sc-app, .sc-page .sc-app .v-application--wrap { background: #fff !important; min-height: auto; }
+  .sc-page .sc-shell { width: 100%; margin: 0 auto; padding: 0 8px 48px; }
+  .sc-page .sc-page-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 22px; }
+  .sc-page .sc-page-header h1 { margin: 0 0 6px; color: #252c34; }
+  .sc-page .sc-page-header p { color: #6b7280; font-size: 14px; margin: 0; }
+  .sc-page .sc-header-context { display: inline-flex; align-items: center; gap: 7px; color: #526271; font-size: 12px; font-weight: 600; background: #f8fafb; border: 1px solid #e4e9ed; border-radius: 7px; padding: 7px 11px; }
+  .sc-page .sc-panel { background: #fff; border: 1px solid #e2e5e9; border-radius: 11px; box-shadow: 0 2px 10px rgba(20,29,38,.025); }
+  .sc-page .sc-filter-panel, .sc-page .sc-builder-panel { padding: 21px 24px 20px; margin-bottom: 18px; }
+  .sc-page .sc-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid #edf0f2; padding-bottom: 17px; margin-bottom: 22px; }
+  .sc-page .sc-heading-identity { display: flex; gap: 12px; align-items: center; }
+  .sc-page .sc-heading-icon { width: 37px; height: 37px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; background: #f8fafb; border: 1px solid #e7e8ec; border-radius: 9px; color: #576676; }
+  .sc-page .sc-section-heading h2, .sc-page .sc-workspace-header h2 { font-size: 17px; line-height: 1.35; font-weight: 700; color: #252e38; margin: 0; }
+  .sc-page .sc-section-heading p, .sc-page .sc-workspace-header p { font-size: 12.5px; color: #77818e; margin: 3px 0 0; }
+  .sc-page .sc-count-chip, .sc-page .sc-workspace-counter, .sc-page .sc-muted-chip { border: 1px solid #e1e6ec; border-radius: 7px; background: #f9fafb; color: #637180; font-size: 12px; padding: 6px 10px; font-weight: 600; }
+  .sc-page .sc-filter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 14px; row-gap: 14px; }
+  .sc-page .sc-filter-grid > *, .sc-page .sc-selection-grid > *, .sc-page .sc-config-grid > * { min-width: 0; }
+  .sc-page .sc-filter-footer { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 19px; padding-top: 17px; border-top: 1px solid #eef0f2; }
+  .sc-page .sc-switches { display: flex; gap: 26px; flex-wrap: wrap; align-items: center; }
+  .sc-page .sc-switches .v-input--selection-controls { padding-top: 0; }
+  .sc-page .sc-switches .v-label { color: #4e5c6b; font-size: 13px; }
+  .sc-page .sc-filter-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sc-page .sc-form-label { font-size: 11px; color: #78828e; font-weight: 700; letter-spacing: .65px; margin-bottom: 13px; }
+  .sc-page .sc-subsection { margin-top: 22px; }
+  .sc-page .sc-selection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .sc-page .sc-multi-select .v-select__selections { max-height: 126px; min-height: 38px; overflow-y: auto; padding: 6px 8px 6px 2px !important; align-content: flex-start; }
+  .sc-page .sc-multi-select .v-chip { margin: 3px 4px 3px 0 !important; max-width: 100%; }
+  .sc-page .sc-multi-select .v-chip__content { overflow: hidden; text-overflow: ellipsis; }
+  .sc-page .sc-selection-status { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-top: 9px; color: #7a8794; font-size: 12px; }
+  .sc-page .sc-request-preview { font-weight: 650; color: #366a8f; padding-left: 9px; border-left: 1px solid #dce2e7; }
+  .sc-page .sc-config-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0, .9fr); gap: 16px; }
+  .sc-page .sc-color-control { display: flex; align-items: flex-start; gap: 10px; }
+  .sc-page .sc-color-picker { cursor: pointer; flex: 0 0 42px; padding: 3px; width: 42px; height: 40px; background: #fff; border: 1px solid #d9dfe6; border-radius: 7px; }
+  .sc-page .sc-color-text { min-width: 0; }
+  .sc-page .sc-period-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .sc-page .sc-period-card { border: 1px solid #e6e9ec; border-radius: 9px; background: #fcfcfd; padding: 15px 16px 17px; min-width: 0; }
+  .sc-page .sc-period-caption { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
+  .sc-page .sc-period-caption strong { color: #333c48; font-size: 14px; }
+  .sc-page .sc-period-caption > span:last-child { margin-left: auto; color: #8a94a0; font-size: 11px; }
+  .sc-page .sc-period-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .sc-page .sc-period-start { background: #15956d; }
+  .sc-page .sc-period-end { background: #df9643; }
+  .sc-page .sc-period-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .sc-page .sc-period-fields.sc-single-field { grid-template-columns: 1fr; }
+  .sc-page .sc-period-fields > * { min-width: 0; }
+  .sc-page .sc-builder-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-top: 22px; padding-top: 18px; border-top: 1px solid #edf0f2; }
+  .sc-page .sc-builder-help { color: #77818d; font-size: 12px; display: inline-flex; align-items: center; gap: 8px; max-width: 650px; }
+  .sc-page .sc-add-btn { min-height: 40px; font-weight: 600; letter-spacing: 0 !important; padding: 0 19px !important; }
+  .sc-page .sc-feedback { margin-bottom: 20px; }
+  .sc-page .sc-progress-panel { border: 1px solid #e2e7ed; border-radius: 10px; padding: 20px; background: #fff; }
+  .sc-page .sc-progress-line { display: flex; gap: 13px; align-items: center; }
+  .sc-page .sc-progress-line strong { display: block; color: #35404b; font-size: 13px; }
+  .sc-page .sc-progress-line span { display: block; color: #7b8591; font-size: 12px; margin-top: 2px; }
+  .sc-page .sc-workspace { margin-top: 28px; }
+  .sc-page .sc-workspace-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 15px; }
+  .sc-page .sc-workspace-panel { overflow: hidden; }
+  .sc-page .sc-tabs { border-bottom: 1px solid #e5e9ed; background: #fafbfc !important; }
+  .sc-page .sc-tabs .v-tab { font-size: 12.5px; font-weight: 650; letter-spacing: 0; }
+  .sc-page .sc-tab-items { background: #fff !important; overflow: visible; }
+  .sc-page .sc-tab-body { padding: 23px 24px 25px; }
+  .sc-page .sc-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 17px; border-bottom: 1px solid #eef0f2; margin-bottom: 18px; }
+  .sc-page .sc-toolbar h3 { margin: 0; font-size: 16px; color: #27313c; font-weight: 700; }
+  .sc-page .sc-toolbar p { font-size: 12px; color: #7c8793; margin: 4px 0 0; }
+  .sc-page .sc-series-actions { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .sc-page .sc-series-search { max-width: 370px; min-width: 220px; }
+  .sc-page .sc-selection-count { font-size: 12px; color: #728091; }
+  .sc-page .sc-type-select { width: 125px; }
+  .sc-page .sc-type-select .v-input__slot { min-height: 35px !important; }
+  .sc-page .sc-series-color { display: inline-flex; align-items: center; }
+  .sc-page .sc-series-color input { height: 31px; width: 44px; padding: 2px; border: 1px solid #d8e0e7; background: #fff; border-radius: 6px; }
+  .sc-page .sc-series-table .v-data-table__wrapper { overflow-x: auto; }
+  .sc-page .sc-series-table thead th, .sc-page .sc-comparison-table thead th { background: #f5f7f9; color: #485563 !important; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .sc-page .sc-series-table tbody td { font-size: 12.5px; color: #41505e; }
+  .sc-page .sc-series-table tbody tr:hover { background: #f8fafc !important; }
+  .sc-page .sc-option-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; max-width: 980px; }
+  .sc-page .sc-highcharts { width: 100%; min-height: 440px; }
+  .sc-page .sc-workspace-empty { text-align: center; padding: 52px 12px; }
+  .sc-page .sc-workspace-empty h4 { font-size: 16px; color: #394351; font-weight: 700; margin: 13px 0 5px; }
+  .sc-page .sc-workspace-empty p { font-size: 13px; color: #7f8a96; margin: 0; }
+  .sc-page .sc-table-wrap { width: 100%; }
+  .sc-page .sc-comparison-table .v-data-table__wrapper { overflow-x: auto; }
+  .sc-page .sc-comparison-table table { min-width: 620px; }
+  .sc-page .sc-comparison-table tbody td { font-size: 12.5px; white-space: nowrap; padding: 10px 14px !important; border-bottom: 1px solid #edf0f2 !important; }
+  .sc-page .sc-date-cell { color: #495460; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .sc-page .sc-number-cell { text-align: right; color: #3b4653; font-variant-numeric: tabular-nums; }
+  .sc-page .sc-missing-cell { color: #a4acb6 !important; background: #fafbfc; }
+  .sc-page .sc-statistics { margin-top: 22px; border: 1px solid #e5e9ed; border-radius: 9px; overflow: hidden; }
+  .sc-page .sc-statistics-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; background: #fafbfc; padding: 13px 17px; border-bottom: 1px solid #e5e9ed; }
+  .sc-page .sc-statistics-header h4 { margin: 0; font-size: 13px; font-weight: 700; color: #344252; }
+  .sc-page .sc-statistics-header span { color: #7a8795; font-size: 11px; }
+  .sc-page .sc-stats-scroll { width: 100%; overflow-x: auto; }
+  .sc-page .sc-stats-table { border-collapse: collapse; width: 100%; min-width: 620px; }
+  .sc-page .sc-stats-table th, .sc-page .sc-stats-table td { border-bottom: 1px solid #e8edf1; border-right: 1px solid #eef1f3; padding: 11px 14px; white-space: nowrap; font-size: 12px; }
+  .sc-page .sc-stats-table thead th { text-align: right; background: #f6f8fa; color: #526170; font-weight: 700; }
+  .sc-page .sc-stats-table thead th:first-child, .sc-page .sc-stats-table tbody th { text-align: left; }
+  .sc-page .sc-stats-table tbody th { background: #fbfcfd; color: #576370; font-weight: 700; }
+  .sc-page .sc-stats-table tbody td { text-align: right; font-variant-numeric: tabular-nums; color: #374556; }
+  .sc-page .sc-stats-table tbody tr:last-child td, .sc-page .sc-stats-table tbody tr:last-child th { border-bottom: 0; }
+  /* Prevent legacy Materialize input rules from destroying Vuetify outlines. */
+  .sc-page .v-text-field input:not([type=checkbox]):not([type=radio]), .sc-page .v-text-field input:focus { border-bottom: 0 !important; box-shadow: none !important; outline: none !important; }
+  .sc-page .v-text-field--outlined .v-input__slot { background: #fff !important; }
+  .sc-page .v-text-field--outlined fieldset { border-color: #d6dde5; }
+  @media(max-width: 1100px) {
+    .sc-page .sc-config-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .sc-page .sc-period-grid { grid-template-columns: 1fr; }
+  }
+  @media(max-width: 760px) {
+    .sc-page { padding: 14px !important; }
+    .sc-page .sc-shell { padding: 0 2px 32px; }
+    .sc-page .sc-filter-panel, .sc-page .sc-builder-panel { padding: 17px 15px; }
+    .sc-page .sc-filter-grid, .sc-page .sc-selection-grid, .sc-page .sc-config-grid, .sc-page .sc-option-fields { grid-template-columns: 1fr; }
+    .sc-page .sc-switches { gap: 14px; }
+    .sc-page .sc-builder-footer { flex-direction: column; align-items: stretch; }
+    .sc-page .sc-add-btn { width: 100%; }
+    .sc-page .sc-tab-body { padding: 17px 12px; }
+    .sc-page .sc-series-search { max-width: none; width: 100%; }
+    .sc-page .sc-period-caption > span:last-child { display: none; }
+    .sc-page .sc-period-fields { grid-template-columns: 1fr; }
+    .sc-page .sc-tabs .v-tab { min-width: auto; padding: 0 10px; }
+  }
+</style>
 {% endblock %}

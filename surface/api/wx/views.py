@@ -810,6 +810,9 @@ def InterpolatePostData(request):
     return JsonResponse({"task_id": task.id})
 
 
+# ######################################################################################
+
+
 # view to display manual upload page
 class ManualDataImportView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
     '''view for uploading daily data for manual station (file format is xlsx, wlk, txt)'''
@@ -1329,146 +1332,146 @@ def station_telemetry_data(request, date):
 
 
 def raw_data_list(request):
-    search_type = request.GET.get('search_type', None)
-    search_value = request.GET.get('search_value', None)
-    search_value2 = request.GET.get('search_value2', None)
+    search_type = request.GET.get('search_type')
+    search_value = request.GET.get('search_value')
+    search_value2 = request.GET.get('search_value2')
+
+    # The API accepts UTC timestamps (the trailing Z means UTC).
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
     search_date_start = request.GET.get(
         'search_date_start',
-        default=(datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        (now_utc - datetime.timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ')
     )
     search_date_end = request.GET.get(
         'search_date_end',
-        default=datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
+        now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
     )
-    sql_string = ""
 
-    response = {
-        'results': [],
-        'messages': [],
-    }
+    if search_type not in ('variable', 'station', 'stationvariable'):
+        return JsonResponse(
+            {'message': 'Invalid search_type.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not search_value or (search_type == 'stationvariable' and not search_value2):
+        return JsonResponse(
+            {'message': 'Missing station or variable search parameter.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
         start_date = datetime.datetime.strptime(search_date_start, '%Y-%m-%dT%H:%M:%SZ')
         end_date = datetime.datetime.strptime(search_date_end, '%Y-%m-%dT%H:%M:%SZ')
-
     except ValueError:
-        message = 'Invalid date format. Expected YYYY-MM-DDTHH:MI:SSZ'
-        return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse(
+            {'message': 'Invalid date format. Expected YYYY-MM-DDTHH:MI:SSZ.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    delta = end_date - start_date
+    if end_date < start_date:
+        return JsonResponse(
+            {'message': 'End date must be on or after start date.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    if delta.days > 8:  # Restrict queries to max seven days
-        message = 'Interval between start date and end date is greater than one week.'
-        return JsonResponse(data={"message": message}, status=status.HTTP_400_BAD_REQUEST)
+    if end_date - start_date > datetime.timedelta(days=7):
+        return JsonResponse(
+            {'message': 'Interval between start and end date cannot exceed seven days.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    if search_type in ['station', 'stationvariable']:
+    # The existing endpoint accepts a station code or a numeric station ID.
+    if search_type in ('station', 'stationvariable'):
         try:
             station = Station.objects.get(code=search_value)
-        except ObjectDoesNotExist:
-            station = Station.objects.get(pk=search_value)
-        finally:
-            search_value = station.id
+        except Station.DoesNotExist:
+            try:
+                station = Station.objects.get(pk=search_value)
+            except (Station.DoesNotExist, TypeError, ValueError):
+                return JsonResponse(
+                    {'message': 'Station not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        search_value = station.id
 
-    if search_type is not None and search_type == 'variable':
-        sql_string = """
-            SELECT station_id,
-                   variable_id,
-                   b.symbol,
-                   b.name,
-                   c.name,
-                   c.symbol,
-                   a.measured,
-                   a.datetime,
-                   q.symbol as quality_flag,
-                   b.variable_type,
-                   a.code
-            FROM raw_data a
-            JOIN wx_variable b ON a.variable_id=b.id
-            LEFT JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_qualityflag q ON a.quality_flag=q.id
-        WHERE b.id = %s 
-          AND datetime >= %s 
-          AND datetime <= %s
-        """
+    # Effective measurement and QC precedence:
+    #   validated   -> consisted, validated_flag
+    #   unvalidated -> measured, quality_flag
+    # manual_flag is intentionally not used.
+    sql_string = """
+        SELECT
+            a.station_id,
+            a.variable_id,
+            b.symbol,
+            b.name,
+            c.name,
+            c.symbol,
+            CASE
+                WHEN a.is_validated IS TRUE THEN a.consisted
+                ELSE a.measured
+            END AS effective_value,
+            a.datetime,
+            q.symbol AS quality_flag,
+            b.variable_type,
+            a.code,
+            q.color AS flag_color
+        FROM raw_data a
+        JOIN wx_variable b ON a.variable_id = b.id
+        LEFT JOIN wx_unit c ON b.unit_id = c.id
+        LEFT JOIN wx_qualityflag q
+            ON q.id = CASE
+                WHEN a.is_validated IS TRUE THEN a.validated_flag
+                ELSE a.quality_flag
+            END
+        WHERE a.datetime >= %s AND a.datetime <= %s
+    """
+    params = [search_date_start, search_date_end]
 
-    if search_type is not None and search_type == 'station':
-        sql_string = """
-            SELECT station_id,
-                   variable_id,
-                   b.symbol,
-                   b.name,
-                   c.name,
-                   c.symbol,
-                   a.measured,
-                   a.datetime,
-                   q.symbol as quality_flag,
-                   b.variable_type,
-                   a.code
-            FROM raw_data a
-            JOIN wx_variable b ON a.variable_id=b.id
-            LEFT JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_qualityflag q ON a.quality_flag=q.id
-            WHERE station_id=%s AND datetime >= %s AND datetime <= %s"""
+    if search_type == 'variable':
+        sql_string += ' AND a.variable_id = %s'
+        params.append(search_value)
+    else:
+        sql_string += ' AND a.station_id = %s'
+        params.append(search_value)
+        if search_type == 'stationvariable':
+            sql_string += ' AND a.variable_id = %s'
+            params.append(search_value2)
 
-    if search_type is not None and search_type == 'stationvariable':
-        sql_string = """
-            SELECT station_id,
-                   variable_id,
-                   b.symbol,
-                   b.name,
-                   c.name,
-                   c.symbol,
-                   a.measured,
-                   a.datetime,
-                   q.symbol as quality_flag,
-                   b.variable_type,
-                   a.code
-            FROM raw_data a
-            JOIN wx_variable b ON a.variable_id=b.id
-            LEFT JOIN wx_unit c ON b.unit_id=c.id
-            JOIN wx_qualityflag q ON a.quality_flag=q.id
-            WHERE station_id=%s AND variable_id=%s AND datetime >= %s AND datetime <= %s"""
+    sql_string += ' ORDER BY a.datetime'
 
-    if sql_string:
-        sql_string += " ORDER BY datetime"
+    response = {'results': [], 'messages': []}
+    with connection.cursor() as cursor:
+        cursor.execute(sql_string, params)
 
-        with connection.cursor() as cursor:
-
-            if search_type is not None and search_type == 'stationvariable':
-
-                cursor.execute(sql_string, [search_value, search_value2, search_date_start, search_date_end])
-
+        for row in cursor.fetchall():
+            # Code-type observations have historically used the separate code field.
+            if row[9] is not None and row[9].lower() == 'code':
+                value = row[10]
             else:
+                value = round(row[6], 2) if row[6] is not None else None
 
-                cursor.execute(sql_string, [search_value, search_date_start, search_date_end])
-
-            rows = cursor.fetchall()
-
-            for row in rows:
-
-                if row[9] is not None and row[9].lower() == 'code':
-                    value = row[10]
-                else:
-                    value = round(row[6], 2)
-
-                obj = {
-                    'station': row[0],
-                    'date': row[7],
-                    'value': value,
-                    'variable': {
-                        'symbol': row[2],
-                        'name': row[3],
-                        'unit_name': row[4],
-                        'unit_symbol': row[5]
-                    }
+            response['results'].append({
+                'station': row[0],
+                'date': row[7],
+                'value': value,
+                'quality_flag': row[8],
+                'flag_color': row[11],
+                'variable': {
+                    'symbol': row[2],
+                    'name': row[3],
+                    'unit_name': row[4],
+                    'unit_symbol': row[5]
                 }
+            })
 
-                response['results'].append(obj)
+    if response['results']:
+        return JsonResponse(response, status=status.HTTP_200_OK)
 
-            if response['results']:
-                return JsonResponse(response, status=status.HTTP_200_OK)
+    return JsonResponse(
+        {'message': 'No data found.'},
+        status=status.HTTP_404_NOT_FOUND
+    )
 
-    return JsonResponse(data={"message": "No data found."}, status=status.HTTP_404_NOT_FOUND)
 
 
 def hourly_summary_list(request):
@@ -10784,334 +10787,6 @@ class AvailableDataView(views.APIView):
             return JsonResponse({'data': result}, status=status.HTTP_200_OK)
         except json.JSONDecodeError:
             return Response({'error': 'Invalid JSON format'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-def DataExportQueryData(initial_datetime, final_datetime, data_source, series, interval):
-    DB_NAME=os.getenv('SURFACE_DB_NAME')
-    DB_USER=os.getenv('SURFACE_DB_USER')
-    DB_PASSWORD=os.getenv('SURFACE_DB_PASSWORD')
-    DB_HOST=os.getenv('SURFACE_DB_HOST')
-    config = f"dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD} host={DB_HOST}"
-
-    config = settings.SURFACE_CONNECTION_STRING
-
-    series = [(row['station_id'], row['variable_id']) for row in series]
-
-    if (data_source=='raw_data'):
-      dfs = []
-      ini_day = initial_datetime;
-      while (ini_day <= final_datetime):
-        fin_day = ini_day + datetime.timedelta(days=1)
-        fin_day = fin_day.replace(hour=0, minute=0, second=0, microsecond=0) 
-
-        fin_day = min(fin_day, final_datetime)
-
-        query = f"""
-          WITH time_series AS(
-            SELECT 
-              timestamp AS datetime
-            FROM
-              GENERATE_SERIES(
-                '{ini_day}'::TIMESTAMP
-                ,'{fin_day}'::TIMESTAMP
-                ,'{interval} SECONDS'
-              ) AS timestamp
-            WHERE timestamp BETWEEN '{ini_day}' AND '{fin_day}'
-          )          
-          ,series AS (
-              SELECT station_id, variable_id
-              FROM UNNEST(ARRAY{series}) AS t(station_id int, variable_id int)
-          )
-          ,processed_data AS (
-            SELECT datetime
-                ,station_id
-                ,var.id as variable_id
-                ,COALESCE(CASE WHEN var.variable_type ilike 'code' THEN data.code ELSE data.measured::varchar END, '-99.9') AS value
-            FROM raw_data data
-            LEFT JOIN wx_variable var ON data.variable_id = var.id
-            WHERE (data.datetime >= '{ini_day}')
-              AND ((data.datetime < '{fin_day}') OR (data.datetime='{fin_day}' AND {fin_day > final_datetime}))
-              AND (station_id, variable_id) IN (SELECT station_id, variable_id FROM series)
-          )
-          SELECT 
-            ts.datetime AS datetime
-            ,series.variable_id AS variable_id
-            ,series.station_id AS station_id
-            ,COALESCE(data.value, '-99.9') AS value
-          FROM time_series ts
-          CROSS JOIN series
-          LEFT JOIN processed_data AS data
-            ON data.datetime = ts.datetime
-            AND data.variable_id = series.variable_id
-            AND data.station_id = series.station_id;
-        """
-        with psycopg2.connect(config) as conn:
-          with conn.cursor() as cursor:
-            logging.info(query)
-            cursor.execute(query)
-            data = cursor.fetchall()
-
-        dfs.append(pd.DataFrame(data))
-
-        ini_day += datetime.timedelta(days=1)
-        ini_day = ini_day.replace(hour=0, minute=0, second=0, microsecond=0)
-
-        if ini_day == final_datetime:
-          break
-
-      df = pd.concat(dfs)
-      return df
-    else:
-      if (data_source=='hourly_summary'):
-        query = f'''
-            WITH time_series AS(
-              SELECT 
-                timestamp AS datetime
-              FROM
-                GENERATE_SERIES(
-                  DATE_TRUNC('HOUR', '{initial_datetime}'::TIMESTAMP)
-                  ,DATE_TRUNC('HOUR', '{final_datetime}'::TIMESTAMP)
-                  ,'1 HOUR'
-                ) AS timestamp
-              WHERE timestamp BETWEEN '{initial_datetime}' AND '{final_datetime}'
-            )       
-            ,series AS (
-                SELECT station_id, variable_id
-                FROM UNNEST(ARRAY{series}) AS t(station_id int, variable_id int)
-            )
-            ,processed_data AS (
-              SELECT
-                datetime
-                ,station_id
-                ,var.id as variable_id
-                ,COALESCE(CASE 
-                  WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
-                  WHEN var.sampling_operation_id = 3      THEN data.min_value
-                  WHEN var.sampling_operation_id = 4      THEN data.max_value
-                  WHEN var.sampling_operation_id = 6      THEN data.sum_value
-                  ELSE data.sum_value END, '-99.9') as value
-              FROM hourly_summary data
-              LEFT JOIN wx_variable var ON data.variable_id = var.id
-              WHERE data.datetime BETWEEN '{initial_datetime}' AND '{final_datetime}'
-                AND (station_id, variable_id) IN (SELECT station_id, variable_id FROM series)
-            )
-            SELECT 
-              ts.datetime AS datetime
-              ,series.variable_id AS variable_id
-              ,series.station_id AS station_id
-              ,COALESCE(data.value, '-99.9') AS value
-            FROM time_series ts
-            CROSS JOIN series
-            LEFT JOIN processed_data AS data
-              ON data.datetime = ts.datetime
-              AND data.variable_id = series.variable_id
-              AND data.station_id = series.station_id;
-        '''    
-      elif (data_source=='daily_summary'):      
-        query = f'''
-            WITH time_series AS(
-              SELECT 
-                timestamp::DATE AS date
-              FROM
-                GENERATE_SERIES(
-                  DATE_TRUNC('DAY', '{initial_datetime}'::TIMESTAMP)
-                  ,DATE_TRUNC('DAY', '{final_datetime}'::TIMESTAMP)
-                  ,'1 DAY'
-                ) AS timestamp
-              WHERE timestamp BETWEEN '{initial_datetime}' AND '{final_datetime}'
-            )       
-            ,series AS (
-                SELECT station_id, variable_id
-                FROM UNNEST(ARRAY{series}) AS t(station_id int, variable_id int)
-            )
-            ,processed_data AS (
-              SELECT
-                day
-                ,station_id
-                ,var.id as variable_id
-                ,COALESCE(CASE 
-                  WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
-                  WHEN var.sampling_operation_id = 3      THEN data.min_value
-                  WHEN var.sampling_operation_id = 4      THEN data.max_value
-                  WHEN var.sampling_operation_id = 6      THEN data.sum_value
-                  ELSE data.sum_value END, '-99.9') as value
-              FROM daily_summary data
-              LEFT JOIN wx_variable var ON data.variable_id = var.id
-              WHERE data.day BETWEEN '{initial_datetime}' AND '{final_datetime}'
-                AND (station_id, variable_id) IN (SELECT station_id, variable_id FROM series)
-            )
-            SELECT 
-              ts.date AS date
-              ,series.variable_id AS variable_id
-              ,series.station_id AS station_id
-              ,COALESCE(data.value, '-99.9') AS value
-            FROM time_series ts
-            CROSS JOIN series
-            LEFT JOIN processed_data AS data
-              ON data.day = ts.date
-              AND data.variable_id = series.variable_id
-              AND data.station_id = series.station_id;
-        '''
-      elif (data_source=='monthly_summary'):
-        query = f'''
-            WITH time_series AS(
-              SELECT 
-                timestamp::DATE AS date
-              FROM
-                GENERATE_SERIES(
-                  DATE_TRUNC('MONTH', '{initial_datetime}'::TIMESTAMP)
-                  ,DATE_TRUNC('MONTH', '{final_datetime}'::TIMESTAMP)
-                  ,'1 MONTH'
-                ) AS timestamp
-              WHERE timestamp BETWEEN '{initial_datetime}' AND '{final_datetime}'
-            )       
-            ,series AS (
-                SELECT station_id, variable_id
-                FROM UNNEST(ARRAY{series}) AS t(station_id int, variable_id int)
-            )
-            ,processed_data AS (
-              SELECT
-                date
-                ,station_id
-                ,var.id as variable_id
-                ,COALESCE(CASE 
-                  WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
-                  WHEN var.sampling_operation_id = 3      THEN data.min_value
-                  WHEN var.sampling_operation_id = 4      THEN data.max_value
-                  WHEN var.sampling_operation_id = 6      THEN data.sum_value
-                  ELSE data.sum_value END, '-99.9') as value
-              FROM monthly_summary data
-              LEFT JOIN wx_variable var ON data.variable_id = var.id
-              WHERE data.date BETWEEN '{initial_datetime}' AND '{final_datetime}'
-                AND (station_id, variable_id) IN (SELECT station_id, variable_id FROM series)
-            )
-            SELECT 
-              ts.date AS date
-              ,series.variable_id AS variable_id
-              ,series.station_id AS station_id
-              ,COALESCE(data.value, '-99.9') AS value
-            FROM time_series ts
-            CROSS JOIN series
-            LEFT JOIN processed_data AS data
-              ON data.date = ts.date
-              AND data.variable_id = series.variable_id
-              AND data.station_id = series.station_id;        
-        '''
-      elif (data_source=='yearly_summary'):
-        query = f'''
-            WITH time_series AS(
-              SELECT 
-                timestamp::DATE AS date
-              FROM
-                GENERATE_SERIES(
-                  DATE_TRUNC('YEAR', '{initial_datetime}'::TIMESTAMP)
-                  ,DATE_TRUNC('YEAR', '{final_datetime}'::TIMESTAMP)
-                  ,'1 YEAR'
-                ) AS timestamp
-              WHERE timestamp BETWEEN '{initial_datetime}' AND '{final_datetime}'
-            )       
-            ,series AS (
-                SELECT station_id, variable_id
-                FROM UNNEST(ARRAY{series}) AS t(station_id int, variable_id int)
-            )
-            ,processed_data AS (
-              SELECT
-                date
-                ,station_id
-                ,var.id as variable_id
-                ,COALESCE(CASE 
-                  WHEN var.sampling_operation_id in (1,2) THEN data.avg_value::real
-                  WHEN var.sampling_operation_id = 3      THEN data.min_value
-                  WHEN var.sampling_operation_id = 4      THEN data.max_value
-                  WHEN var.sampling_operation_id = 6      THEN data.sum_value
-                  ELSE data.sum_value END, '-99.9') as value
-              FROM yearly_summary data
-              LEFT JOIN wx_variable var ON data.variable_id = var.id
-              WHERE data.date BETWEEN '{initial_datetime}' AND '{final_datetime}'
-                AND (station_id, variable_id) IN (SELECT station_id, variable_id FROM series)
-            )
-            SELECT 
-              ts.date AS date
-              ,series.variable_id AS variable_id
-              ,series.station_id AS station_id
-              ,COALESCE(data.value, '-99.9') AS value
-            FROM time_series ts
-            CROSS JOIN series
-            LEFT JOIN processed_data AS data
-              ON data.date = ts.date
-              AND data.variable_id = series.variable_id
-              AND data.station_id = series.station_id;        
-        '''               
-
-      with psycopg2.connect(config) as conn:
-        with conn.cursor() as cursor:
-          logging.info(query)
-          cursor.execute(query)
-          data = cursor.fetchall()
-
-      df = pd.DataFrame(data)
-    return df
-
-
-class AppDataExportView(views.APIView):
-    permission_classes = (IsAuthenticated,)
-
-    def post(self, request, *args, **kwargs):
-        serializer = serializers.DataExportSerializer(data=request.data)
-        if serializer.is_valid():
-            data_dict = {
-                key: [dict(item) for item in value] if key == 'series' else value
-                for key, value in serializer.validated_data.items()
-            }
-
-            initial_datetime = datetime.datetime.combine(data_dict['initial_date'],  data_dict['initial_time'])
-            final_datetime = datetime.datetime.combine(data_dict['final_date'],  data_dict['final_time'])
-
-            df = DataExportQueryData(initial_datetime, final_datetime, data_dict['data_source'], data_dict['series'], data_dict['interval'])
-
-            try:
-                file_format = data_dict.get('file_format')            
-                if(file_format == 'excel'):
-                    output = io.BytesIO()
-                    df.to_excel(output, index=False, engine='openpyxl')
-                    output.seek(0)
-
-                    return HttpResponse(
-                        output,
-                        content_type='application/vnd.ms-excel',
-                        headers={'Content-Disposition': 'attachment; filename="data.xlsx"'}
-                    )
-                elif(file_format == 'csv'):
-                    output = io.StringIO()
-                    df.to_csv(output, index=False)
-                    output.seek(0)
-
-                    return HttpResponse(
-                        output,
-                        content_type='text/csv',
-                        headers={'Content-Disposition': 'attachment; filename="data.csv"'}
-                    )                
-
-                elif(file_format == 'rinstat'):
-                    output = io.StringIO()
-                    df.to_csv(output, sep='\t', index=False)
-                    output.seek(0)
-                    
-                    return HttpResponse(
-                        output,
-                        content_type='text/tab-separated-values',
-                        headers={'Content-Disposition': 'attachment; filename="data.tsv"'}
-                    )
-                else:
-                    return HttpResponse('Unsupported file format', status=400)
-            except Exception as e:
-                return HttpResponse('An error occurred: {}'.format(e), status=500)
-        else:
-            return HttpResponse(
-                json.dumps({'message': 'Validation failed', 'errors': serializer.errors}),
-                content_type='application/json',
-                status=400
-            )
 
 
 class IntervalViewSet(viewsets.ModelViewSet):

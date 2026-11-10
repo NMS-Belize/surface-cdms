@@ -1,660 +1,333 @@
-{% extends "base.html" %} {% block content %} {% load static %} {% load wx_filters %}
-
-<div id="app" v-cloak>
-  <v-app v-if="stations">
-    <div class="text-center" style="z-index: 999;">
-
-      <!-- loading overlay -->
-      <v-overlay :value="loading_overlay">
-        <v-progress-circular
-            indeterminate
-            size="64"
-        >
-          [[ Math.floor(progress) ]]%
-        </v-progress-circular>
-      </v-overlay> 
-
-    </div>
-
-    <v-dialog v-model="parameters_dialog" max-width="400px" style="z-index: 998;">
-      <v-card class="flex-grow-1">
-        <v-card-title>
-          <span class="headline">Interpolation Parameters</span>
-        </v-card-title>
-
-        <v-card-text>
-          <v-form v-model="valid" lazy-validation>
-            <v-row>
-              <!-- Horizontal resolution -->
-              <v-col cols="12" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                <v-text-field
-                  v-model="interpolation_parameters.hres"
-                  label="Horizontal resolution"
-                  hint="The horizontal resolution of the generated grid."
-                  style="width: 160px"
-                  type="number"
-                  inputmode="decimal"
-                  step="any"
-                  @keydown="allowNumbersAndSingleDotOnly"
-                  :rules="[rules.required]"
-                />
-              </v-col>
-
-              <!-- Minimum Neighbors -->
-              <v-col cols="12" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                <v-text-field
-                  v-model="interpolation_parameters.minimum_neighbors"
-                  label="Minimum neighbors"
-                  hint="Minimum number of neighbors needed to perform interpolation for a point."
-                  style="width: 160px"
-                  type="number"
-                  inputmode="decimal"
-                  step="any"
-                  @keydown="allowNumbersAndSingleDotOnly"
-                  :rules="[rules.required]"
-                />
-              </v-col>
-
-              <!-- Search Radius -->
-              <v-col cols="12" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                <v-text-field
-                  v-model="interpolation_parameters.search_radius"
-                  label="Search radius"
-                  hint="A search radius to use for the interpolation."
-                  style="width: 160px"
-                  type="number"
-                  inputmode="decimal"
-                  step="any"
-                  @keydown="allowNumbersAndSingleDotOnly"
-                  :rules="[rules.required]"
-                />
-              </v-col>
-            </v-row>
-          </v-form>
-        </v-card-text>
-
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="error" @click="parameters_dialog = false">Close</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-navigation-drawer
-      v-model="drawer"
-      color="white"
-      :right="right"
-      width="25vw"
-      style="z-index: 800;"
-      app
-    >
-      <v-card flat class="pa-4">
-        <v-card-title class="headline">Spatial Analysis</v-card-title>
-        <v-card-text>
-          <v-form
-            ref="form"
-            v-model="valid"
-            lazy-validation
-          >
-            <v-combobox
-            v-model="variable"
-            :items="variables"
-            item-text="name"
-            item-value="id"
-            label="Variable"
-            required
-            :rules="[v => !!v || 'Variable is required']"
-            @change="selectVariable"
-            ></v-combobox>
-            <v-combobox
-              v-model="source"
-              :items="sources"
-              label="Data source"
-              required
-              v-on:change="changeSource"
-              :rules="[v => !!v || 'Data source is required']"
-            ></v-combobox>
-            <v-autocomplete
-              v-if="source.value === 'raw_data'"
-              v-model="selected_quality_flag"
-              :items="quality_flags"
-              :search-input.sync="searchFlags"
-              label="Quality Flags"
-              multiple
-              chips
-              deletable-chips
-              small-chips
-              autocomplete="off"
-            ></v-autocomplete>
-            <v-combobox
-              v-model="aggregation"
-              :items="aggregations"
-              label="Aggregation"
-              required
-              :rules="[v => !!v || 'Aggregation is required']"
-            ></v-combobox>
-            <v-combobox
-              v-model="interpolation_parameters.cmap"
-              :items="cmaps"
-              label="Color map"
-              required
-            ></v-combobox>
-            <div class="d-flex flex-row">
-              <v-text-field
-                v-model="vmin"
-                label="Min scale value"
-                type="number"
-                style="width: 160px"
-                class="pr-2"
-              ></v-text-field>
-              <v-text-field
-                v-model="vmax"
-                label="Max scale value"
-                type="number"
-                style="width: 160px"
-                class="pl-2"
-                ></v-text-field>
-            </div>
-            <div class="d-flex flex-row">
-              <v-menu
-                ref="date_menu"
-                v-model="date_menu"
-                :close-on-content-click="false"
-                :return-value.sync="start_date"
-                transition="scale-transition"
-                offset-y
-                min-width="290px"
-                required
-                :rules="[v => !!v || 'Date is required']"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="start_date"
-                    :label="aggregation.value == 'instant' ? 'Date' : 'Start date'"
-                    prepend-icon="event"
-                    readonly
-                    v-on="on"
-                    class="pr-2"
-                    ></v-text-field>
-                </template>
-                <v-date-picker
-                  v-model="start_date"
-                  no-title scrollable
-                  @click:date="$refs.date_menu.save(start_date)"
-                  :type='getDatepickFormat()'
-                  :allowed-dates="allowedDates"
-                >
-                  <!-- <v-spacer></v-spacer>
-                  <v-btn text color="primary" @click="date_menu = false">Cancel</v-btn>
-                  <v-btn text color="primary" @click="$refs.date_menu.save(start_date)">OK</v-btn> -->
-                </v-date-picker>
-              </v-menu>
-              <v-menu
-                ref="time_menu"
-                v-model="time_menu"
-                v-if="source.value === 'raw_data'"
-                :close-on-content-click="false"
-                :nudge-right="40"
-                :return-value.sync="start_time"
-                transition="scale-transition"
-                offset-y
-                min-width="290px"
-                required
-                :rules="[v => !!v || 'Time is required']"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="start_time"
-                    :label="aggregation.value == 'instant' ? 'Time' : 'Start time'"
-                    prepend-icon="access_time"                    
-                    v-on="on"
-                    class="pl-2"
-                ></v-text-field>
-                </template>
-                <v-time-picker
-                  v-if="time_menu"
-                  v-model="start_time"
-                  full-width
-                  no-title
-                  scrollable
-                  @click:minute="$refs.time_menu.save(start_time)"
-                ></v-time-picker>
-              </v-menu>
-              <v-select
-                v-model="start_time"
-                v-if="source.value === 'hourly'"
-                :label="aggregation.value == 'instant' ? 'Time' : 'Start time'"
-                :items="hours"
-                prepend-icon="access_time"
-                required
-                persistent-hint
-                class="pl-2"
-                max-width="200px"
-              ></v-select>
-            </div>            
-            <div class="d-flex flex-row">
-              <v-menu
-                v-if="aggregation.value != 'instant'"
-                ref="end_date_menu"
-                v-model="end_date_menu"
-                :close-on-content-click="false"
-                :return-value.sync="end_date"
-                transition="scale-transition"
-                offset-y
-                min-width="290px"
-                required
-                :rules="[v => !!v || 'Date is required']"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="end_date"
-                    label="End date"
-                    prepend-icon="event"
-                    readonly
-                    v-on="on"
-                    class="pr-2"
-                  ></v-text-field>
-                </template>
-                <v-date-picker
-                  v-model="end_date"
-                  no-title scrollable
-                  :type='getDatepickFormat()'
-                  :allowed-dates="allowedDates"
-                  @click:date="$refs.end_date_menu.save(end_date)"
-                >
-                  <!-- <v-spacer></v-spacer>
-                  <v-btn text color="primary" @click="end_date_menu = false">Cancel</v-btn>
-                  <v-btn text color="primary" @click="$refs.end_date_menu.save(end_date)">OK</v-btn> -->
-                </v-date-picker>
-              </v-menu>
-              <v-select
-                v-model="end_time"
-                v-if="aggregation.value != 'instant' && source.value === 'hourly'"
-                :label="aggregation.value == 'instant' ? 'Time' : 'Start time'"
-                :items="hours"
-                prepend-icon="access_time"
-                required
-                persistent-hint
-                class="pl-2"
-                max-width="200px"
-              ></v-select>
-              <v-menu
-                v-if="aggregation.value != 'instant' && source.value === 'raw_data'"
-                ref="end_time_menu"
-                v-model="end_time_menu"
-                :close-on-content-click="false"
-                :nudge-right="40"
-                :return-value.sync="end_time"
-                transition="scale-transition"
-                offset-y
-                max-width="290px"
-                min-width="290px"
-                required
-                :rules="[v => !!v || 'Time is required']"
-              >
-                <template v-slot:activator="{ on }">
-                  <v-text-field
-                    v-model="end_time"
-                    label="End time"
-                    prepend-icon="access_time"                    
-                    v-on="on"
-                    class="pl-2"
-                  ></v-text-field>
-                </template>
-                <v-time-picker
-                  v-if="end_time_menu"
-                  v-model="end_time"
-                  full-width
-                  no-title
-                  scrollable
-                  @click:minute="$refs.end_time_menu.save(end_time)"
-                ></v-time-picker>
-              </v-menu>
+{% extends "base.html" %}
+{% load static %}
+{% load wx_filters %}
+{% block title %}SURFACE - Spatial Analysis{% endblock %}
+{% block content %}
+<div class="sa-page">
+  <div id="app" v-cloak>
+    <v-app class="sa-vapp">
+      <div class="sa-shell">
+        <section class="sa-workspace" :class="{ 'sa-workspace--wide': !drawer }" aria-label="Spatial analysis workspace">
+          <main class="sa-map-card" ref="mapFrame" aria-label="Spatial interpolation map">
+            <div class="sa-map-layer">
+              <l-map :key="mapKey" ref="myMap" :zoom="zoom" :center="center" :options="options" @ready="onMapReady" class="sa-map">
+                <l-marker v-for="marker in availableMarkers" :key="marker.id" :lat-lng.sync="marker.position"
+                  :visible="marker.visible" :draggable="marker.draggable" :tooltip="marker.name">
+                  <l-icon :icon-size="iconSizeTest" :icon-anchor="iconAnchor">
+                    <span class="sa-map-value">[[ Math.round(Number(marker.measured) * 100) / 100 ]]</span>
+                    <div class="sa-marker-name" v-if="marker.show">[[ marker.name ]]</div>
+                  </l-icon>
+                  <l-tooltip>[[ marker.name ]]</l-tooltip>
+                </l-marker>
+                <l-geo-json v-if="Groundwater" :options="geoOptionsGroundwater" :geojson="Groundwater_geojson" :options-style="styleFunctionGroundwater"></l-geo-json>
+                <l-geo-json v-if="Watershed" :geojson="Watersheds_geojson" :options="geoOptionsWatershed" :options-style="styleFunctionWatershed"></l-geo-json>
+                <l-geo-json v-if="Basemap" :geojson="Basemap_geojson" :options="geoOptionsBasemap" :options-style="styleFunctionBasemap"></l-geo-json>
+                <l-geo-json v-if="River" :geojson="River_geojson" :options="geoOptionsRivers" :options-style="styleFunctionRiver"></l-geo-json>
+                <l-geo-json v-if="NationalWaters" :geojson="NationalWaters_geojson" :options="geoOptionsNationalWaters" :options-style="styleFunctionNationalWaters"></l-geo-json>
+                <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
+                <l-image-overlay v-if="get_img_url" :url="img_url" :bounds="img_bounds" :opacity="0.8"></l-image-overlay>
+                <l-control-zoom :position="zoomPosition"></l-control-zoom>
+              </l-map>
             </div>
 
-            <!-- buttons-->
-            <div class="d-flex flex-row">
-              <v-btn color="success" @click="interpolateData">Interpolate</v-btn>
-              <v-spacer></v-spacer>
-              <v-btn color="primary" @click="parameters_dialog=true">Parameters</v-btn>
-            </div>
-
-          </v-form>
-          <v-alert
-            v-model='no_data'
-            dismissible
-            type="info"
-          >
-            No data
-          </v-alert>
-          <div v-show="markers.length > 0">
-          <v-divider></v-divider>
-          <v-data-table
-            ref="data_table"
-            :headers="table_headers"
-            :items="markers"
-            :items-per-page="5"
-            item-key="name"
-            class="elevation-1"
-            @item-selected="editTable_save"
-            @toggle-select-all="editTable_save"
-            show-select
-            dense
-            calculate-widths
-          >
-          <template v-slot:item.show="{ item }">
-            <v-checkbox
-              class="table-checkbox"
-              v-model="item.show"
-            ></v-checkbox>
-          </template>
-          <template v-slot:item.latitude="{ item }">
-            <span>[[item.latitude.toFixed(2)]]</span>
-          </template>
-          <template v-slot:item.longitude="{ item }">
-            <span>[[item.longitude.toFixed(2)]]</span>
-          </template>
-
-          <template v-slot:item.measured="props">
-            <v-edit-dialog
-              :return-value="props.item.measured"
-              @save="editTable_save"
-            >
-              [[ props.item.measured.toFixed(2) ]]
-              <template v-slot:input>
-                <v-text-field
-                  v-model.number="props.item.measured"
-                  label="Edit"
-                  single-line
-                ></v-text-field>
-              </template>
-            </v-edit-dialog>
-          </template>
-
-          </v-data-table>
-        </v-card-text>
-
-        <v-divider></v-divider>
-        
-        <v-card-actions>
-          <v-dialog
-            v-model="add_value_dialog"
-            width="600"
-            style="z-index: 998;"
-            :persistent="false"
-          >
-            <template v-slot:activator="{ on }">
-              <v-btn
-                v-on="on"
-                :disabled="markers.length == 0"
-                small
-              >Add value</v-btn>
-            </template>
-            <v-card class="flex-grow-1">
-              <v-card-title>
-                <span class="headline">Add value</span>
-              </v-card-title>
-
-              <v-card-text>
-
-                <v-form ref="addValueForm" v-model="addValueFormValid">
-                  <v-row>
-                    <!-- station name -->
-                    <v-col cols="12" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                      <v-text-field
-                        v-model.trim="editedItem.name"
-                        label="Station name"
-                        :rules="[rules.required]"
-                      />
-                    </v-col>
-
-                    <!-- station lat -->
-                    <v-col cols="6" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                      <v-text-field
-                        v-model="editedItem.latitude"
-                        label="Latitude"
-                        type="number"
-                        inputmode="decimal"
-                        step="any"
-                        :rules="[rules.required, rules.isNumber, rules.latRange]"
-                      />
-                    </v-col>
-
-                    <!-- station lng -->
-                    <v-col cols="6" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                      <v-text-field
-                        v-model="editedItem.longitude"
-                        label="Longitude"
-                        type="number"
-                        inputmode="decimal"
-                        step="any"
-                        :rules="[rules.required, rules.isNumber, rules.lonRange]"
-                      />
-                    </v-col>
-
-                    <!-- station measured value -->
-                    <v-col v-if="variable" cols="12" class="d-flex flex-grow-1 flex-shrink-1 align-center">
-                      <v-text-field
-                        v-model="editedItem.measured"
-                        :label="variable.name"
-                        type="number"
-                        inputmode="decimal"
-                        step="any"
-                        :rules="[rules.required, rules.isNumber]"
-                      />
-                    </v-col>
-                  </v-row>
-                </v-form>
-
-                <v-card-actions>
-                  <v-spacer></v-spacer>
-
-                  <v-btn
-                    color="success"
-                    :disabled="!canSaveValue"
-                    @click="addValue"
-                  >
-                    Save
+            <!-- Compact white map actions matching the Station Monitoring page. -->
+            <div class="sa-map-tools" aria-label="Map actions">
+              <v-menu offset-y left :close-on-content-click="false" content-class="sa-layers-menu">
+                <template v-slot:activator="{ on }">
+                  <v-btn v-on="on" color="white" class="sa-monitor-map-btn map-sidebar-toggle"
+                    title="Map layers and basemaps" aria-label="Map layers and basemaps">
+                    <v-icon>mdi-layers</v-icon>
                   </v-btn>
+                </template>
+                <v-card class="sa-layers-card" elevation="0">
+                  <div class="sa-layers-heading"><v-icon size="18" color="primary">mdi-layers-triple-outline</v-icon><strong>Map layers</strong><span>VISIBILITY</span></div>
+                  <div class="sa-layers-content">
+                    <v-switch v-model="showWatershed" @change="toggleWatershedOverlay()" :loading="loadWatershed" label="Watershed" inset dense hide-details class="sa-layer-switch"></v-switch>
+                    <v-switch v-model="showGroundwater" @change="toggleGroundwaterOverlay()" :loading="loadGroundwater" label="Groundwater" inset dense hide-details class="sa-layer-switch"></v-switch>
+                    <v-switch v-model="showBasemap" @change="toggleRegionsOverlay()" :loading="loadBasemap" label="Administrative regions" inset dense hide-details class="sa-layer-switch"></v-switch>
+                    <v-switch v-model="showNationalWaters" @change="toggleNationalWatersOverlay()" :loading="loadNationalWaters" label="National waters" inset dense hide-details class="sa-layer-switch"></v-switch>
+                  </div>
+                  <v-divider></v-divider>
+                  <div class="sa-layers-subtitle">BASEMAP STYLE</div>
+                  <v-radio-group v-model="selectedBasemap" @change="setBasemap()" class="sa-basemap-radios" hide-details>
+                    <v-radio v-for="(basemap, index) in basemaps" :key="index" :label="basemap.displayName" :value="basemap" color="primary"></v-radio>
+                  </v-radio-group>
+                </v-card>
+              </v-menu>
+              <v-btn color="white" class="sa-monitor-map-btn map-sidebar-toggle" @click="resetMainMapView"
+                title="Reset to configured map view" aria-label="Reset to configured map view">
+                <v-icon>mdi-crosshairs-gps</v-icon>
+              </v-btn>
+              <v-btn color="white" class="sa-monitor-map-btn map-sidebar-toggle" @click="scrollToObservations"
+                title="View station data table" aria-label="View station data table">
+                <v-icon>mdi-table-eye</v-icon>
+              </v-btn>
+              <v-btn color="white" class="sa-monitor-map-btn map-sidebar-toggle" @click="toggleMarkers"
+                :title="markersVisible ? 'Hide station markers' : 'Show station markers'"
+                :aria-label="markersVisible ? 'Hide station markers' : 'Show station markers'">
+                <v-icon>[[ markersVisible ? 'mdi-map-marker-off-outline' : 'mdi-map-marker-outline' ]]</v-icon>
+              </v-btn>
+              <v-btn color="white" class="sa-monitor-map-btn map-sidebar-toggle" @click="toggleSidenav"
+                :title="drawer ? 'Hide analysis controls' : 'Show analysis controls'"
+                :aria-label="drawer ? 'Hide analysis controls' : 'Show analysis controls'">
+                <v-icon>[[ drawer ? 'mdi-table-eye-off' : 'mdi-tune-variant' ]]</v-icon>
+              </v-btn>
+            </div>
 
-                  <v-btn color="error" @click="closeAddValue">Cancel</v-btn>
-                </v-card-actions>
+            <div v-show="get_img_url" class="sa-map-colorbar"><span class="sa-map-colorbar-label">INTERPOLATED VALUE SCALE</span><div id="color_bar_img"></div></div>
 
-            </v-card>
-          </v-dialog>
-          <v-spacer></v-spacer>
+            <div class="sa-map-footer">
+              <div class="sa-map-footer-left">
+                <v-icon size="15" color="primary">mdi-map-marker-multiple-outline</v-icon>
+                <strong>[[ availableMarkers.length ]]</strong> selected station[[ availableMarkers.length === 1 ? '' : 's' ]]
+                <span class="sa-footer-divider"></span>
+                <span>[[ variable ? variable.name : 'No variable selected' ]]</span>
+              </div>
+              <div class="sa-map-footer-right">[[ source ? source.text : 'Raw data' ]]</div>
+            </div>
+          </main>
 
-          {% if request|has_any_feature_permission:"spatial-analysis:write" %}
-          <v-btn small @click="exportData">Export Data</v-btn>
-          {% endif %}
+          <aside v-show="drawer" class="sa-sidebar" aria-label="Analysis controls">
+            <div class="sa-sidebar-head">
+              <div class="sa-sidebar-heading">
+                <div>
+                  <h1 class="srf-display-1 text-uppercase sa-panel-title">Spatial Analysis</h1>
+                  <p>Explore station observations and generate interpolated surfaces.</p>
+                </div>
+              </div>
+              <v-btn icon small @click="toggleSidenav" title="Collapse controls"><v-icon size="19">mdi-chevron-right</v-icon></v-btn>
+            </div>
+            <div class="sa-sidebar-scroll">
+              <div class="sa-sidebar-intro">Configure analysis</div>
+              <v-form ref="form" v-model="valid" lazy-validation>
+                <div class="sa-section-heading"><span>DATA SELECTION</span></div>
+                <div class="sa-fields">
+                  <v-autocomplete v-model="variable" :items="variables" item-text="name" item-value="id" return-object
+                    label="Weather variable" @change="selectVariable"
+                    :rules="[v => !!v || 'Variable is required']" outlined dense hide-details="auto"></v-autocomplete>
 
-          <v-spacer></v-spacer>
-          <v-btn small @click="toggleMarkers">Show/Hide Markers</v-btn>
-        </v-card-actions>
+                  <v-autocomplete v-model="source" :items="sources" item-text="text" item-value="value" return-object
+                    label="Data source" @change="changeSource"
+                    :rules="[v => !!v || 'Data source is required']" outlined dense hide-details="auto"></v-autocomplete>
+
+                  <div v-if="source && source.value === 'raw_data'" class="sa-field-block">
+                    <div class="sa-inline-caption">QUALITY FILTER <small>Optional</small></div>
+
+                    <v-autocomplete v-model="selected_quality_flag" :items="quality_flags" :search-input.sync="searchFlags"
+                      multiple chips small-chips deletable-chips clearable autocomplete="off" label="Quality flags"
+                      placeholder="All quality flags" outlined dense hide-details="auto" class="sa-chips-input"></v-autocomplete>
+                  </div>
+                </div>
+
+                <div class="sa-section-heading"><span>INTERPOLATION SETUP</span></div>
+                <div class="sa-fields">
+                  <v-autocomplete v-model="aggregation" :items="aggregations" item-text="text" item-value="value" return-object
+                    label="Aggregation method"
+                    :rules="[v => !!v || 'Aggregation is required']" outlined dense hide-details="auto"></v-autocomplete>
+
+                  <v-autocomplete v-model="interpolation_parameters.cmap" :items="cmaps" item-text="text" item-value="value" return-object
+                    label="Color map" prepend-inner-icon="mdi-palette-outline" outlined dense hide-details="auto"></v-autocomplete>
+
+                  <div class="sa-scale-fields">
+                    <v-text-field v-model="vmin" label="Scale minimum" type="number" outlined dense hide-details="auto" prepend-inner-icon="mdi-arrow-down"></v-text-field>
+                    <v-text-field v-model="vmax" label="Scale maximum" type="number" outlined dense hide-details="auto" prepend-inner-icon="mdi-arrow-up"></v-text-field>
+                  </div>
+                  <v-btn block outlined color="primary" class="sa-param-button text-none" @click="parameters_dialog = true">
+                    <v-icon left size="18">mdi-cog-outline</v-icon> Advanced interpolation parameters <v-spacer></v-spacer><v-icon size="17">mdi-chevron-right</v-icon>
+                  </v-btn>
+                </div>
+
+                <div class="sa-section-heading"><span>TIME PERIOD</span></div>
+                <div class="sa-period-card">
+                  <div class="sa-period-card-title"><span class="sa-period-dot sa-period-dot-start"></span>
+                    [[ aggregation && aggregation.value === 'instant' ? 'Observation date' : 'From' ]]
+                  </div>
+                  <div class="sa-period-fields" :class="{'sa-period-single': !(source && ['raw_data', 'hourly'].includes(source.value))}">
+                    <v-menu ref="date_menu" v-model="date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px">
+                      <template v-slot:activator="{ on }"><v-text-field v-model="start_date" v-on="on" readonly label="Date" prepend-inner-icon="mdi-calendar-outline" outlined dense hide-details="auto" required></v-text-field></template>
+                      <v-date-picker v-model="start_date" no-title scrollable :type="getDatepickFormat()" :allowed-dates="allowedDates"
+                        @input="date_menu = false"></v-date-picker>
+                    </v-menu>
+                    <v-menu v-if="source && source.value === 'raw_data'" ref="time_menu" v-model="time_menu" :close-on-content-click="false" :return-value.sync="start_time" transition="scale-transition" offset-y min-width="290px">
+                      <template v-slot:activator="{ on }"><v-text-field v-model="start_time" v-on="on" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-text-field></template>
+                      <v-time-picker v-if="time_menu" v-model="start_time" full-width no-title scrollable @click:minute="$refs.time_menu.save(start_time)"></v-time-picker>
+                    </v-menu>
+                    <v-select v-if="source && source.value === 'hourly'" v-model="start_time" :items="hours" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-select>
+                  </div>
+                </div>
+                <div class="sa-period-card" v-if="aggregation && aggregation.value !== 'instant'">
+                  <div class="sa-period-card-title"><span class="sa-period-dot sa-period-dot-end"></span>To</div>
+                  <div class="sa-period-fields" :class="{'sa-period-single': !(source && ['raw_data', 'hourly'].includes(source.value))}">
+                    <v-menu ref="end_date_menu" v-model="end_date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px">
+                      <template v-slot:activator="{ on }"><v-text-field v-model="end_date" v-on="on" readonly label="Date" prepend-inner-icon="mdi-calendar-outline" outlined dense hide-details="auto" required></v-text-field></template>
+                      <v-date-picker v-model="end_date" no-title scrollable :type="getDatepickFormat()" :allowed-dates="allowedDates" @input="end_date_menu = false"></v-date-picker>
+                    </v-menu>
+                    <v-menu v-if="source && source.value === 'raw_data'" ref="end_time_menu" v-model="end_time_menu" :close-on-content-click="false" :return-value.sync="end_time" transition="scale-transition" offset-y min-width="290px">
+                      <template v-slot:activator="{ on }"><v-text-field v-model="end_time" v-on="on" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-text-field></template>
+                      <v-time-picker v-if="end_time_menu" v-model="end_time" full-width no-title scrollable @click:minute="$refs.end_time_menu.save(end_time)"></v-time-picker>
+                    </v-menu>
+                    <v-select v-if="source && source.value === 'hourly'" v-model="end_time" :items="hours" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-select>
+                  </div>
+                </div>
+
+                <v-alert v-model="no_data" dismissible type="warning" dense class="sa-inline-alert">No station observations were found for this selection.</v-alert>
+
+                <div class="sa-action-area">
+                  <v-btn color="primary" depressed block large class="sa-interpolate text-none" @click="interpolateData" :loading="loading_overlay" :disabled="loading_overlay || !variable || !source || !aggregation">
+                    <v-icon left>mdi-map-search</v-icon> Generate interpolation
+                  </v-btn>
+                  <p><v-icon size="14">mdi-information-outline</v-icon> The interpolated surface is calculated from the selected observations.</p>
+                </div>
+              </v-form>
+
+
+            </div>
+          </aside>
+        </section>
+
+        <!-- Observation editing is now BELOW the full-width map, not in the controls drawer. -->
+        <section id="sa-observations" ref="observationsSection" class="sa-observations-section" aria-label="Interpolation station measurements">
+          <div class="sa-observations-panel">
+            <div class="sa-observations-head">
+              <div class="sa-observations-title">
+                <span class="sa-observations-icon"><v-icon size="21" color="primary">mdi-table-edit</v-icon></span>
+                <div>
+                  <h2>Interpolation station data</h2>
+                  <p>Review participating stations, edit measurements, or include your own observation points.</p>
+                </div>
+              </div>
+              <div class="sa-observations-actions">
+                <v-btn outlined color="primary" class="text-none" @click="add_value_dialog = true" :disabled="!markers.length">
+                  <v-icon left>mdi-plus</v-icon> Add point
+                </v-btn>
+                {% if request|has_any_feature_permission:"spatial-analysis:write" %}
+                <v-btn outlined color="success" class="text-none" @click="exportData" :disabled="!availableMarkers.length">
+                  <v-icon left>mdi-download-outline</v-icon> Export CSV
+                </v-btn>
+                {% endif %}
+              </div>
+            </div>
+
+            <template v-if="markers.length">
+              <div class="sa-observations-toolbar">
+                <div class="sa-observations-status">
+                  <span class="sa-count-badge">[[ selectedMarkers.length ]] of [[ markers.length ]] stations selected</span>
+                  <span class="sa-observations-note">Only selected stations with valid measurements are used for interpolation.</span>
+                </div>
+                <v-text-field v-model="stationTableSearch" label="Search stations" prepend-inner-icon="mdi-magnify"
+                  outlined dense hide-details clearable class="sa-observations-search"></v-text-field>
+              </div>
+              <v-data-table ref="data_table" v-model="selectedMarkers" :headers="table_headers" :items="markers"
+                :search="stationTableSearch" :items-per-page="10" item-key="id"
+                show-select dense class="sa-station-table" :footer-props="{'items-per-page-options': [10, 25, 50, -1]}"
+                @item-selected="onMarkerSelectionChange" @toggle-select-all="onMarkerSelectionChange">
+                <template v-slot:item.show="{ item }">
+                  <v-checkbox v-model="item.show" hide-details dense class="sa-show-checkbox"></v-checkbox>
+                </template>
+                <template v-slot:item.latitude="{ item }"><span class="sa-coordinate">[[ Number(item.latitude).toFixed(4) ]]</span></template>
+                <template v-slot:item.longitude="{ item }"><span class="sa-coordinate">[[ Number(item.longitude).toFixed(4) ]]</span></template>
+                <template v-slot:item.measured="props">
+                  <v-edit-dialog :return-value="props.item.measured" @save="editTable_save">
+                    <span class="sa-editable-value">[[ Number.isFinite(Number(props.item.measured)) ? Number(props.item.measured).toFixed(2) : '—' ]]<v-icon size="12" color="primary">mdi-pencil-outline</v-icon></span>
+                    <template v-slot:input><v-text-field v-model.number="props.item.measured" type="number" step="any" label="Measurement" single-line></v-text-field></template>
+                  </v-edit-dialog>
+                </template>
+              </v-data-table>
+            </template>
+            <div v-else class="sa-observations-empty">
+              <v-icon size="31" color="blue-grey lighten-2">mdi-map-marker-radius-outline</v-icon>
+              <strong>No station observations yet</strong>
+              <p>Generate an interpolation to load the station observations, then manage them here.</p>
+              <v-btn outlined color="primary" class="text-none" small @click="drawer = true; scrollToMap()">
+                <v-icon left small>mdi-tune-variant</v-icon> Open analysis controls
+              </v-btn>
+            </div>
+          </div>
+        </section>
       </div>
-      </v-card>
-    </v-navigation-drawer>
 
-    <div style="height: 100vh; width: 100%;">
-      <l-map
-        :key="mapKey"
-        ref="myMap"
-        :zoom="zoom"
-        :center="center"
-        :options="options"
-        style="z-index: 10;"
-      >
+      <!-- Interpolation progress covers the work area while both tasks finish. -->
+      <v-overlay :value="loading_overlay" :z-index="1100" opacity="0.44">
+        <div class="sa-loading-card">
+          <div class="sa-loading-icon"><v-progress-circular indeterminate :size="54" :width="4" color="primary"><span>[[ Math.floor(progress) ]]%</span></v-progress-circular></div>
+          <h3>Generating spatial analysis</h3>
+          <p>Processing station measurements and rendering your interpolation surface.</p>
+          <v-progress-linear indeterminate color="primary" height="4" rounded></v-progress-linear>
+          <small>[[ imageProcessing ? 'Preparing interpolation map' : 'Finalizing station data' ]]</small>
+        </div>
+      </v-overlay>
 
-        <l-marker
-          v-for="marker in availableMarkers"
-          :key="marker.id"
-          :lat-lng.sync="marker.position"
-          :visible="marker.visible"
-          :draggable="marker.draggable"
-          :tooltip="marker.name"
-        >
-          <l-icon :icon-size="iconSizeTest" :icon-anchor="iconAnchor">
-            <span class="measured-values">[[ Math.round(marker.measured * 100) / 100 ]]</span>
-            <div class="station-name" v-if="marker.show">[[ marker.name ]]</div>
-          </l-icon>
-          <l-tooltip>[[ marker.name ]]</l-tooltip>
-        </l-marker>
+      <!-- Advanced settings dialog -->
+      <v-dialog v-model="parameters_dialog" max-width="530" content-class="sa-dialog">
+        <v-card class="sa-dialog-card">
+          <div class="sa-dialog-top"><span class="sa-dialog-symbol"><v-icon color="primary">mdi-cog-outline</v-icon></span><div><h2>Interpolation parameters</h2><p>Fine-tune the spatial interpolation model.</p></div><v-spacer></v-spacer><v-btn icon @click="parameters_dialog = false"><v-icon>mdi-close</v-icon></v-btn></div>
+          <v-card-text class="sa-dialog-body">
+            <v-form lazy-validation>
+              <div class="sa-dialog-field"><v-text-field v-model="interpolation_parameters.hres" type="number" inputmode="decimal" step="any" label="Horizontal resolution" outlined dense :rules="[rules.required]" @keydown="allowNumbersAndSingleDotOnly"></v-text-field><p>Grid spacing for the generated interpolation image.</p></div>
+              <div class="sa-dialog-field"><v-text-field v-model="interpolation_parameters.minimum_neighbors" type="number" inputmode="numeric" min="1" step="1" label="Minimum neighbors" outlined dense :rules="[rules.required]" @keydown="allowNumbersAndSingleDotOnly"></v-text-field><p>Minimum number of neighboring observations required at each grid point.</p></div>
+              <div class="sa-dialog-field"><v-text-field v-model="interpolation_parameters.search_radius" type="number" inputmode="decimal" step="any" label="Search radius" outlined dense :rules="[rules.required]" @keydown="allowNumbersAndSingleDotOnly"></v-text-field><p>Maximum search radius used to find neighboring observations.</p></div>
+            </v-form>
+          </v-card-text>
+          <v-card-actions class="sa-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn class="text-none" color="primary" @click="parameters_dialog = false">Done</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
-        <l-geo-json
-          v-if="Groundwater"
-          :options="geoOptionsGroundwater"
-          :geojson="Groundwater_geojson"
-          :options-style="styleFunctionGroundwater"
-        ></l-geo-json>
-        <l-geo-json
-          v-if="Watershed"
-          :geojson="Watersheds_geojson"
-          :options="geoOptionsWatershed"
-          :options-style="styleFunctionWatershed"
-        ></l-geo-json>
-        <l-geo-json
-          v-if="Basemap"
-          :geojson="Basemap_geojson"
-          :options="geoOptionsBasemap"
-          :options-style="styleFunctionBasemap"
-        ></l-geo-json>
-        <l-geo-json
-          v-if="River"
-          :geojson="River_geojson"
-          :options="geoOptionsRivers"
-          :options-style="styleFunctionRiver"
-        ></l-geo-json>
-        <l-geo-json
-          v-if="NationalWaters"
-          :geojson="NationalWaters_geojson"
-          :options="geoOptionsNationalWaters"
-          :options-style="styleFunctionNationalWaters"
-        ></l-geo-json>
+      <!-- Custom observation dialog -->
+      <v-dialog v-model="add_value_dialog" max-width="620" content-class="sa-dialog sa-point-dialog" scrollable eager>
+        <v-card class="sa-dialog-card">
+          <div class="sa-dialog-top"><span class="sa-dialog-symbol"><v-icon color="primary">mdi-map-marker-plus-outline</v-icon></span><div><h2>Add observation point</h2><p>Place a custom measurement on the interpolation map.</p></div><v-spacer></v-spacer><v-btn icon @click="closeAddValue"><v-icon>mdi-close</v-icon></v-btn></div>
+          <v-card-text class="sa-dialog-body">
+            <v-form ref="addValueForm" v-model="addValueFormValid">
+              <v-text-field v-model.trim="editedItem.name" label="Point or station name" outlined dense :rules="[rules.required]"></v-text-field>
 
-        <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
-        <l-image-overlay v-if="get_img_url" :url="img_url" :bounds="img_bounds" :opacity="0.8"/>
-        
-        <l-control-zoom :position="zoomPosition"></l-control-zoom>
-      </l-map>
-      <div id="color_bar_img" style="position:absolute; top:10px; left:10px; width:20px; height:20px; z-index: 100">
-      </div>
-    </div>
+              <!-- Independent Leaflet mini-map: click to set coordinates, drag marker to refine. -->
+              <div class="sa-point-picker-head">
+                <div>
+                  <span class="sa-point-picker-title">SELECT LOCATION ON MAP</span>
+                  <span class="sa-point-picker-subtitle">Click or tap to place a point. Drag the marker to adjust it.</span>
+                </div>
+                <v-btn x-small text color="primary" class="text-none sa-point-picker-reset" @click="resetPointPickerView">
+                  <v-icon left small>mdi-crosshairs-gps</v-icon>Reset view
+                </v-btn>
+              </div>
+              <div ref="pointPickerMap" class="sa-point-picker-map" role="application" aria-label="Map to select latitude and longitude by clicking"></div>
+              <div class="sa-point-picker-caption">
+                <v-icon size="15" color="grey darken-1">mdi-map-marker-outline</v-icon>
+                <span>[[ pointPickerHasCoordinates ? 'Location selected — you can fine-tune the coordinates below.' : 'Select a location on the map, or enter its coordinates below.' ]]</span>
+              </div>
 
-    <!-- <v-btn v-if="!drawer" class="btn-show-options" @click="toggleSidenav()">
-      <v-icon class="left material-icons" left>keyboard_arrow_left</v-icon>
-      <span>Show options</span>
-    </v-btn> -->
+              <div class="sa-dialog-grid sa-point-coordinate-fields">
+                <v-text-field v-model="editedItem.latitude" label="Latitude" type="number" inputmode="decimal" step="any" outlined dense :rules="[rules.required, rules.isNumber, rules.latRange]"></v-text-field>
+                <v-text-field v-model="editedItem.longitude" label="Longitude" type="number" inputmode="decimal" step="any" outlined dense :rules="[rules.required, rules.isNumber, rules.lonRange]"></v-text-field>
+              </div>
+              <v-text-field v-if="variable" v-model="editedItem.measured" :label="variable.name + ' measurement'" type="number" inputmode="decimal" step="any" outlined dense :rules="[rules.required, rules.isNumber]"></v-text-field>
+            </v-form>
+          </v-card-text>
+          <v-card-actions class="sa-dialog-actions">
+            <v-btn color="error" class="text-none" @click="closeAddValue">
+              Cancel
+            </v-btn>
+            
+            <v-spacer></v-spacer>
 
-    <div class="overlays-filter" v-bind:class="{ 'options-menu-opened': drawer === true }">
-      <v-menu content-class="layers-menu" left offset-x :close-on-content-click="closeOnContentClick">
-        <template v-slot:activator="{ on }">
-          <v-btn
-            color="white"
-            dark
-            v-on="on"
-          >
-            <v-icon class="material-icons" color="black">layers</v-icon>
-          </v-btn>
-        </template>
-
-        <v-list class="overlays-list">
-          <v-list-item-title class="pl-4">Overlays</v-list-item-title>
-          
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadWatershed"
-              v-model="showWatershed"
-              @change="toggleWatershedOverlay()"
-              label="Watershed"
-            ></v-switch>
-          </v-list-item>
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadGroundwater"
-              v-model="showGroundwater"
-              @change="toggleGroundwaterOverlay()"
-              label="Groundwater"
-            ></v-switch>
-          </v-list-item>
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadBasemap"
-              v-model="showBasemap"
-              @change="toggleRegionsOverlay()"
-              label="Administrative Regions"
-            ></v-switch>
-          </v-list-item>
-          <!-- <v-list-item>
-            <v-switch @change="toggleRiverOverlay()" label="Rivers"></v-switch>
-          </v-list-item> -->
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadNationalWaters"
-              v-model="showNationalWaters"
-              @change="toggleNationalWatersOverlay()"
-              label="National waters"
-            ></v-switch>
-          </v-list-item>
-          
-          <v-divider></v-divider>
-          <v-list-item-title class="pl-4">Basemaps</v-list-item-title>
-          
-          <v-radio-group
-            color="black"
-            class="w-100"
-            v-model="selectedBasemap"
-            @change="setBasemap()"
-          >
-            <v-list class="overlays-list">
-              <v-list-item v-for="(basemap, index) in basemaps" :key="basemap.index">
-                <v-radio
-                  :label="basemap.displayName"
-                  :value="basemap"
-                ></v-radio>
-              </v-list-item>
-            </v-list>
-          </v-radio-group>
-        </v-list>
-        
-      </v-menu>
-    </div>
-
-    <div class="options-menu" v-bind:class="{ 'options-menu-opened': drawer === true }">
-      <v-btn
-        color="white"
-        dark
-        @click="toggleSidenav()"
-      >
-        <v-icon class="material-icons" color="black">settings</v-icon>
-      </v-btn>
-    </div>
-
-    <!-- alerts -->
-    <v-alert
-      v-model="alertVisible"
-      :type="alertType"
-      dismissible
-      transition="scale-transition"
-      style="
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-      "
-    >
-      [[ alertMessage ]]
-    </v-alert>
-
-  </v-app>
+            <v-btn color="primary" class="text-none" :disabled="!canSaveValue" @click="addValue">
+              Save point
+            </v-btn></v-card-actions>
+        </v-card>
+      </v-dialog>
+      <v-snackbar v-model="alertVisible" :color="alertType" :timeout="alertType === 'error' ? -1 : 4000" bottom>
+        [[ alertMessage ]]
+        <template v-slot:action="{ attrs }"><v-btn text v-bind="attrs" @click="alertVisible=false">Close</v-btn></template>
+      </v-snackbar>
+    </v-app>
+  </div>
 </div>
+{% endblock %}
 
-{% endblock %} {% block localjavascript %}
-
+{% block localjavascript %}
 <script>
   var {
     LMap,
@@ -968,6 +641,7 @@
         { text: 'winter', value: 'winter' },
         { text: 'winter_r', value: 'winter_r' },
       ],
+      enableTooltip: true,
       markersVisible: true,
       add_value_dialog: false,
       vmin: 15,
@@ -1003,13 +677,16 @@
       mod_img: false,
       get_img_url: false,
       img_bounds: [[{{ SPATIAL_ANALYSIS_INITIAL_LATITUDE|safe }}, {{ SPATIAL_ANALYSIS_INITIAL_LONGITUDE|safe }}], [{{ SPATIAL_ANALYSIS_FINAL_LATITUDE|safe }}, {{ SPATIAL_ANALYSIS_FINAL_LONGITUDE|safe }}]],
+      // Use the SURFACE installation's configured default view.
+      // Shared by the main map and the Add Point mini-map.
       zoom: {{ MAP_ZOOM|safe }},
       center: L.latLng({{ MAP_LATITUDE|safe }}, {{ MAP_LONGITUDE|safe }}),
-      url: "http://{s}.tile.osm.org/{z}/{x}/{y}.png",
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       attribution:
         '&copy, <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
-      options: { zoomControl: false },
-      zoomPosition: "bottomleft",
+      // Wheel scroll navigates the page to the station table; zoom with the +/- controls.
+      options: { zoomControl: false, scrollWheelZoom: false },
+      zoomPosition: "topleft",
 
       // NAVIGATION DRAWER
 
@@ -1018,6 +695,10 @@
 
       stations: [],
       markers: [],
+      selectedMarkers: [],
+      stationTableSearch: "",
+      dataProcessing: false,
+      imageProcessing: false,
       stationMarkers: [],
       iconSizeTest: [32, 32],
       iconAnchor: [16, 32],
@@ -1027,11 +708,6 @@
       formattedStartDate: null,
       formattedEndDate: null,
       formattedVariable: null
-    },
-    watch: {
-      selected_quality_flag (newSelectedArray, oldSelectedArray) {
-        this.searchFlags = '';
-      }
     },
     methods: {
       toggleWatershedOverlay() {
@@ -1045,10 +721,10 @@
 
           }).catch(error => {
             // if an error occurs alert the user
-            if (error.response.status == '404') {
+            if (error.response && error.response.status == 404) {
               this.showAlert("Watershed Shapefile Not Found");
             } else {
-              this.showAlert(`Error Occured Accessing Watershed Shapefile - ${error.response.status}`);
+              this.showAlert(`Error Occured Accessing Watershed Shapefile - ${(error.response && error.response.status) || 'unknown'}`);
             }
 
             // reset the button
@@ -1070,10 +746,10 @@
 
           }).catch(error => {
             // if an error occurs alert the user
-            if (error.response.status == '404') {
+            if (error.response && error.response.status == 404) {
               this.showAlert("Administrative Region Shapefile Not Found");
             } else {
-              this.showAlert(`Error Occured Accessing Administrative Region Shapefile - ${error.response.status}`);
+              this.showAlert(`Error Occured Accessing Administrative Region Shapefile - ${(error.response && error.response.status) || 'unknown'}`);
             }
 
             // reset the button
@@ -1095,10 +771,10 @@
             this.Groundwater_geojson = data.data;
           }).catch(error => {
             // if an error occurs alert the user
-            if (error.response.status == '404') {
+            if (error.response && error.response.status == 404) {
               this.showAlert("Groundwater Shapefile Not Found");
             } else {
-              this.showAlert(`Error Occured Accessing Groundwater Shapefile - ${error.response.status}`);
+              this.showAlert(`Error Occured Accessing Groundwater Shapefile - ${(error.response && error.response.status) || 'unknown'}`);
             }
 
             // reset the button
@@ -1128,10 +804,10 @@
             this.NationalWaters_geojson = data.data;
           }).catch(error => {
             // if an error occurs alert the user
-            if (error.response.status == '404') {
+            if (error.response && error.response.status == 404) {
               this.showAlert("National Waters Shapefile Not Found");
             } else {
-              this.showAlert(`Error Occured Accessing National Waters Shapefile - ${error.response.status}`);
+              this.showAlert(`Error Occured Accessing National Waters Shapefile - ${(error.response && error.response.status) || 'unknown'}`);
             }
 
             // reset the button
@@ -1163,25 +839,131 @@
       },
 
       setBasemap() {
-        this.url = this.selectedBasemap.url;
+        if (this.selectedBasemap) this.url = this.selectedBasemap.url;
       },
 
       closeAddValue() {
-        this.add_value_dialog = false
+        // The dialog watcher also handles Escape/outside-click dismissals.
+        this.add_value_dialog = false;
+      },
 
-        setTimeout(() => {
-          this.editedItem = Object.assign({}, {
-            code: '',
-            latitude: null,
-            longitude: null,
-            measured: null,
-            name: '',
-            station_id: null
-          })
-        }, 300)
+      // A separate Leaflet instance keeps the main interpolation map untouched.
+      initializePointPickerMap() {
+        if (!this.add_value_dialog || this._saPointPickerMap) return;
+        const container = this.$refs.pointPickerMap;
+        if (!container) return;
 
-        // reset validation when closing
-        this.$refs.addValueForm?.resetValidation();
+        const map = L.map(container, {
+          zoomControl: true,
+          scrollWheelZoom: false,  // Allow normal scrolling through dialog content.
+          attributionControl: true
+        });
+        this._saPointPickerMap = map;
+        L.tileLayer(this.url, { attribution: this.attribution, maxZoom: 19 }).addTo(map);
+
+        map.on('click', event => this.setPointCoordinates(event.latlng));
+        this.resetPointPickerView();
+        this.syncPointPickerFromInputs();
+
+        // Vuetify dialogs animate in, so recalculate Leaflet's tile grid after
+        // their size settles. This avoids partially rendered/blank mini-maps.
+        this._saPointPickerResizeTimer = setTimeout(() => {
+          if (this._saPointPickerMap === map && this.add_value_dialog) {
+            map.invalidateSize({ pan: false, animate: false });
+            if (!this.pointPickerHasCoordinates) this.resetPointPickerView();
+          }
+        }, 350);
+      },
+
+      resetPointPickerView() {
+        const map = this._saPointPickerMap;
+        if (!map) return;
+        map.invalidateSize({ pan: false, animate: false });
+        map.setView(this.center, this.zoom, { animate: false });
+      },
+
+      setPointCoordinates(latlng) {
+        // Six decimal places are precise enough for selecting a point on a map.
+        const lat = Number(latlng.lat.toFixed(6));
+        const lng = Number(latlng.lng.toFixed(6));
+        this.editedItem.latitude = lat;
+        this.editedItem.longitude = lng;
+        this.placePointPickerMarker(lat, lng);
+      },
+
+      pointPickerCoordinates() {
+        const latitude = this.editedItem.latitude;
+        const longitude = this.editedItem.longitude;
+        // Number(null), Number('') and Number(' ') are 0, but those fields
+        // must be treated as unselected, not as an actual zero coordinate.
+        if (latitude === null || latitude === undefined ||
+            longitude === null || longitude === undefined ||
+            String(latitude).trim() === '' || String(longitude).trim() === '') return null;
+        const lat = Number(latitude);
+        const lng = Number(longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+            lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        return { lat, lng };
+      },
+
+      placePointPickerMarker(lat, lng) {
+        const map = this._saPointPickerMap;
+        if (!map) return;
+        const latlng = L.latLng(lat, lng);
+        if (!this._saPointPickerMarker) {
+          // A CSS marker avoids depending on Leaflet's external marker images.
+          const icon = L.divIcon({
+            className: 'sa-point-picker-pin',
+            html: '<span></span>',
+            iconSize: [24, 24], iconAnchor: [12, 12]
+          });
+          this._saPointPickerMarker = L.marker(latlng, {
+            draggable: true, autoPan: true, icon: icon,
+            title: 'Selected point — drag to adjust location'
+          }).addTo(map);
+          this._saPointPickerMarker.on('dragend', event => {
+            this.setPointCoordinates(event.target.getLatLng());
+          });
+        } else {
+          this._saPointPickerMarker.setLatLng(latlng);
+        }
+      },
+
+      syncPointPickerFromInputs() {
+        const coords = this.pointPickerCoordinates();
+        const map = this._saPointPickerMap;
+        if (!map) return;
+        if (!coords) {
+          // Invalid or incomplete coordinates must not leave a stale pin.
+          if (this._saPointPickerMarker) {
+            map.removeLayer(this._saPointPickerMarker);
+            this._saPointPickerMarker = null;
+          }
+          return;
+        }
+        this.placePointPickerMarker(coords.lat, coords.lng);
+        const latlng = L.latLng(coords.lat, coords.lng);
+        if (!map.getBounds().contains(latlng)) map.panTo(latlng, { animate: false });
+      },
+
+      schedulePointPickerInputSync() {
+        if (!this.add_value_dialog) return;
+        if (this._saPointPickerInputTimer) clearTimeout(this._saPointPickerInputTimer);
+        // Avoid repeatedly panning the map as each digit is typed.
+        this._saPointPickerInputTimer = setTimeout(() => this.syncPointPickerFromInputs(), 260);
+      },
+
+      destroyPointPickerMap() {
+        clearTimeout(this._saPointPickerResizeTimer);
+        clearTimeout(this._saPointPickerInputTimer);
+        this._saPointPickerResizeTimer = null;
+        this._saPointPickerInputTimer = null;
+        if (this._saPointPickerMap) {
+          this._saPointPickerMap.off();
+          this._saPointPickerMap.remove();
+          this._saPointPickerMap = null;
+        }
+        this._saPointPickerMarker = null;
       },
 
       addValue() {
@@ -1190,8 +972,10 @@
         // hard gate on submit too (never trust only disabled button)
         if (!this.$refs.addValueForm.validate()) return;
 
-        // add markers to the map
-        this.markers.push({
+        // Add the new point to both the station list and the included selection.
+        const newMarker = {
+          id: `custom-${Date.now()}-${this.markers.length}`,
+          station_id: null,
           draggable: false,
           icon: "{% static 'images/placeholder.png' %}",
           position: {
@@ -1205,7 +989,9 @@
           visible: this.markersVisible,
           code: this.editedItem.code,
           measured: parseFloat(this.editedItem.measured),
-        })
+        };
+        this.markers.push(newMarker);
+        this.selectedMarkers.push(newMarker);
 
         this.closeAddValue() // close form dialog
 
@@ -1243,12 +1029,16 @@
       },
 
       changeSource(){
-        if(this.source.value === 'monthly') {
-          this.start_date = moment().format('YYYY-MM')
-          this.end_date = moment().add(1, 'month').format('YYYY-MM')
+        if (!this.source || !this.source.value) return;
+        if (this.source.value === 'monthly') {
+          this.start_date = moment().format('YYYY-MM');
+          this.end_date = moment().add(1, 'month').format('YYYY-MM');
         } else if (this.source.value === 'yearly') {
-          this.start_date = moment().format('YYYY-01')
-          this.end_date = moment().add(1, 'year').format('YYYY-01')
+          this.start_date = moment().format('YYYY-01');
+          this.end_date = moment().add(1, 'year').format('YYYY-01');
+        } else {
+          this.start_date = moment().format('YYYY-MM-DD');
+          this.end_date = moment().add(1, 'day').format('YYYY-MM-DD');
         }
       },
 
@@ -1263,38 +1053,39 @@
       },
 
       interpolateData() {
-        if (!this.$refs.form.validate()) return;
+        if (!this.$refs.form || !this.$refs.form.validate()) return;
+        if (!this.variable || !this.source || !this.aggregation) return;
 
         this.no_data = false;
-        this.loading_overlay = true;
+        this.mod_img = false;
+        this.dataProcessing = true;
+        this.imageProcessing = true;
+        this.syncLoadingOverlay();
+        this.get_img_url = false;
+        const parameters = this.getEndpointParameters();
+        const colorbarUrl = "{% url 'spatial-analysis-color-bar' %}?" + parameters;
+        $("#color_bar_img").html('<img alt="Interpolation color scale" src="' + colorbarUrl + '">');
 
-        // color legend
-        $("#color_bar_img").html('<img src="' + "{% url 'spatial-analysis-color-bar' %}?" + this.getEndpointParameters() + '" width="450">');
+        axios.get("{% url 'spatial-analysis-image' %}?" + parameters)
+          .then(res => {
+            this.imgTaskId = res.data.task_id;
+            this.startInterpolateImgPolling();
+          }).catch(() => {
+            this.imageProcessing = false;
+            this.syncLoadingOverlay();
+            this.showAlert("Unable to start interpolation image generation.", "error", false);
+          });
 
-        // get interpolation image
-        axios.get("{% url 'spatial-analysis-image' %}?" + this.getEndpointParameters())
-        .then(res => {
-          this.imgTaskId = res.data.task_id;
-          this.startInterpolateImgPolling();
-        })
-        .catch(() => {
-          this.showAlert("An error occured retrieving interpolation image, see terminal.", "warning", false);
-        });
-
-        // get interpolation data
-        axios.get("data?" + this.getEndpointParameters())
-        .then(res => {
-          this.dataTaskId = res.data.task_id;
-          this.startInterpolateDataPolling();
-        })
-        .catch(() => {
-          this.loading_overlay = false;
-
-          this.showAlert("An error occured, see terminal.", "error", false);
-        });
+        axios.get("data?" + parameters)
+          .then(res => {
+            this.dataTaskId = res.data.task_id;
+            this.startInterpolateDataPolling();
+          }).catch(() => {
+            this.dataProcessing = false;
+            this.syncLoadingOverlay();
+            this.showAlert("Unable to retrieve interpolation data.", "error", false);
+          });
       },
-
-
 
       // ============================= //
       // Interpolation IMAGE fxns start
@@ -1315,45 +1106,30 @@
         if (this.pollingIntImgInterval) {
           clearInterval(this.pollingIntImgInterval);
           this.pollingIntImgInterval = null;
-          this.loading_overlay = false;
-
-          // controls spinner activation when only modifying the interpolation image
-          if(this.mod_img) {
-
-            this.mod_img = false; // reset var
-
-            this.showAlert("Interpolation Complete!", "success");
-          }
         }
+        this.imageProcessing = false;
+        this.syncLoadingOverlay();
       },
 
       interpolateImgStatus() {
         axios.get(`/api/task/${this.imgTaskId}/`)
           .then(res => {
-            // data may finish first and set this loading to false, in that case keep it active.
-            this.loading_overlay = true;
-
-            const status = res.data.status;
-
-            if (status === "completed") {
-              this.stopInterpolateImgPolling();
-
+            const currentStatus = res.data.status;
+            if (currentStatus === "completed") {
               this.img_url = res.data.data.data;
               this.get_img_url = true;
-
-              console.log("Interpolation image retireved successfully");
-            }
-
-            if (status === "failed") {
               this.stopInterpolateImgPolling();
-
-              this.showAlert("An error occured retrieving interpolation image, see terminal.", "warning", false);
+              if (this.mod_img) this.showAlert("Interpolation map updated.", "success");
+              this.mod_img = false;
+            } else if (currentStatus === "failed") {
+              this.stopInterpolateImgPolling();
+              this.mod_img = false;
+              this.showAlert("Interpolation image generation failed.", "error", false);
             }
-          })
-          .catch(() => {
+          }).catch(() => {
             this.stopInterpolateImgPolling();
-
-            this.showAlert("An error occured retrieving interpolation image, see terminal.", "warning", false);
+            this.mod_img = false;
+            this.showAlert("Unable to check interpolation image status.", "error", false);
           });
       },
       // ============================= //
@@ -1383,134 +1159,111 @@
           clearInterval(this.pollingIntDataInterval);
           this.pollingIntDataInterval = null;
         }
+        this.dataProcessing = false;
+        this.syncLoadingOverlay();
       },
 
       interpolateDataStatus() {
         axios.get(`/api/task/${this.dataTaskId}/`)
           .then(res => {
-            const status = res.data.status;
-
-            if (status === "completed") {
-              this.stopInterpolateDataPolling();
-
+            const currentStatus = res.data.status;
+            if (currentStatus === "completed") {
               this.handleInterpolateDataResult(res.data.data.data);
-
-              this.showAlert("Interpolation Complete!", "success");
-            }
-
-            if (status === "failed") {
               this.stopInterpolateDataPolling();
-              this.loading_overlay = false;
+              if (!this.no_data) this.showAlert("Station measurements loaded.", "success");
+            } else if (currentStatus === "failed") {
+              this.stopInterpolateDataPolling();
               this.no_data = true;
-
-              this.showAlert("An error occured, see terminal.", "error", false);
+              this.showAlert("Interpolation data retrieval failed.", "error", false);
             }
-          })
-          .catch(() => {
+          }).catch(() => {
             this.stopInterpolateDataPolling();
-            this.loading_overlay = false;
-
-            this.showAlert("An error occured, see terminal.", "error", false);
+            this.showAlert("Unable to check interpolation data status.", "error", false);
           });
       },
 
       handleInterpolateDataResult(data) {
-        this.no_data = false;
-
-        if (data.length === 0) {
-          this.no_data = true;
-          this.loading_overlay = false;
+        this.no_data = !Array.isArray(data) || data.length === 0;
+        if (this.no_data) {
+          this.markers = [];
+          this.selectedMarkers = [];
+          return;
         }
-        
-        this.markers = data.map(station => ({
-          id: station.station_id,
+        this.markers = data.map((station, index) => ({
+          id: station.station_id != null ? station.station_id : `station-${index}`,
           station_id: station.station_id,
           show: false,
           name: station.name,
-          latitude: station.latitude,
-          longitude: station.longitude,
+          latitude: Number(station.latitude),
+          longitude: Number(station.longitude),
           position: {
-            lat: station.latitude,
-            lng: station.longitude
+            lat: Number(station.latitude),
+            lng: Number(station.longitude)
           },
           visible: this.markersVisible,
           draggable: false,
           measured: station.measured,
         }));
-
-        for(station in data){
-          this.$refs.data_table.selection[data[station].name] = true;
-        }
-
-        // 2 second buffer
-        // setTimeout(() => {
-        //   this.loading_overlay = false;
-        // }, 2000)
-
-        // no buffer
-        this.loading_overlay = false;
+        // Start with every station selected, but allow users to remove points.
+        this.selectedMarkers = this.markers.slice();
       },
       // ============================= //
       // Interpolation DATA fxns end
       // ============================= //
 
-      getAll(path, url, oldData = []) {
-        return fetch(`/${path}`)
+      getAll(path, url = null, oldData = []) {
+        const endpoint = url || `/${path.replace(/^\/+/, '')}`;
+        return fetch(endpoint)
           .then(res => {
-            if (!res.body) {
-              return { next: null, results: [] };
-            }
-            
+            if (!res.ok) throw new Error(`Request failed: ${res.status}`);
             return res.json();
           })
-          .then(async data => {
-            const values = [...oldData, ...data.results];
-            if (!!data.next) {
-              return await getAll(
-                context,
-                path,
-                `/${path}/${data.next.substr(
-                  data.next.indexOf(`/${path}`)
-                )}`,
-                values
-              );
-            }
-            return values;
+          .then(data => {
+            const values = oldData.concat(Array.isArray(data) ? data : (data.results || []));
+            return data.next ? this.getAll(path, data.next, values) : values;
           });
       },
 
       getVariables() {
         this.getAll("api/variables/").then(data => {
           this.variables = data;
+        }).catch(() => this.showAlert("Unable to load variables.", "error", false));
+      },
+
+      syncLoadingOverlay() {
+        this.loading_overlay = this.dataProcessing || this.imageProcessing;
+      },
+
+      onMarkerSelectionChange() {
+        this.$nextTick(() => {
+          if (this.img_url) this.editTable_save();
         });
       },
 
       editTable_save () {
-        this.loading_overlay = true;
+        if (!this.availableMarkers.length) {
+          this.get_img_url = false;
+          this.showAlert("Select at least one station with a valid measurement.", "warning");
+          return;
+        }
+        this.mod_img = true;
+        this.imageProcessing = true;
+        this.syncLoadingOverlay();
 
-        // get modified interpolation image
-        axios.post("interpolate_data", {parameters: this.interpolation_parameters, vmin: this.vmin, vmax: this.vmax, data: this.availableMarkers})
-        .then(res => {
+        axios.post("interpolate_data", {
+          parameters: this.interpolation_parameters,
+          vmin: this.vmin,
+          vmax: this.vmax,
+          data: this.availableMarkers
+        }).then(res => {
           this.imgTaskId = res.data.task_id;
-
-          // controls spinner activation when only modifying the interpolation image
-          this.mod_img = true;
-
           this.startInterpolateImgPolling();
-        })
-        .catch(() => {
-          this.loading_overlay = false;
-
-          this.markers.pop(); // remove the last element that was added before this fxn was called
-          // note that in the case on an error not being caught here (this will be so on about 99% of iterations)
-          // the value will still show up on the map. This is a minor "bug" that should be fixed.
-          // however note that the iterpolation img would still be correct because it did not finish succesfully.
-
-          this.mod_img = false; // reset var
-
-          this.showAlert("An error occured retrieving interpolation image, see terminal.", "warning", false);
+        }).catch(() => {
+          this.imageProcessing = false;
+          this.syncLoadingOverlay();
+          this.mod_img = false;
+          this.showAlert("Unable to update interpolation. Your station edits were kept.", "error", false);
         });
-
       },
 
       toggleMarkers() {
@@ -1518,43 +1271,44 @@
         this.markers.forEach(element => {
           element.visible = this.markersVisible;
         });
-        this.mapKey +=1;
+        // Leaflet marker visibility is reactive; do not remount the map here.
       },
 
-      exportData(){
+      exportData() {
         const values = this.availableMarkers;
-        headers = ['Station', 'Latitude', 'Longitude', 'Value']
-          
-        const exportEngine = {
-            csv: () =>
-              this.exportAsCSV(
-                headers.join(','),
-                values.map(value => [value.name, value.latitude, value.longitude, value.measured.toFixed(2)]),
-                `Surface Spatial Analisys - ${this.formattedVariable}`
-              )
-          };
-
-          exportEngine['csv']();
+        if (!values.length) {
+          this.showAlert("No selected station values to export.", "warning");
+          return;
+        }
+        const headers = ['Station', 'Latitude', 'Longitude', 'Value'];
+        const rows = values.map(value => [
+          value.name, value.latitude, value.longitude, Number(value.measured).toFixed(2)
+        ]);
+        this.exportAsCSV(headers, rows,
+          `SURFACE Spatial Analysis - ${this.formattedVariable || 'stations'}`);
       },
 
-      exportAsCSV(headers, values, filename = null, title = 'Surface Spatial Analisys') {
-          const data = this.normalize(values.join("\n"));
-          const date = `Date: ${this.formattedStartDate} - ${this.formattedEndDate}`;
-          const variable = `Variable: ${this.formattedVariable}`;
-          const csvContent = `${title}\n${date}\n${variable}\n\n${headers}\n${data}`;
-          const blob = new Blob(
-            [new Uint8Array([0xef, 0xbb, 0xbf]), csvContent],
-            {
-              type: "text/csv;charset=utf-8"
-            }
-          );
-
-          const link = document.createElement("a");
-          document.body.appendChild(link);
-          link.setAttribute("href", URL.createObjectURL(blob));
-          link.setAttribute("download", `${filename || "surface-spatial-analisys-report"}.csv`);
-          link.click();
-          link.remove();
+      exportAsCSV(headers, values, filename = null) {
+        const escapeCell = value => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
+        const lines = [
+          ["SURFACE Spatial Analysis"],
+          [`Date: ${this.formattedStartDate || ''} - ${this.formattedEndDate || ''}`],
+          [`Variable: ${this.formattedVariable || ''}`],
+          [],
+          headers,
+          ...values
+        ];
+        const csvContent = lines.map(row => row.map(escapeCell).join(',')).join('\r\n');
+        const blob = new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), csvContent],
+          { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        document.body.appendChild(link);
+        link.href = url;
+        link.download = `${filename || 'surface-spatial-analysis'}.csv`;
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       },
 
       normalize(value) {
@@ -1577,9 +1331,58 @@
           return replaces.reduce((p, c) => p.replace(c[0], c[1]), value);
       }, 
 
+      refreshMapSize() {
+        const ref = this.$refs.myMap;
+        const map = ref && ref.mapObject;
+        if (map) map.invalidateSize({ pan: false, animate: false });
+      },
+
+      scheduleMapRefresh() {
+        // Leaflet calculates tile bounds using its container dimensions.
+        // Refresh once after render and once after layout settles.
+        this.$nextTick(() => {
+          this.refreshMapSize();
+          requestAnimationFrame(() => this.refreshMapSize());
+          if (this._saMapResizeTimer) clearTimeout(this._saMapResizeTimer);
+          this._saMapResizeTimer = setTimeout(() => this.refreshMapSize(), 280);
+        });
+      },
+
+      resetMainMapView() {
+        const mapComponent = this.$refs.myMap;
+        const map = mapComponent && mapComponent.mapObject;
+        if (!map) return;
+
+        // Return to the configured location, never a country-specific extent.
+        // invalidateSize is important when Vuetify/base-layout changes the viewport.
+        map.invalidateSize({ pan: false, animate: false });
+        map.setView(this.center, this.zoom, { animate: false });
+        this._saMapCentered = true;
+      },
+
+      onMapReady() {
+        // The map can be ready before its parent has its final dimensions.
+        this.scheduleMapRefresh();
+        this.$nextTick(() => {
+          requestAnimationFrame(() => this.resetMainMapView());
+        });
+      },
+
+      scrollToObservations() {
+        const section = this.$refs.observationsSection;
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
+
+      scrollToMap() {
+        const section = this.$refs.mapFrame;
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.scheduleMapRefresh();
+      },
+
       toggleSidenav() {
         this.drawer = !this.drawer;
         this.parameters_dialog = false;
+        this.scheduleMapRefresh();
       },
 
       toggleParametersSidenav() {
@@ -1587,6 +1390,7 @@
       },
 
       selectVariable(variable) {
+        if (!variable || typeof variable !== 'object') return;
         switch (variable.sampling_operation) {
           case 3:
             this.aggregation = {value: 'min', text: "Minimum"};
@@ -1656,6 +1460,24 @@
     },
     mounted() {
       this.getVariables();
+      this.selectedBasemap = this.basemaps[0];
+      this.setBasemap();
+      // Observing the map container handles late flex/layout size changes,
+      // including navigation resizing and browser zoom.
+      this.$nextTick(() => {
+        if (typeof ResizeObserver !== 'undefined' && this.$refs.mapFrame) {
+          this._saMapResizeObserver = new ResizeObserver(() => this.scheduleMapRefresh());
+          this._saMapResizeObserver.observe(this.$refs.mapFrame);
+        }
+        window.addEventListener('resize', this.scheduleMapRefresh);
+        this.scheduleMapRefresh();
+        // Backup for cases where the Vue2Leaflet ready event fires before
+        // the map's parent receives its height from the Django base layout.
+        setTimeout(() => {
+          if (!this._saMapCentered) this.resetMainMapView();
+          else this.refreshMapSize();
+        }, 600);
+      });
     },
     computed: {
       // availableMarkers(){
@@ -1666,12 +1488,19 @@
 
       // get markers with a name, lng, lat and measured value
       availableMarkers() {
+        const selectedIds = new Set(this.selectedMarkers.map(marker => marker.id));
         return this.markers.filter(m =>
-          m?.name &&
-          m?.longitude !== null && m?.longitude !== undefined && m?.longitude !== 0 &&
-          m?.latitude !== null && m?.latitude !== undefined && m?.latitude !== 0 &&
-          m?.measured !== null && m?.measured !== undefined
+          m && selectedIds.has(m.id) &&
+          m.name &&
+          m.longitude !== null && m.longitude !== undefined && Number.isFinite(Number(m.longitude)) &&
+          m.latitude !== null && m.latitude !== undefined && Number.isFinite(Number(m.latitude)) &&
+          m.measured !== null && m.measured !== undefined &&
+          Number.isFinite(Number(m.measured)) && Number(m.measured) !== -99.9
         );
+      },
+
+      pointPickerHasCoordinates() {
+        return this.pointPickerCoordinates() !== null;
       },
 
       // Only require measured when variable exists
@@ -1872,6 +1701,25 @@
       }
     },
     watch: {
+      add_value_dialog(isOpen) {
+        if (isOpen) {
+          this.$nextTick(() => {
+            requestAnimationFrame(() => this.initializePointPickerMap());
+          });
+        } else {
+          this.destroyPointPickerMap();
+          // Any exit path (Save, Cancel, Escape, outside-click) resets the form.
+          this.editedItem = {
+            code: '', latitude: null, longitude: null, measured: null,
+            name: '', station_id: null, show: false
+          };
+          this.$nextTick(() => {
+            if (this.$refs.addValueForm) this.$refs.addValueForm.resetValidation();
+          });
+        }
+      },
+      'editedItem.latitude'() { this.schedulePointPickerInputSync(); },
+      'editedItem.longitude'() { this.schedulePointPickerInputSync(); },
       loading_overlay(newVal) {
         if (newVal) {
           this.startProgress();  // start when loading_overlay = true
@@ -1881,288 +1729,804 @@
       }
     },
     beforeDestroy() {
+      this.destroyPointPickerMap();
       this.stopInterpolateDataPolling();
       this.stopInterpolateImgPolling();
-
       clearInterval(this.progressIntervalId);
+      window.removeEventListener('resize', this.scheduleMapRefresh);
+      if (this._saMapResizeObserver) this._saMapResizeObserver.disconnect();
+      if (this._saMapResizeTimer) clearTimeout(this._saMapResizeTimer);
     }
   });
 </script>
-
 <style>
+  [v-cloak] { display: none !important; }
 
-  .options-menu-opened {
-    right: calc(25vw + 16px)!important;
-    transition: .15s;
-  }
-  .options-menu {
-    z-index: 995;
-    position: absolute;
-    top: 68px;
-    right: 16px;
-    transition: .15s;
-  }
-  .overlays-filter {
-    transition: .15s;
-    z-index: 995;
-    position: absolute;
-    top: 16px;
-    right: 16px;
-  }
-  .overlays-list .v-messages {
-    display: none!important;
-  }
-
-  .custom-headline {
-    background-color: rgba(255, 255, 255, 0.884);
-    padding: 2px;
-    border-radius: 10px;
-    position: absolute;
-    top: -32px;
-    font-size: 15px !important;
-    border: 1px solid gray;
-  }
-  .btn-close-dialog {
-    position: absolute;
-    top: 116px;
-    left: 336px;
-    border-radius: 0px 20px 20px 0px;
-    z-index: 9999;
-    width: 36px;
-  }
-  .station-link:hover {
-    text-decoration: underline;
-    cursor: pointer;
-  }
-  .v-card__text {
-    padding: 0px;
-  }
-  .v-dialog {
-    box-shadow: none;
-  }
-  .v-dialog__content,
-  .v-dialog__content--active {
-    z-index: 9999 !important;
-  }
-  .sandbox_last_update {
-    font-size: 9pt;
-    padding: 16px 16px 6px 18px;
-  }
-  .index-top {
-    z-index: 999;
-  }
-  .stations-detail {
-    position: absolute;
-    top: 108px;
-    left: 316px;
-    height: 100%;
-    max-height: calc(100vh - 196px) !important;
+  /* SURFACE Spatial Analysis — consistent with Station / Variable Reports
+     White main canvas, neutral panels, charcoal text and restrained accents. */
+  .sa-page {
+    --sa-text: #252c34;
+    --sa-strong: #303b47;
+    --sa-muted: #77818e;
+    --sa-stroke: #e2e5e9;
+    --sa-divider: #edf0f2;
+    --sa-soft: #fcfcfd;
+    background: #fff !important;
     width: 100%;
-    max-width: 320px !important;
-    background-color: #fafafa;
-    border: 1px solid gray;
-    border-radius: 5px;
+    min-height: 100%;
+    padding: 35px !important;
   }
-  .sandbox {
-    position: absolute;
-    top: 108px;
-    left: 16px;
-    height: 100%;
-    max-height: calc(100vh - 196px);
-    background-color: white;
-    width: 100%;
-    max-width: 300px;
-    z-index: 999;
-    border: 1px solid gray;
-    border-radius: 5px;
-    box-sizing: border-box;
+  .sa-page .sa-vapp, .sa-page .sa-vapp .v-application--wrap {
+    background: #fff !important;
+    min-height: 0 !important;
   }
-  .station-information {
-    position: absolute;
-    top: 72px;
-    left: 16px;
-    width: 300px;
-    height: 28px;
-    background-color: white;
+  .sa-page .sa-shell { width: 100%; min-width: 0; margin: 0 auto; }
+  .sa-page .sa-header {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    z-index: 995;
-    border: 1px solid gray;
-    border-radius: 5px;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 0 0 22px;
   }
-  .btn-show-options {
-    position: absolute;
-    top: 16px;
-    right: 0px;
-    border-radius: 20px 0px 0px 20px;
-    z-index: 100;
-  }
-  .btn-hide-options {
-    position: absolute;
-    top: 16px;
-    right: 300px;
-    border-radius: 20px 0px 0px 20px;
-    z-index: 100;
-  }
-  aside {
-    z-index: 9999 !important;
-    position: absolute;
-  }
-  .collapsible {
-    border-top: 0px;
-    border-right: 0px;
-    border-left: 0px;
+  .sa-page .sa-header-copy { min-width: 0; }
+  .sa-page .sa-title-row { display: flex; align-items: center; }
+  .sa-page .sa-title-row h1 {
     margin: 0;
-    box-shadow: none;
+    color: var(--sa-text);
+    letter-spacing: 0;
+    line-height: 1.32;
   }
-  .display-none {
-    display: none;
+  .sa-page .sa-header-copy p {
+    margin: 6px 0 0;
+    color: #6b7280;
+    font-size: 14px;
   }
-  .sidebar-body span.sidebar-header {
-    padding: 1rem;
-    position: fixed;
-    background-color: white;
-    height: 48px;
-    /* z-index: 999; */
+  .sa-page .sa-header-actions { display: flex; align-items: center; gap: 10px; }
+  .sa-page .sa-header-action {
+    min-height: 38px;
+    padding: 0 14px !important;
+    background: #fff !important;
+    border-color: #d9dfe5 !important;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
   }
-  .sidebar-body::after {
-    transition: opacity 0.5s, width 0.1s 0.5s;
+
+  /* Geospatial workspace: map + scrollable report-style configuration card */
+  .sa-page .sa-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(400px, 450px);
+    align-items: stretch;
+    gap: 16px;
+    height: calc(100vh - 220px);
+    min-height: 660px;
+    max-height: 1120px;
+    transition: grid-template-columns .25s ease;
+    border-bottom: 1px solid #c5cdd5;
   }
-  .sidebar-body {
-    width: 300px;
+  .sa-page .sa-workspace--wide {
+    grid-template-columns: minmax(0, 1fr) 0px;
+    gap: 0;
+  }
+  .sa-page .sa-map-card, .sa-page .sa-sidebar {
+    min-width: 0;
+    border: 1px solid var(--sa-stroke);
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(20,29,38,.025);
+  }
+  .sa-page .sa-map-card { position: relative; overflow: hidden; min-height: 540px; }
+  .sa-page .sa-map-layer { position: absolute; inset: 0; z-index: 1; }
+  .sa-page .sa-map { width: 100%; height: 100% !important; z-index: 1; }
+
+  /* Map elements sit above Leaflet and use the same neutral, compact treatment */
+  .sa-page .sa-map-title {
     position: absolute;
+    z-index: 650;
+    top: 14px;
+    left: 14px;
     display: flex;
-    overflow: auto;
-    background-color: white;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100% - 180px);
+    padding: 9px 13px 9px 9px;
+    background: rgba(255,255,255,.97);
+    border: 1px solid #e2e5e9;
+    border-radius: 8px;
+    box-shadow: 0 2px 9px rgba(24,33,43,.06);
+  }
+  .sa-page .sa-map-title-icon {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f9fafb;
+    border: 1px solid #e7e8ec;
+    border-radius: 8px;
+  }
+  .sa-page .sa-map-title strong, .sa-page .sa-map-title small { display: block; }
+  .sa-page .sa-map-title strong { color: #303b47; font-size: 13px; font-weight: 700; }
+  .sa-page .sa-map-title small { color: #7d8792; font-size: 11px; margin-top: 2px; }
+  .sa-page .sa-map-title-badge {
+    color: #178259;
+    border: 1px solid #d7ecdf;
+    background: #f5fbf7;
+    border-radius: 5px;
+    padding: 4px 7px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .sa-page .sa-map-tools {
+    position: absolute;
+    z-index: 750;
+    right: 14px;
+    top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .sa-page .sa-map-tool {
+    height: 38px !important;
+    min-width: 0 !important;
+    padding: 0 12px !important;
+    color: #374451 !important;
+    background: rgba(255,255,255,.98) !important;
+    border: 1px solid #e0e5ea;
+    border-radius: 7px;
+    box-shadow: 0 2px 9px rgba(28,43,55,.06);
+    letter-spacing: 0 !important;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .sa-page .sa-map-tool-icon { width: 38px; padding: 0 !important; }
+  .sa-page .sa-map-colorbar {
+    position: absolute;
+    z-index: 640;
+    bottom: 110px;
+    left: 14px;
+    max-width: min(450px, calc(100% - 28px));
+    padding: 10px 13px;
+    background: rgba(255,255,255,.97);
+    border: 1px solid #e2e5e9;
+    border-radius: 8px;
+    box-shadow: 0 2px 9px rgba(25,36,49,.055);
+  }
+  .sa-page .sa-map-colorbar-label {
+    color: #78828e;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .sa-page #color_bar_img img {
+    display: block;
+    max-width: 100%;
+    width: auto;
+    max-height: 85px;
+    object-fit: contain;
+  }
+  .sa-page .sa-map-footer {
+    position: absolute;
+    z-index: 640;
+    left: 14px;
+    right: 14px;
+    bottom: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: #5e6a78;
+    font-size: 11px;
+    pointer-events: none;
+  }
+  .sa-page .sa-map-footer-left, .sa-page .sa-map-footer-right {
+    background: rgba(255,255,255,.97);
+    padding: 7px 10px;
+    border: 1px solid #e2e5e9;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(30,40,50,.04);
+  }
+  .sa-page .sa-map-footer-left { display: flex; align-items: center; gap: 7px; }
+  .sa-page .sa-map-footer-left strong { color: #303b47; font-weight: 700; }
+  .sa-page .sa-footer-divider { height: 13px; width: 1px; margin: 0 3px; background: #dfe3e8; }
+  .sa-page .sa-map-value {
+    display: inline-block;
+    white-space: nowrap;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    text-shadow: 0 1px 3px #202a33, 0 -1px 3px #202a33;
+  }
+  .sa-page .sa-marker-name {
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-shadow: 0 1px 4px #202a33, 0 -1px 3px #202a33;
+  }
+
+  /* Sidebar */
+  .sa-page .sa-sidebar {
     display: flex;
     flex-direction: column;
-    top: 0px;
-    right: -350px;
-    height: 100vh;
-    /* z-index: 1000; */
-    box-sizing: border-box;
-    transition: transform 0.5s;
-    box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-      0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
+    min-height: 0;
+    overflow: hidden;
   }
-  .custom-padding {
-    padding-right: 16px !important;
-    padding-left: 8px;
-  }
-  .sidebar-toggle {
-    position: absolute;
-    top: 16px;
-    right: 0px;
-    background-color: white;
-    /* z-index: 999; */
+  .sa-page .sa-sidebar-head {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+    padding: 18px 20px;
+    background: #fff;
+  }
+  .sa-page .sa-sidebar-heading { display: flex; align-items: center; gap: 12px; }
+  .sa-page .sa-sidebar-heading-icon {
+    height: 37px;
+    width: 37px;
+    flex: 0 0 37px;
+    border: 1px solid #e7e8ec;
+    border-radius: 9px;
+    background: #f9fafb;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    overflow: hidden;
-    border-radius: 20px 0px 0px 20px;
-    box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-      0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
   }
-  .search-content {
-    position: absolute;
-    top: 16px;
-    left: 16px;
+  .sa-page .sa-sidebar-head h2 {
+    font-size: 17px;
+    line-height: 1.35;
+    font-weight: 700;
+    color: #252e38;
+    margin: 0;
+  }
+  .sa-page .sa-sidebar-head p { color: #77818e; font-size: 12.5px; margin: 3px 0 0; }
+  .sa-page .sa-sidebar-scroll {
+    flex: 1;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 0 20px 22px;
+    scrollbar-width: thin;
+    scrollbar-color: #d8dfe5 transparent;
+  }
+  .sa-page .sa-section-heading {
     display: flex;
-    width: 100%;
-    max-width: 300px;
-    z-index: 995;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .65px;
+    color: #78828e;
+    padding-top: 22px;
+    margin-bottom: 14px;
   }
-  .search-content .v-input__control .v-input__slot {
-    border: 1px solid gray;
+  .sa-page .sa-section-heading:not(:first-child) {
+    border-top: 1px solid #edf0f2;
+    margin-top: 2px;
+  }
+  .sa-page .sa-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 21px;
+  }
+  .sa-page .sa-field-block { display: flex; flex-direction: column; gap: 8px; }
+  .sa-page .sa-inline-caption {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #78828e;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .45px;
+  }
+  .sa-page .sa-inline-caption small { color: #98a1aa; font-size: 10.5px; font-weight: 400; letter-spacing: 0; }
+  .sa-page .sa-chips-input .v-select__selections {
+    min-height: 42px;
+    max-height: 140px;
+    overflow-y: auto;
+    align-content: flex-start;
+    align-items: center;
+    padding: 6px 7px 6px 2px !important;
+  }
+  .sa-page .sa-chips-input .v-chip { max-width: 100%; margin: 3px 4px 3px 0 !important; }
+  .sa-page .sa-scale-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+  .sa-page .sa-param-button {
+    min-height: 39px;
+    border-color: #d9dfe5;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .sa-page .sa-period-card {
+    min-width: 0;
+    border: 1px solid #e6e9ec;
+    border-radius: 9px;
+    background: #fcfcfd;
+    padding: 15px 15px 5px;
+    margin-bottom: 12px;
+  }
+  .sa-page .sa-period-card-title {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #333c48;
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0 0 15px;
+  }
+  .sa-page .sa-period-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .sa-page .sa-period-dot-start { background: #15956d; }
+  .sa-page .sa-period-dot-end { background: #df9643; }
+  .sa-page .sa-period-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .sa-page .sa-period-fields.sa-period-single { grid-template-columns: 1fr; }
+  .sa-page .sa-period-fields > * { min-width: 0; }
+  .sa-page .sa-period-fields .v-input { min-width: 0; }
+  .sa-page .sa-action-area { padding-top: 17px; margin: 10px 0 17px; border-top: 1px solid #edf0f2; }
+  .sa-page .sa-interpolate {
+    min-height: 42px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .sa-page .sa-action-area p { display: flex; align-items: start; gap: 7px; color: #858f99; font-size: 11.5px; line-height: 1.55; margin: 10px 0 0; }
+  .sa-page .sa-inline-alert { margin: 8px 0; font-size: 12px; }
+
+  /* Observations table — same hierarchy and separators as reports */
+  .sa-page .sa-station-section { margin-top: 8px !important; }
+  .sa-page .sa-count-badge {
+    margin-left: auto;
+    background: #f5f7f9;
+    color: #5e6b77;
+    border: 1px solid #e4e8eb;
     border-radius: 5px;
-  }
-  .search-box {
-    position: relative;
-    width: 350px;
-    padding-left: 8px;
-    padding-right: 8px;
-    overflow: hidden;
-    box-shadow: 0px 3px 1px -2px rgba(0, 0, 0, 0.2),
-      0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
-  }
-  .search-input {
-    width: 100%;
-    height: 36px;
-  }
-  .measured-values {
-    font-size: 16px;
-    font-weight: bold;
-    color: white;
-    text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;
-  }
-  .v-data-table td, .v-data-table th {
-    padding: 0 0px;
+    padding: 4px 7px;
     font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0;
   }
-
-  /* MATERIALIZE */
-  input:not([type]),
-  input[type="text"]:not(.browser-default),
-  input[type="password"]:not(.browser-default),
-  input[type="email"]:not(.browser-default),
-  input[type="url"]:not(.browser-default),
-  input[type="time"]:not(.browser-default),
-  input[type="date"]:not(.browser-default),
-  input[type="datetime"]:not(.browser-default),
-  input[type="datetime-local"]:not(.browser-default),
-  input[type="tel"]:not(.browser-default),
-  input[type="number"]:not(.browser-default),
-  input[type="search"]:not(.browser-default),
-  textarea.materialize-textarea {
-    background-color: transparent;
-    border: none !important;
-    border-bottom: 0px !important;
-    border-radius: 0 !important;
-    outline: none !important;
-    /* height: 0em!important; */
-    width: 100%;
-    font-size: 16px;
-    margin: 0px;
-    padding: 0;
-    -webkit-box-shadow: none;
-    box-shadow: none;
-    -webkit-box-sizing: content-box;
-    box-sizing: content-box;
-    -webkit-transition: border 0.3s, -webkit-box-shadow 0.3s;
-    transition: border 0.3s, -webkit-box-shadow 0.3s;
-    transition: box-shadow 0.3s, border 0.3s;
-    transition: box-shadow 0.3s, border 0.3s, -webkit-box-shadow 0.3s;
+  .sa-page .sa-stations-hint { color: #77818e; font-size: 12px; line-height: 1.6; margin-bottom: 14px; }
+  .sa-page .sa-station-table { border: 1px solid #e2e5e9; border-radius: 8px; overflow: hidden; box-shadow: none; }
+  .sa-page .sa-station-table .v-data-table__wrapper { overflow-x: auto; max-width: 100%; }
+  .sa-page .sa-station-table table { min-width: 435px; }
+  .sa-page .sa-station-table thead th {
+    padding: 0 9px !important;
+    background: #f5f7f9 !important;
+    color: #485563 !important;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    border-bottom: 1px solid #e4e8eb !important;
   }
-  
-  .v-input--selection-controls__ripple {
-    border-radius: 50%;
+  .sa-page .sa-station-table tbody td {
+    padding: 6px 9px !important;
+    color: #3b4653;
+    font-size: 11.5px;
+    white-space: nowrap;
+    border-bottom: 1px solid #edf0f2 !important;
+  }
+  .sa-page .sa-station-table tbody tr:hover { background: #f8fafb !important; }
+  .sa-page .sa-editable-value {
+    color: #354351;
+    font-weight: 700;
+    border-bottom: 1px dashed #aebac5;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     cursor: pointer;
-    height: 34px;
-    position: absolute;
-    transition: inherit;
-    width: 34px;
-    left: -12px;
-    top: calc(50% - 24px);
-    margin: 7px;
-    z-index: 10 !important;
+  }
+  .sa-page .sa-coordinate { color: #687381; font-variant-numeric: tabular-nums; }
+  .sa-page .sa-show-checkbox { margin: 0; padding: 0; }
+  .sa-page .sa-station-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 9px; margin-top: 15px; }
+  .sa-page .sa-station-actions .v-btn { font-size: 11.5px; font-weight: 600; letter-spacing: 0; }
+  .sa-page .sa-sidebar-empty {
+    text-align: center;
+    border: 1px dashed #d9dfe5;
+    border-radius: 9px;
+    padding: 29px 16px;
+    margin: 9px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+  }
+  .sa-page .sa-sidebar-empty strong { color: #4d5b69; font-size: 13px; }
+  .sa-page .sa-sidebar-empty p { color: #8894a0; font-size: 12px; margin: 0; }
+
+  /* Consistent Vue / Vuetify field defaults; do not interfere with data behaviour */
+  .sa-page .v-text-field input:not([type=checkbox]):not([type=radio]),
+  .sa-page .v-text-field input:focus {
+    border-bottom: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+  .sa-page .v-text-field--outlined .v-input__slot { background: #fff !important; }
+  .sa-page .v-text-field--outlined fieldset { border-color: #d6dde5; }
+  .sa-page .v-input--dense .v-label { font-size: 12px; }
+  .sa-page .v-btn { text-transform: none; }
+
+  /* Layer popup */
+  .sa-layers-menu { border-radius: 9px !important; box-shadow: 0 8px 26px rgba(25,38,50,.11) !important; z-index: 1400 !important; }
+  .sa-layers-card { width: 305px; border: 1px solid #e2e5e9; border-radius: 9px !important; background: #fff; }
+  .sa-layers-heading { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid #edf0f2; }
+  .sa-layers-heading strong { color: #303b47; font-size: 13px; font-weight: 700; }
+  .sa-layers-heading span { margin-left: auto; color: #8a949f; font-size: 10px; font-weight: 600; letter-spacing: .5px; }
+  .sa-layers-content { padding: 8px 17px 16px; }
+  .sa-layer-switch { margin: 10px 0 0 !important; padding: 0 !important; }
+  .sa-layer-switch .v-label { color: #4f5d69; font-size: 12px; }
+  .sa-layers-subtitle { padding: 16px 18px 0; color: #78828e; font-weight: 700; letter-spacing: .55px; font-size: 10.5px; }
+  .sa-basemap-radios { padding: 0 18px 17px; margin: 7px 0 0; }
+  .sa-basemap-radios .v-radio { margin: 5px 0 !important; }
+  .sa-basemap-radios .v-label { color: #53616e; font-size: 12px; }
+
+  /* Dialogs and progress state */
+  .sa-dialog .v-card { border-radius: 11px !important; }
+  .sa-dialog-card { background: #fff !important; }
+  .sa-dialog-top { display: flex; align-items: center; gap: 12px; padding: 21px 23px 18px; border-bottom: 1px solid #edf0f2; }
+  .sa-dialog-symbol { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 38px; width: 38px; height: 38px; background: #f9fafb; border: 1px solid #e7e8ec; border-radius: 8px; }
+  .sa-dialog-top h2 { font-size: 17px; font-weight: 700; color: #252e38; margin: 0; }
+  .sa-dialog-top p { color: #77818e; font-size: 12px; margin: 3px 0 0; }
+  .sa-dialog-body { padding: 21px 23px 8px !important; }
+  .sa-dialog-field { margin-bottom: 18px; }
+  .sa-dialog-field p { color: #87929e; font-size: 11.5px; line-height: 1.5; margin: -13px 0 0; }
+  .sa-dialog-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .sa-dialog-actions { border-top: 1px solid #edf0f2; padding: 14px 20px 17px !important; }
+
+  /* Add observation — coordinate picker, matching SURFACE's white/charcoal styling. */
+  .sa-point-dialog .sa-dialog-body { padding-bottom: 5px !important; }
+  .sa-point-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 1px 0 9px; }
+  .sa-point-picker-head > div { min-width: 0; }
+  .sa-point-picker-title { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .055em; color: #48535f; }
+  .sa-point-picker-subtitle { display: block; margin-top: 3px; color: #7d8893; font-size: 11.5px; line-height: 1.5; }
+  .sa-point-picker-reset { flex: 0 0 auto; letter-spacing: 0 !important; }
+  .sa-point-picker-map {
+    width: 100%; height: 255px; position: relative; border: 1px solid #dbe1e7;
+    border-radius: 7px; overflow: hidden; background: #f1f3f5;
+    cursor: crosshair;
+  }
+  .sa-point-picker-map.leaflet-container { z-index: 0; font: inherit; }
+  .sa-point-picker-map .leaflet-control-zoom a { width: 29px; height: 29px; line-height: 29px; font-size: 18px; }
+  .sa-point-picker-map .leaflet-control-attribution { font-size: 9px; }
+  .sa-point-picker-pin {
+    border: 3px solid #fff; border-radius: 50%;
+    background: #1976d2; box-shadow: 0 1px 6px rgba(0,0,0,.3);
+  }
+  .sa-point-picker-pin span { display: block; width: 100%; height: 100%; }
+  .sa-point-picker-caption { display: flex; align-items: center; gap: 6px; padding: 9px 1px 13px; font-size: 11.5px; color: #6e7c88; }
+  .sa-point-picker-caption .v-icon { flex: 0 0 auto; }
+  .sa-point-coordinate-fields { margin-top: 1px; }
+  @media (max-width: 650px) {
+    .sa-point-dialog .sa-dialog-top { padding: 16px; }
+    .sa-point-dialog .sa-dialog-body { padding: 16px 16px 3px !important; }
+    .sa-point-picker-head { align-items: flex-start; }
+    .sa-point-picker-map { height: 220px; }
+    .sa-point-picker-reset { margin-top: -4px; }
+  }
+  .sa-loading-card { width: 345px; max-width: 90vw; padding: 28px 26px; border-radius: 11px; background: #fff; color: #303b47; text-align: center; box-shadow: 0 14px 40px rgba(15,24,34,.18); }
+  .sa-loading-icon { display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .sa-loading-icon span { color: #374451; font-size: 11px; font-weight: 700; }
+  .sa-loading-card h3 { color: #252e38; font-size: 16px; font-weight: 700; margin: 0 0 7px; }
+  .sa-loading-card p { color: #77818e; font-size: 12px; line-height: 1.6; margin-bottom: 17px; }
+  .sa-loading-card small { display: block; font-size: 11px; color: #8893a0; margin-top: 13px; }
+
+  @media (max-width: 1250px) {
+    .sa-page .sa-workspace { grid-template-columns: minmax(0,1fr) minmax(385px,420px); }
+    .sa-page .sa-workspace--wide { grid-template-columns: minmax(0,1fr) 0px; }
+    .sa-page .sa-sidebar-scroll { padding-left: 15px; padding-right: 15px; }
+  }
+  @media (max-width: 960px) {
+    .sa-page .sa-workspace, .sa-page .sa-workspace--wide {
+      height: auto;
+      max-height: none;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .sa-page .sa-map-card { height: min(67vh,660px); min-height: 520px; }
+    .sa-page .sa-sidebar { max-height: 850px; min-height: 530px; }
+  }
+  @media (max-width: 650px) {
+    .sa-page { padding: 13px 12px 22px !important; }
+    .sa-page .sa-header { gap: 12px; margin-bottom: 18px; }
+    .sa-page .sa-header-copy p { font-size: 12px; }
+    .sa-page .sa-title-row h1 { font-size: 22px; }
+    .sa-page .sa-map-card { height: 57vh; min-height: 425px; }
+    .sa-page .sa-map-title { top: 10px; left: 10px; padding: 7px; max-width: calc(100% - 150px); }
+    .sa-page .sa-map-title small { display: none; }
+    .sa-page .sa-map-tools { top: 10px; right: 10px; gap: 5px; }
+    .sa-page .sa-map-tool { height: 34px !important; padding: 0 8px !important; }
+    .sa-page .sa-map-tool-icon { width: 34px; padding: 0 !important; }
+    .sa-page .sa-map-colorbar { left: 10px; bottom: 55px; }
+    .sa-page .sa-map-footer { bottom: 10px; left: 10px; right: 10px; }
+    .sa-page .sa-map-footer-right { display: none; }
+    .sa-page .sa-sidebar-head { padding: 15px; }
+    .sa-page .sa-sidebar-scroll { padding: 0 13px 18px; }
+    .sa-page .sa-dialog-grid { grid-template-columns: 1fr; gap: 2px; }
   }
 
-  nav i,
-  nav [class^="mdi-"], nav [class*="mdi-"],
-  nav i.material-icons {
+  /* FULL-MAP MODE: the map owns the entire page width. The filter panel
+     floats above it rather than making Leaflet continuously change widths. */
+  .sa-page { padding: 0 !important; background: #fff !important; }
+  .sa-page .sa-shell { width: 100%; max-width: none; }
+  .sa-page .sa-header {
+    padding: 20px 35px 19px;
+    margin: 0;
+    border-bottom: 1px solid #e2e5e9;
+    background: #fff;
+  }
+  .sa-page .sa-header-actions { gap: 10px; }
+  .sa-page .sa-header-count {
+    margin-left: 8px; padding: 1px 6px;
+    background: #f3f5f7; border-radius: 5px;
+    font-size: 11px; color: #52606d;
+  }
+  .sa-page .sa-workspace,
+  .sa-page .sa-workspace.sa-workspace--wide {
+    position: relative;
     display: block;
-    font-size: 24px;
-    height: 24px;
-    line-height: 56px; }
-
-  .station-name{
-    font-size: 11px;
-    font-weight: bold;
-    color: white;
-    width: 400px;
-    text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black;
+    width: 100%;
+    height: calc(100vh - 132px);
+    min-height: 560px;
+    max-height: none;
+    overflow: hidden;
+    transition: none;
   }
-}
-</style>
+  .sa-page .sa-map-card {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+    background: #eef1f2;
+  }
+  .sa-page .sa-map-layer,
+  .sa-page .sa-map-layer .vue2leaflet-map,
+  .sa-page .sa-map-layer .leaflet-container,
+  .sa-page .sa-map {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+  }
+  .sa-page .sa-map-title { top: 18px; left: 22px; }
+  .sa-page .sa-map-tools { top: 18px; right: 22px; }
+  .sa-page .sa-map-colorbar { left: 22px; }
+  .sa-page .sa-map-footer { left: 22px; right: 22px; }
 
+  .sa-page .sa-sidebar {
+    position: absolute;
+    top: 74px;
+    right: 22px;
+    bottom: 20px;
+    z-index: 850;
+    width: min(440px, calc(100% - 44px));
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #e0e5e9;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 8px 30px rgba(23, 35, 47, .15);
+  }
+  .sa-page .sa-sidebar-scroll { min-height: 0; }
+  .sa-page .sa-sidebar-head { padding: 16px 19px; }
+
+  /* Below-map measurements, styled consistently with other SURFACE tables. */
+  .sa-page .sa-observations-section {
+      position: relative;
+      z-index: 900;
+
+      /* Pull the section upward over the map */
+      margin-top: -40px;
+
+      /* Rounded upper corners */
+      border-radius: 40px 40px 0 0;
+
+      border-top: 1px solid #edf0f2;
+
+      /* Maintain our SURFACE styling */
+      padding: 36px 35px 42px;
+      background: #fff;
+
+      /* Very subtle separation from the map */
+      box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.06);
+
+      scroll-margin-top: 16px;
+  }
+  .sa-page .sa-observations-panel {
+    background: #fff;
+    border: 1px solid #e2e5e9;
+    border-radius: 11px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(20,29,38,.025);
+  }
+  .sa-page .sa-observations-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding: 20px 23px;
+    border-bottom: 1px solid #edf0f2;
+  }
+  .sa-page .sa-observations-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .sa-page .sa-observations-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; flex: 0 0 38px;
+    background: #f9fafb; border: 1px solid #e7e8ec; border-radius: 9px;
+  }
+  .sa-page .sa-observations-title h2 { margin: 0; color: #252e38; font-size: 17px; font-weight: 700; }
+  .sa-page .sa-observations-title p { margin: 4px 0 0; font-size: 12.5px; color: #77818e; }
+  .sa-page .sa-observations-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+  .sa-page .sa-observations-actions .v-btn { letter-spacing: 0; font-weight: 600; }
+  .sa-page .sa-observations-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 14px;
+    padding: 15px 22px 16px;
+  }
+  .sa-page .sa-observations-status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .sa-page .sa-observations-note { color: #828d99; font-size: 12px; }
+  .sa-page .sa-observations-search { width: 255px; max-width: 100%; flex: 0 1 255px; }
+  .sa-page .sa-station-table {
+    margin: 0 20px 20px;
+    border: 1px solid #e4e8eb;
+    border-radius: 8px;
+  }
+  .sa-page .sa-station-table table { min-width: 570px; }
+  .sa-page .sa-station-table thead th { font-size: 12px; padding: 10px 13px !important; }
+  .sa-page .sa-station-table tbody td { font-size: 12px; padding: 11px 13px !important; }
+  .sa-page .sa-observations-empty {
+    padding: 52px 18px 55px;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 9px;
+  }
+  .sa-page .sa-observations-empty strong { color: #455160; font-size: 14px; }
+  .sa-page .sa-observations-empty p { max-width: 475px; color: #87929e; font-size: 12.5px; }
+
+  @media (max-width: 960px) {
+    .sa-page .sa-workspace,
+    .sa-page .sa-workspace.sa-workspace--wide {
+      display: block;
+      height: calc(100vh - 135px);
+      min-height: 480px;
+      max-height: none;
+      overflow: hidden;
+    }
+    .sa-page .sa-map-card { width: 100%; height: 100%; min-height: 0; }
+    .sa-page .sa-sidebar {
+      width: min(430px, calc(100% - 30px));
+      max-height: none; min-height: 0; height: auto;
+      top: 69px; bottom: 14px; right: 15px;
+    }
+  }
+  @media (max-width: 650px) {
+    .sa-page .sa-header { padding: 15px 14px; gap: 12px; }
+    .sa-page .sa-header-copy p { display: none; }
+    .sa-page .sa-header-actions { width: 100%; justify-content: flex-end; }
+    .sa-page .sa-header-action { padding: 0 9px !important; font-size: 11px; }
+    .sa-page .sa-workspace,
+    .sa-page .sa-workspace.sa-workspace--wide {
+      height: calc(100svh - 122px);
+      min-height: 440px;
+    }
+    .sa-page .sa-map-card { height: 100%; min-height: 0; }
+    .sa-page .sa-map-title { top: 10px; left: 10px; }
+    .sa-page .sa-map-tools { top: 10px; right: 10px; }
+    .sa-page .sa-map-colorbar { left: 10px; }
+    .sa-page .sa-map-footer { left: 10px; right: 10px; }
+    .sa-page .sa-sidebar { top: 57px; bottom: 10px; right: 10px; width: calc(100% - 20px); }
+    .sa-page .sa-observations-section { padding: 20px 12px 28px; }
+    .sa-page .sa-observations-head { padding: 16px 14px; }
+    .sa-page .sa-observations-toolbar { padding: 12px 12px; }
+    .sa-page .sa-observations-search { width: 100%; flex: 1 1 100%; }
+    .sa-page .sa-station-table { margin: 0 10px 14px; }
+  }
+
+
+  /* Station Monitoring-aligned map layout (final overrides). */
+  .sa-page .sa-shell { width: 100%; }
+  .sa-page .sa-workspace,
+  .sa-page .sa-workspace.sa-workspace--wide {
+    height: calc(100vh - 120px);
+    min-height: 540px;
+    width: 100%;
+  }
+  .sa-page .sa-map-card { background: #f1f3f5; }
+  .sa-page .sa-map-layer,
+  .sa-page .sa-map-layer > .vue2leaflet-map,
+  .sa-page .sa-map-layer > .leaflet-container,
+  .sa-page .sa-map { width: 100% !important; height: 100% !important; }
+  .sa-page .sa-map-tools {
+    top: 12px;
+    right: 14px;
+    z-index: 760;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: calc(100% - 120px);
+    justify-content: flex-end;
+  }
+  /* Same white Vuetify button style, corners and Material Design icon scale
+     as Station Monitoring's .map-sidebar-toggle controls. */
+  .sa-page .sa-monitor-map-btn {
+    margin-top: 6px;
+    height: 37px !important;
+    min-width: 42px !important;
+    width: 42px;
+    padding: 0 !important;
+    border-radius: 4px;
+    color: #262c33 !important;
+    border: 0;
+    background: #fff !important;
+    box-shadow: 0 2px 7px rgba(0,0,0,.18) !important;
+  }
+  .sa-page .sa-monitor-map-btn .v-icon { font-size: 23px !important; }
+  .sa-page .sa-monitor-map-btn:hover { background: #f4f5f7 !important; }
+  .sa-page .sa-sidebar {
+    top: 72px;
+    right: 20px;
+    bottom: 18px;
+  }
+  .sa-page .sa-sidebar-head {
+    align-items: flex-start;
+    padding: 18px 20px 17px;
+    background: #fff;
+  }
+  .sa-page .sa-sidebar-heading { min-width: 0; align-items: flex-start; }
+  .sa-page .sa-sidebar-heading > div { min-width: 0; }
+  .sa-page .sa-sidebar-heading .sa-panel-title {
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: 0;
+    color: #252c34;
+    margin: 0;
+  }
+  .sa-page .sa-sidebar-heading p { font-size: 12px; line-height: 1.5; margin: 6px 0 0; }
+  .sa-page .sa-sidebar-intro {
+    color: #737d8a;
+    font-size: 12px;
+    font-weight: 600;
+    padding-top: 16px;
+    margin-bottom: -7px;
+  }
+  .sa-page .sa-map-footer {
+      bottom: 60px;
+  }
+  .sa-page .sa-sidebar {
+      bottom: 60px;
+  }
+  .sa-page .sa-sidebar-scroll .sa-section-heading:first-of-type { border-top: none; }
+  @media (max-width: 960px) {
+    .sa-page .sa-workspace,
+    .sa-page .sa-workspace.sa-workspace--wide { height: calc(100vh - 120px); min-height: 480px; }
+  }
+  @media (max-width: 650px) {
+    .sa-page .sa-workspace,
+    .sa-page .sa-workspace.sa-workspace--wide {
+      height: calc(100svh - 120px);
+      min-height: 430px;
+    }
+    .sa-page .sa-map-tools { top: 8px; right: 9px; gap: 3px; max-width: calc(100% - 85px); }
+    .sa-page .sa-monitor-map-btn { width: 34px; min-width: 34px !important; height: 34px !important; }
+    .sa-page .sa-monitor-map-btn .v-icon { font-size: 20px !important; }
+    .sa-page .sa-sidebar { top: 59px; right: 10px; bottom: 10px; width: calc(100% - 20px); }
+    .sa-page .sa-sidebar-head { padding: 14px 13px; }
+    .sa-page .sa-sidebar-heading .sa-panel-title { font-size: 16px; }
+    .sa-page .sa-sidebar-heading p { font-size: 11px; }
+  }
+</style>
 {% endblock %}

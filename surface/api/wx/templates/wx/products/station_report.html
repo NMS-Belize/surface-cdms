@@ -1,420 +1,389 @@
 {% extends "base.html" %}
-{% block title %} Surface - Station Report {% endblock %}
-{% block content %}
 {% load wx_filters %}
-<div class="srf-container" style="max-height: 280px;">
-  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-    <span class="srf-display-1 text-uppercase">Station Report</span><br><br>
-  </div>
+{% block title %}Surface - Station Report{% endblock %}
+
+{% block content %}
+<div class="srf-container sr-page">
   <div id="app" v-cloak>
-    <v-app>
-      <form class="col l12">
-        <v-row dense justify="start">
-          <v-col class="text-center" cols="6">
-            <v-autocomplete
-            v-model="station"
-            :items="stations"
-            label="Station"
-            return-object
-            autocomplete="off"
-            ></v-autocomplete>
-          </v-col>
-          
-          <v-col class="text-center" cols="6">
-            <v-select
-            v-model="source"
-            :items="sources"
-            label="Data Source"
-            v-on:change="changeSource"
-            ></v-select>
-          </v-col>
-          
-        </v-row>
-        
-        <v-row dense justify="start">
-          <v-col class="text-center" cols="3">
-            <v-menu
-              :close-on-content-click="false"
-              v-model="initial_date_menu"
-              transition="scale-transition"
-              offset-y
-              class="max-50"
-            >
-              <template v-slot:activator="{ on }">
-                <v-text-field
-                v-model="initial_date"
-                label="Initial date"
-                v-on="on"
-                required
-                prepend-icon="event"
-                persistent-hint
-                ></v-text-field>
-              </template>
-              <v-date-picker
-              v-model="initial_date"
-              @input="initial_date_menu = false"
-              :type='getDatepickFormat()'
-              :allowed-dates="allowedDates"
-              ></v-date-picker>
-            </v-menu>
-          </v-col>
+    <v-app class="sr-app">
+      <div class="sr-shell">
 
-          <v-col class="text-center" cols="3" v-if="source === 1">
-            <v-select
-              v-model="initial_time"
-              label="Initial time"
-              :items="hours"
-              prepend-icon="access_time"
-              required
-              persistent-hint
-            ></v-select>
-          </v-col>
-          
-          <v-col class="text-center" cols="3"  v-if="source === 0">
-            <v-menu
-              :close-on-content-click="false"
-              v-model="initial_time_menu"
-              transition="scale-transition"
-              offset-y
-              class="max-50"
-            >
-              <template v-slot:activator="{ on }">
-                <v-text-field
-                v-model="initial_time"
-                label="Initial time"
-                v-on="on"
-                required
-                persistent-hint
-                prepend-icon="access_time"
-                ></v-text-field>
-              </template>
-              <v-time-picker
-              v-model="initial_time"
-              ></v-time-picker>
-            </v-menu>
-          </v-col>
+        <!-- Page header -->
+        <header class="sr-page-header">
+          <div>
+            <h1 class="srf-display-1 text-uppercase">Station Report</h1>
+            <p>Explore station observations, compare measurements, and review summary statistics.</p>
+          </div>
+        </header>
 
-          <v-col class="text-center" cols="3">
-            <v-menu
-              :close-on-content-click="false"
-              v-model="final_date_menu"
-              transition="scale-transition"
-              offset-y
-              class="max-50"
-            >
-              <template v-slot:activator="{ on }">
-                <v-text-field
-                v-model="final_date"
-                label="Final date"
-                v-on="on"
-                required
-                persistent-hint
-                prepend-icon="event"
-                ></v-text-field>
-              </template>
-              <v-date-picker
-              v-model="final_date"
-              @input="final_date_menu = false"
-              :type='getDatepickFormat()'
-              :allowed-dates="allowedDates"
-              ></v-date-picker>
-            </v-menu>
-          </v-col>
+        <!-- Report configuration: all original Vue data models and handlers retained. -->
+        <section class="sr-panel sr-filters" aria-label="Report configuration">
+          <div class="sr-panel-heading">
+            <div class="sr-panel-heading-main">
+              <span class="sr-panel-icon"><v-icon size="20" color="primary">mdi-tune-variant</v-icon></span>
+              <div>
+                <h2>Generate a report</h2>
+                <p>Choose the station, data source, and reporting period.</p>
+              </div>
+            </div>
+          </div>
 
-          <v-col class="text-center" cols="3" v-if="source === 1">
-            <v-select                
-              v-model="final_time"
-              label="Final time"
-              required
-              persistent-hint
-              :items="hours"
-              prepend-icon="access_time"
-            ></v-select>
-          </v-col>
-          
-          <v-col class="text-center" cols="3"  v-if="source === 0">
-            <v-menu
-              :close-on-content-click="false"
-              v-model="final_time_menu"
-              transition="scale-transition"
-              offset-y
-              class="max-50"
-            >
-              <template v-slot:activator="{ on }">
-                <v-text-field
-                v-model="final_time"
-                label="Final time"
-                v-on="on"
-                required
-                persistent-hint
-                prepend-icon="access_time"
-                ></v-text-field>
-              </template>
-              <v-time-picker
-              v-model="final_time"
-              ></v-time-picker>
-            </v-menu>
-          </v-col>            
-        </v-row>
+          <form class="sr-filter-form" @submit.prevent="fetchData()">
+            <div class="sr-field-label">STATION &amp; DATA SOURCE</div>
+            <div class="sr-main-fields">
+              <v-autocomplete
+                v-model="station"
+                :items="stations"
+                label="Station"
+                return-object
+                autocomplete="off"
+                outlined dense hide-details="auto"
+              ></v-autocomplete>
+              <v-select
+                v-model="source"
+                :items="sources"
+                label="Data Source"
+                @change="changeSource"
+                outlined dense hide-details="auto"
+              ></v-select>
+            </div>
 
-        <v-row dense justify='start'>
-          <v-col class="text-center" cols="auto">
-            <v-btn @click="fetchData()" color="success">
-              Query
-              <i class="material-icons right">send</i>
-            </v-btn>
-          </v-col>
-        </v-row>
+            <div class="sr-field-label sr-period-label">REPORTING PERIOD</div>
+            <div class="sr-periods">
+              <div class="sr-period-box">
+                <div class="sr-period-heading">
+                  <span class="sr-dot sr-dot-from"></span>
+                  <h3>From</h3>
+                  <span>Start of reporting period</span>
+                </div>
+                <div class="sr-period-fields" :class="{ 'sr-one-field': source !== 0 && source !== 1 }">
+                  <v-menu
+                    v-model="initial_date_menu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="initial_date"
+                        label="Initial date"
+                        v-on="on"
+                        prepend-inner-icon="mdi-calendar-month-outline"
+                        outlined dense required hide-details="auto"
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
+                      v-model="initial_date"
+                      @input="initial_date_menu = false"
+                      :type="getDatepickFormat()"
+                      :allowed-dates="allowedDates"
+                    ></v-date-picker>
+                  </v-menu>
 
+                  <v-select
+                    v-if="source === 1"
+                    v-model="initial_time"
+                    label="Initial time"
+                    :items="hours"
+                    prepend-inner-icon="mdi-clock-outline"
+                    outlined dense required hide-details="auto"
+                  ></v-select>
+                  <v-menu
+                    v-if="source === 0"
+                    v-model="initial_time_menu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="initial_time"
+                        label="Initial time"
+                        v-on="on"
+                        prepend-inner-icon="mdi-clock-outline"
+                        outlined dense required hide-details="auto"
+                      ></v-text-field>
+                    </template>
+                    <v-time-picker v-model="initial_time"></v-time-picker>
+                  </v-menu>
+                </div>
+              </div>
 
-        <!-- alert container -->
-        <v-row dense justify='start'>
-          <v-col class="mt-5" cols="12">
-            <v-alert
-              v-model='error'
-              dismissible
-              type="error"
-            >
-              [[ error_message ]]
-            </v-alert>
+              <div class="sr-period-box">
+                <div class="sr-period-heading">
+                  <span class="sr-dot sr-dot-to"></span>
+                  <h3>To</h3>
+                  <span>End of reporting period</span>
+                </div>
+                <div class="sr-period-fields" :class="{ 'sr-one-field': source !== 0 && source !== 1 }">
+                  <v-menu
+                    v-model="final_date_menu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="final_date"
+                        label="Final date"
+                        v-on="on"
+                        prepend-inner-icon="mdi-calendar-month-outline"
+                        outlined dense required hide-details="auto"
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
+                      v-model="final_date"
+                      @input="final_date_menu = false"
+                      :type="getDatepickFormat()"
+                      :allowed-dates="allowedDates"
+                    ></v-date-picker>
+                  </v-menu>
 
-            <v-alert
-              v-model='no_data'
-              dismissible
-              type="info"
-            >
-              No data
-            </v-alert>
-          </v-col>
-        </v-row>
+                  <v-select
+                    v-if="source === 1"
+                    v-model="final_time"
+                    :items="hours"
+                    label="Final time"
+                    prepend-inner-icon="mdi-clock-outline"
+                    outlined dense required hide-details="auto"
+                  ></v-select>
+                  <v-menu
+                    v-if="source === 0"
+                    v-model="final_time_menu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                  >
+                    <template v-slot:activator="{ on }">
+                      <v-text-field
+                        v-model="final_time"
+                        label="Final time"
+                        v-on="on"
+                        prepend-inner-icon="mdi-clock-outline"
+                        outlined dense required hide-details="auto"
+                      ></v-text-field>
+                    </template>
+                    <v-time-picker v-model="final_time"></v-time-picker>
+                  </v-menu>
+                </div>
+              </div>
+            </div>
 
-        <div
-          v-if="loading || rendering"
-        >
-          <span class="headline font-weight-thin" v-if="loading">Loading...</span><br>
-          <span class="headline font-weight-thin" v-if="rendering">Rendering...</span><br>
-          <v-progress-linear
-          indeterminate
-          ></v-progress-linear>
+            <div class="sr-form-footer">
+              <div class="sr-form-hint">
+                <v-icon color="primary" size="17">mdi-information-outline</v-icon>
+                <span>Maximum date ranges depend on the station type and selected data source.</span>
+              </div>
+              <v-btn
+                color="primary" depressed
+                class="sr-run-btn text-none"
+                :disabled="!station || !initial_date || !final_date || loading || rendering"
+                :loading="loading"
+                @click="fetchData()"
+                type="button"
+              >
+                <v-icon left small>mdi-chart-line</v-icon>
+                Generate Report
+              </v-btn>
+            </div>
+          </form>
+        </section>
+
+        <!-- Retain the original URL used by fetchData() -->
+        <input type="hidden" id="data-url" value="{% url 'station_report_data' %}">
+
+        <div class="sr-messages">
+          <v-alert v-model="error" dismissible type="error" dense>
+            [[ error_message ]]
+          </v-alert>
+          <v-alert v-model="no_data" dismissible type="info" dense>
+            No data found for this station, source, and date range.
+          </v-alert>
+
+          <div v-if="loading || rendering" class="sr-progress-panel">
+            <div class="sr-progress-row">
+              <v-progress-circular indeterminate size="22" width="3" color="primary"></v-progress-circular>
+              <div>
+                <strong>[[ loading ? 'Retrieving station data' : 'Preparing charts and tables' ]]</strong>
+                <span>[[ loading ? 'Loading observations from the server...' : 'Rendering report results...' ]]</span>
+              </div>
+            </div>
+            <v-progress-linear indeterminate color="primary" height="3" class="mt-4"></v-progress-linear>
+          </div>
         </div>
-      </form>
-      
-      <!-- weird way of storing the get URL for the report. **legacy implemetation -->
-      <input type="hidden" id="data-url" value="{% url 'station_report_data' %}">
 
-      <v-tabs
-        id="tabs"
-        v-model="tab"
-        :key="tabs.length"
-        show-arrows
-        centered
-        center-active
-      >
-        <v-tab
-          v-for="i in tabs"
-          :key="i"
-          :href="`#tab-${i}`"
-        >[[ i ]]</v-tab>
-      </v-tabs>
+        <div v-if="!tabs.length && !loading && !rendering && !no_data && !error" class="sr-empty-state">
+          <v-icon color="blue-grey lighten-2" size="42">mdi-chart-box-outline</v-icon>
+          <h2>Ready to generate a report</h2>
+          <p>Select a station and reporting period above to see interactive charts and observation tables.</p>
+        </div>
 
-      <v-tabs-items
-        v-model="tab"
-        continuous
-      >
-        <v-tab-item
-          v-for="i in tabs"
-          :key="i"
-          :value="'tab-' + i"
-          eager
-          :transition="false"
-          :reverse-transition="false"
-          :ref="'tab-' + i"
-        >
-          <div :id='i + "-chart"' style='width:100%; height:400px;'></div>
-
-          <div class="space-between">
-
-            <!-- Export to CSV button -->
-            {% if request|has_any_feature_permission:"station-report:write" %}
-            <v-btn color="info" @click="exportCSV(i)">Download CSV</v-btn>
-            {% endif %}
-
-            <div v-if="currentSource === 0" style="margin-top: 16px; position: absolute; right: 16px;" class="mt-2">
-              <small>Table legend</small>
-              <div class="table-legend">
-          
-                <div class="column">
-                  <div class="item">
-                    <div class="type min-value">aA</div>
-                    <div class="name">Min value</div>
-                  </div>
-
-                  <div class="item">
-                    <div class="type max-value">aA</div>
-                    <div class="name">Max value</div>
-                  </div>
-                </div>
-
-                <div class="column">
-                  <div class="item">
-                    <div class="color good-quality"></div>
-                    <div class="name">Good quality</div>
-                  </div>
-
-                  <div class="item">
-                    <div class="color bad-quality"></div>
-                    <div class="name">Bad quality</div>
-                  </div>
-                </div>
-
-                <div class="column">
-                  <div class="item">
-                    <div class="color suspicious"></div>
-                    <div class="name">Suspicious</div>
-                  </div>
-                  
-                  <div class="item">
-                    <div class="color not-checked"></div>
-                    <div class="name">Not checked</div>
-                  </div>
-                </div>
-                
-              </div>
-            </div>
-
-          </div>
-
-          <table
-            :id="`datatable-${i}`"
-            class="compact hover row-border stripe"
-            data-page-length="300"
-            data-searching="false"
-            style="width: 100%;"
-          >
-            <thead>
-              <tr>
-                <td v-for="header in tableHeadersList[i]">[[ header.text ]] <small v-if="header.value === 'datetime'">[[timezone]]</small></td>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in tableItemsList[i]">
-                <td v-for="header in tableHeadersList[i]" :data-color="(item[header.value] || {}).color || '#fff'">
-                  <div v-if="header.value=='datetime'">
-                    [[ (item[header.value] || {}).value ]]
-                  </div>
-                  <div v-if="header.value!='datetime'">
-                    <div v-bind:class="{'min-value': (item[header.value] || {}).value == (summaries[header.value]['MIN'] || {}).value, 'max-value': (item[header.value] || {}).value == (summaries[header.value]['MAX'] || {}).value}">
-                    [[ (item[header.value] || {}).value ]]
-                    </div>
-                </td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <td>
-                  SUM
-                </td>
-                <td v-for="v in tableHeadersList[i]" v-if="v.value!='datetime'">
-                  <div v-if="summaries[v.value]['SUM'] > 0">
-                    [[ summaries[v.value]['SUM'] ]]
-                  </div>
-                  <div v-if="summaries[v.value]['SUM'] <= 0">
-                    -
-                  </div>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  AVG
-                </td>
-                <td v-for="v in tableHeadersList[i]" v-if="v.value!='datetime'">
-                  [[ summaries[v.value]['AVG'] ]]
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  MIN
-                </td>
-                <td v-for="v in tableHeadersList[i]" v-if="v.value!='datetime'">
-                  <span>[[ summaries[v.value]['MIN'].value ]]</span><br>
-                  <span class="caption font-weight-light">First occurrence</span><br>
-                  <span class="caption font-weight-light">[[ summaries[v.value]['MIN'].timestamp ]]</span>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  MAX
-                </td>
-                <td v-for="v in tableHeadersList[i]" v-if="v.value!='datetime'">
-                  <span>[[ summaries[v.value]['MAX'].value ]]</span><br>
-                  <span class="caption font-weight-light">First occurrence</span><br>
-                  <span class="caption font-weight-light">[[ summaries[v.value]['MAX'].timestamp ]]</span>
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  STDDEV
-                </td>
-                <td v-for="v in tableHeadersList[i]" v-if="v.value!='datetime'">
-                  [[ summaries[v.value]['STDDEV'] ]]
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  COUNT
-                </td>
-                <td v-for="v in tableHeadersList[i]" v-if="v.value!='datetime'">
-                  [[ summaries[v.value]['COUNT'] ]]
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-
-          <div v-if="currentSource === 0" style="display: flex; justify-content: flex-end;" class="mb-3">
+        <section v-if="tabs.length" class="sr-results" aria-label="Station report results">
+          <div class="sr-results-header">
             <div>
-              <small>Table legend</small>
-              <div class="table-legend">
-          
-                <div class="column">
-                  <div class="item">
-                    <div class="type min-value">aA</div>
-                    <div class="name">Min value</div>
+              <h2>Report results</h2>
+              <p>Explore individual variables and review their statistics.</p>
+            </div>
+            <div class="sr-station-context" v-if="station">
+              <v-icon size="16" color="primary">mdi-map-marker-outline</v-icon>
+              <span>[[ station.text ]]</span>
+            </div>
+          </div>
+
+          <!-- Preserve tab IDs, hrefs and Vue refs: Highcharts and DataTables rely on them. -->
+          <div class="sr-tabs-frame">
+            <v-tabs
+              id="tabs"
+              v-model="tab"
+              :key="tabs.length"
+              show-arrows
+              centered
+              center-active
+              background-color="transparent"
+              color="primary"
+              class="sr-variable-tabs"
+            >
+              <v-tab v-for="i in tabs" :key="i" :href="`#tab-${i}`">[[ i ]]</v-tab>
+            </v-tabs>
+          </div>
+
+          <v-tabs-items v-model="tab" continuous class="sr-tabs-content">
+            <v-tab-item
+              v-for="i in tabs"
+              :key="i"
+              :value="'tab-' + i"
+              eager
+              :transition="false"
+              :reverse-transition="false"
+              :ref="'tab-' + i"
+            >
+              <div class="sr-report-stack">
+                <!-- Highcharts mounts onto this original chart ID. -->
+                <div class="sr-panel sr-chart-panel">
+                  <div class="sr-section-heading">
+                    <div>
+                      <h3>[[ i ]]</h3>
+                      <p>Interactive measurement chart</p>
+                    </div>
+                    <span class="sr-section-kind"><v-icon size="15">mdi-chart-line</v-icon> Chart</span>
                   </div>
-          
-                  <div class="item">
-                    <div class="type max-value">aA</div>
-                    <div class="name">Max value</div>
+                  <div class="sr-chart-body">
+                    <div :id='i + "-chart"' style="width:100%; height:400px;"></div>
                   </div>
                 </div>
-          
-                <div class="column">
-                  <div class="item">
-                    <div class="color good-quality"></div>
-                    <div class="name">Good quality</div>
+
+                <!-- DataTables uses the original datatable-${i} ID. -->
+                <div class="sr-panel sr-table-panel">
+                  <div class="sr-section-heading sr-table-heading">
+                    <div>
+                      <h3>Observation data</h3>
+                      <p>Sortable observations with SUM, AVG, MIN, MAX, STDDEV, and COUNT.</p>
+                    </div>
+
+                    <!-- dowload csv btn -->
+                    {% if request|has_any_feature_permission:"station-report:write" %}
+                    <v-btn outlined color="success" class="sr-download-btn text-none"
+                           :disabled="!tableItemsList[i] || !tableItemsList[i].length"
+                           @click="exportCSV(i)">
+                      <v-icon left>mdi-download-outline</v-icon> Download CSV
+                    </v-btn>
+                    {% endif %}
                   </div>
-          
-                  <div class="item">
-                    <div class="color bad-quality"></div>
-                    <div class="name">Bad quality</div>
-                  </div>
-                </div>
-          
-                <div class="column">
-                  <div class="item">
-                    <div class="color suspicious"></div>
-                    <div class="name">Suspicious</div>
-                  </div>
-                  
-                  <div class="item">
-                    <div class="color not-checked"></div>
-                    <div class="name">Not checked</div>
+
+                  <!-- Single legend beneath the heading, above the observations. -->
+                    <!-- QC flags and extrema key. -->
+                    <div class="sr-legend-top" v-if="currentSource === 0">
+                      <span class="sr-legend-title">Table legend</span>
+                      <div class="sr-legend-items">
+                        <span class="sr-legend-entry"><span class="sr-extreme-sample min-value">Aa</span> Min value</span>
+                        <span class="sr-legend-entry"><span class="sr-extreme-sample max-value">Aa</span> Max value</span>
+                        <span class="sr-legend-entry"><span class="sr-status-dot good-quality"></span> Good quality</span>
+                        <span class="sr-legend-entry"><span class="sr-status-dot bad-quality"></span> Bad quality</span>
+                        <span class="sr-legend-entry"><span class="sr-status-dot suspicious"></span> Suspicious</span>
+                        <span class="sr-legend-entry"><span class="sr-status-dot missing"></span> Missing</span>
+                        <span class="sr-legend-entry"><span class="sr-status-dot not-checked"></span> Not checked</span>
+                      </div>
+                    </div>
+
+
+                  <div class="sr-table-scroll">
+                    <!--
+                      Vuetify sorts flat display fields correctly. The original nested
+                      tableItemsList stays available for CSV exports/statistics.
+                      Native table pagination replaces jQuery DataTables.
+                    -->
+                    <v-data-table
+                      :headers="tableHeadersList[i] || []"
+                      :items="displayTableItemsList[i] || []"
+                      item-key="__rowIndex"
+                      :items-per-page="50"
+                      :footer-props="{
+                        'items-per-page-options': [25, 50, 100, 300, -1],
+                        'items-per-page-text': 'Rows per page'
+                      }"
+                      :mobile-breakpoint="0"
+                      dense
+                      class="sr-report-vtable elevation-0"
+                      no-data-text="No observations in this chart range."
+                    >
+                      <!-- Retain the timezone annotation on the date column. -->
+                      <template v-slot:header.datetime="{ header }">
+                        <span>[[ header.text ]]</span>
+                        <small class="sr-timezone-label">[[ timezone ]]</small>
+                      </template>
+
+                      <!-- Dynamic variable columns, with original QC cell background colors. -->
+                      <template v-slot:item="{ item }">
+                        <tr>
+                          <td
+                            v-for="header in (tableHeadersList[i] || [])"
+                            :key="header.value"
+                            :style="getReportCellStyle(item.__cells[header.value], header.value)"
+                          >
+                            <div
+                              :class="[
+                                header.value === 'datetime' ? 'sr-date-cell' : '',
+                                reportValueClass(header.value, item.__cells[header.value])
+                              ]"
+                            >
+                              [[ item.__cells[header.value] && item.__cells[header.value].value != null
+                                  ? item.__cells[header.value].value : '—' ]]
+                            </div>
+                          </td>
+                        </tr>
+                      </template>
+
+                      <!-- Statistics follow the current Highcharts zoom, not only this page. -->
+                      <template v-slot:body.append>
+                        <tr v-for="metric in summaryMetrics" :key="'summary-' + metric" class="sr-summary-row">
+                          <td class="sr-summary-label">[[ metric ]]</td>
+                          <td
+                            v-for="header in (tableHeadersList[i] || []).slice(1)"
+                            :key="'summary-' + metric + '-' + header.value"
+                            class="sr-summary-value"
+                          >
+                            <template v-if="metric === 'MIN' || metric === 'MAX'">
+                              <strong>[[ summaryDisplay(header.value, metric) ]]</strong>
+                              <template v-if="summaries[header.value] && summaries[header.value][metric] && summaries[header.value][metric].timestamp">
+                                <div class="sr-extreme-label">First occurrence</div>
+                                <div class="sr-extreme-time">[[ summaries[header.value][metric].timestamp ]]</div>
+                              </template>
+                            </template>
+                            <span v-else>[[ summaryDisplay(header.value, metric) ]]</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </v-data-table>
+                    <p class="sr-statistics-note">
+                      Statistics are calculated for all observations in the current chart range, not just the visible page.
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </v-tab-item>
-      </v-tabs-items>
+            </v-tab-item>
+          </v-tabs-items>
+        </section>
+      </div>
     </v-app>
   </div>
 </div>
@@ -422,615 +391,981 @@
 
 {% block localjavascript %}
 <script>
+
   // highchart
+
   Vue.use(HighchartsVue.default);
+
   Vue.use(window.vuelidate.default);
 
+
+
   'use strict';
+
   new Vue({
+
     el: "#app",
+
     vuetify: new Vuetify(),
+
     delimiters: ["[[", "]]"],
+
     data: {
+
       currentSource: null,
+
       allData: [],
+
       formatedData: [],
+
       timezone: "{{ TIMEZONE_NAME|escapejs }}",
+
       hours: (function() {
+
         const hours = [];
+
         hours.length = 24;
+
         hours.fill('');
+
         return hours.map((el, index) => `${index < 10 ? '0' : ''}${index}:00`);
+
       })(),
+
       stations: [
+
         {% for station in station_list %}
+
         {
+
           value: {{ station.id }}, 
+
           text: "{{ station.name | safe }} - {{ station.code }}",
+
           is_automatic: "{{ station.is_automatic | safe }}",
+
           is_synoptic: "{{ station.is_synoptic | safe }}",
+
         },
+
         {% endfor %}
+
       ],
+
       station: null,
+
       measurement_variable: null,
+
       source: 0,
+
       sources: [
+
         {value: 0, text: "Raw data"},
+
         {value: 1, text: "Hourly summary"},
+
         {value: 2, text: "Daily summary"},
+
         {value: 3, text: "Monthly summary"},
+
         {value: 4, text: "Yearly summary"},
+
       ],
+
       day_limits: [
+
         15,
+
         30,
+
         365,
+
       ],
+
       manual_stations_day_limits: [
+
         365,
+
         365,
+
         365,
+
       ],
+
       synop_manual_stations_day_limits: [
+
         30,
+
         30,
+
         365,
+
       ],
+
       initial_date_menu: false,
+
       initial_date:  moment().format('YYYY-MM-DD'),
+
       initial_time_menu: false,
+
       initial_time: '00:00',
+
       final_date_menu: false,
+
       final_date: moment().add(1, 'days').format('YYYY-MM-DD'),
+
       final_time_menu: false,
+
       final_time: '00:00',
+
       valid_data: false,
+
       tabs: [],
+
       tab: null,
+
       data: {},
+
       filteredData: {},
+
       tableHeadersList: {},
+
       tableItemsList: {},
+
+      // Flat numeric/date fields for Vuetify sorting and paging; nested original rows remain for exports.
+      displayTableItemsList: {},
+      summaryMetrics: ['SUM', 'AVG', 'MIN', 'MAX', 'STDDEV', 'COUNT'],
+
       summaries: {},
+
       error_message: "",
+
       error: false,
+
       loading: false,
+
       rendering: false,
+
       no_data: false,
+
     },
+
     mounted() {
+
       window.addEventListener("load", () => {
+
         this.setStationAndRunQuery();
+
       });
+
       if(this.stations)
+
         this.station = this.stations[0]
+
     },
+
     methods: {
 
+
+
       parseBool(str) {
+
         if (typeof str === 'string') {
+
           return str.toLowerCase() === 'true';
+
         }
+
         return !!str; // Handle non-string values using truthiness if needed
+
       },
+
+
 
       setStationAndRunQuery(stationId) {
+
         const queryString = window.location.search;
+
         const urlParams = new URLSearchParams(queryString);
+
         const station_id = urlParams.get('station_id')
+
         const start_date = urlParams.get('start_date')
+
         const end_date = urlParams.get('end_date')
+
         const measurement_variable = urlParams.get('measurement_variable')
 
+
+
         this.station = this.stations.find(station => station['value'] == station_id);
+
         if(station_id && start_date && end_date && measurement_variable){
+
           this.initial_date = moment.utc(start_date).format('YYYY-MM-DD')
+
           this.final_date = moment.utc(end_date).format('YYYY-MM-DD')
+
           this.measurement_variable = measurement_variable
+
           this.fetchData();
+
         } else if(station_id && start_date && end_date) {
+
           this.initial_date = moment.utc(start_date).format('YYYY-MM-DD')
+
           this.final_date = moment.utc(end_date).format('YYYY-MM-DD')
+
           this.fetchData();
+
         } else if(station_id) {
+
           this.fetchData();
+
         }
+
       },
-      
+
       getParams() {
+
         let params = '?';
+
         let initial_datetime = this.formatDatetimeForRequest(moment(`${this.initial_date} ${this.initial_time}`).tz(this.timezone, true));
+
         let final_datetime = this.formatDatetimeForRequest(moment(`${this.final_date} ${this.final_time}`).tz(this.timezone, true));
+
         params += 'station=' +  this.station['value'];
+
         params += '&initial_datetime=' + initial_datetime;
+
         params += '&final_datetime=' + final_datetime;
+
         params += '&source=' + this.source;
+
         return params;
+
       },
-      
+
       formatDatetimeForRequest(datetime){
+
         if (this.source === 0 || this.source === 1)
+
           return datetime.utc().format('YYYY-MM-DDTHH:mm:ss[Z]');
+
         else
+
           return datetime.format('YYYY-MM-DD');
+
       },
+
+
 
       formatDatetimeForDataTable(datetime){
+
         if (this.source === 0 || this.source === 1)
+
           return datetime.format('YYYY-MM-DD HH:mm');
+
         else if (this.source === 2 || this.source === 3)
+
           return datetime.format('YYYY-MM-DD');
+
         else
+
           return datetime.format('YYYY');
+
       },
+
+
 
       fetchData() {
+
         this.loading = true;
+
         this.no_data = false;
+
         this.tabs = [];
 
+
+
         const startDate = new Date(this.initial_date);
+
         const endDate   = new Date(this.final_date);
+
         const days = (endDate.getTime() - startDate.getTime()) / (1000*60*60*24);
 
+
+
         const station_is_automatic = this.parseBool(this.station.is_automatic)
+
         const station_is_synoptic = this.parseBool(this.station.is_synoptic)
 
+
+
         // checks if the station is manual and synoptic and the source is raw_data, hourly sum or daily sum
+
         if (
+
           !station_is_automatic && 
+
           station_is_synoptic && 
+
           [0, 1, 2].includes(this.sources[this.source].value) &&
+
           days > this.synop_manual_stations_day_limits[this.source]
+
         ) {
 
+
+
           this.error_message = `
+
                                 The maximum number of days for a ${this.sources[this.source].text.toLowerCase()} report
+
                                 is ${this.synop_manual_stations_day_limits[this.source]} 
+
                                 for a Manual Synoptic station.
+
                               `;
+
           this.loading = false;
+
           this.error = true;
 
+
+
         }
+
         // checks if the station is just manual and the source is raw_data, hourly sum or daily sum
+
         else if (
+
           !station_is_automatic && 
+
           [0, 1, 2].includes(this.sources[this.source].value) &&
+
           days > this.manual_stations_day_limits[this.source]
+
         ) {
 
+
+
           this.error_message = `
+
                                 The maximum number of days for a ${this.sources[this.source].text.toLowerCase()} report
+
                                 is ${this.manual_stations_day_limits[this.source]} 
+
                                 for a Manual station.
+
                               `;
+
           this.loading = false;
+
           this.error = true;
 
+
+
         }
+
         // These checks are only done on Raw Data, Daily & Hourly Summary. Monthly & Yearly Summary default to the else statement
+
         else if (station_is_automatic &&  days > this.day_limits[this.source]) {
+
           this.error_message = 'The maximum number of days for ' + this.sources[this.source].text.toLowerCase() + ' report is ' + this.day_limits[this.source];
+
           this.loading = false;
+
           this.error = true;
+
         } 
+
         else {
+
           this.error = false;
 
+
+
           axios.get( document.getElementById('data-url').value + this.getParams()).then(data => {
+
             this.loading = false;
+
             this.rendering = true;
+
             this.currentSource = this.source;
+
             this.data = Object.assign({}, data.data);
+
             this.filteredData = Object.assign({}, data.data);
-            
+
             this.tabs = Object.keys(this.data).sort();
-            
+
             if (this.tabs.length > 0) {
+
               if(this.source === 2 || this.source === 3 || this.source === 4) // Daily, Monthly and Yearly dates comes as with a calculated timezone
+
                 Highcharts.setOptions({
+
                   time: {
+
                     timezone: 'UTC'
+
                   }
+
                 });
+
               else
+
                 Highcharts.setOptions({
+
                   time: {
+
                     timezone: this.timezone
+
                   }
+
                 });
+
               this.tabs.forEach(tab => {
+
                 this.data[tab].series.forEach(el => {
+
                   if (this.source === 4)
+
                     el.tooltip = {
+
                       headerFormat: '<span style="font-size: 10px">{point.x:%Y}</span><br/>',
+
                     }
+
                   el.turboThreshold = 0;
+
                   el.data.forEach(i => {
+
                     if(this.source === 2 || this.source === 3 || this.source === 4) // Daily, Monthly and Yearly dates comes as with a calculated timezone
+
                       i.xFormated = this.formatDatetimeForDataTable(moment.utc(i.x).tz(this.timezone, true))
+
                     else
+
                       i.xFormated = this.formatDatetimeForDataTable(moment.utc(i.x).tz(this.timezone))
+
                   })
+
                 });
+
               });
+
             }
+
             this.allData = JSON.parse(JSON.stringify(data.data));
+
             // sessionStorage.setItem('stationReport:originalData', JSON.stringify(data.data));
+
           }).then(data => {
+
             this.createTables();
+
             if (this.tabs.length > 0) {
+
               window.requestAnimationFrame(evt => {
+
                 this.tabs.forEach(tab => {
 
-                  const $table = $('#datatable-' + tab);
+
+
+                  // The v-data-table reacts automatically to createTable(tab).
+
                   const xAxis = Object.assign({}, this.data[tab].xAxis, {
+
                     events:{
+
                       afterSetExtremes: (evt) => {
+
                         this.filteredData = JSON.parse(JSON.stringify(this.allData));
+
                         // this.filteredData = JSON.parse(sessionStorage.getItem('stationReport:originalData'));
+
                         let auxData = Object.assign({}, this.data);
+
                         if (evt.userMin && evt.userMax) {
+
                           const series = auxData[tab].series.map(values => {
+
                             const content = Object.assign({}, values);
+
                             content.data = values.data.filter(item => {
+
                               return item.x >= evt.userMin && item.x <= evt.userMax;
+
                             });
+
                             // content.turboThreshold = 1;
+
                             return content;
+
                           });
+
                           this.filteredData[tab].series = series;
+
                         }
-                        
+
+                        // Updates the reactive Vuetify rows and their summary metrics.
                         this.createTable(tab);
-                        this.$forceUpdate();
-                        $table.DataTable().destroy();
-                        
-                        setTimeout(() => {
-                          $table.DataTable({
-                            lengthMenu: [[ 50, 100, 300, 500, -1 ], [ 50, 100, 300, 500, "All"]],
-                            rowCallback: this.setCellColor(),
-                          });
-                        }, 200);
+
                       }
+
                     }
+
                   });
+
                   if(this.source === 4)
+
                     xAxis.labels.format = "{value:%Y}"
 
+
+
                   this.data[tab].xAxis = xAxis;
+
                   this.data[tab].xAxis.type = 'datetime';
+
                   Highcharts.chart(tab+'-chart', this.data[tab]);
 
-                  $table.DataTable(
-                    {
-                      lengthMenu: [[ 50, 100, 300, 500, -1 ], [ 50, 100, 300, 500, "All"]],
-                      rowCallback: this.setCellColor(),
-                    }
-                  );
                 });
+
               });
 
+
+
               if(this.measurement_variable)
+
                 this.$refs[`tab-${this.measurement_variable}`][0].toggle()
+
             } else {
+
               this.no_data = true;
+
             }
+
             this.rendering = false;
+
           })
+
         }
+
       },
+
+
 
       changeSource(){
+
         if(this.source === 3) {
+
           this.initial_date = moment().format('YYYY-MM')
+
           this.final_date = moment().add(1, 'month').format('YYYY-MM')
+
         } else if(this.source === 4) {
+
           this.initial_date = moment().format('YYYY-01')
+
           this.final_date = moment().add(1, 'year').format('YYYY-01')
+
         }
+
       },
+
+
 
       createTables: function() {        
+
         for(let i in this.tabs) {
+
           this.createTable(this.tabs[i]);
+
         }
+
       },
 
+
+
       createTable: function(key) {
-        this.tableItemsList[key] = [];
-        this.tableHeadersList[key] = [{
-          value: "datetime",
-          text: this.source === 3 || this.source === 4 ? "REFERENCE" : "DATE",
+        const rows = [];
+        const rowByDatetime = new Map();
+        const headers = [{
+          value: 'datetime',
+          text: this.source === 3 || this.source === 4 ? 'REFERENCE' : 'DATE',
+          sortable: true,
         }];
-        
+
         this.filteredData[key].series.forEach(series => {
-          const vname = series.name
-          this.summaries[vname] = {};
-          this.summaries[vname]['SUM'] = 'loading...';
-          this.summaries[vname]['AVG'] = 'loading...';
-          this.summaries[vname]['MIN'] = 'loading...';
-          this.summaries[vname]['MAX'] = 'loading...';
-          this.summaries[vname]['STDDEV'] = 'loading...';
-          this.summaries[vname]['COUNT'] = 'loading...';
-          
-          this.tableHeadersList[key].push({
-            value: vname,
-            text: vname + " (" + series.unit + ")",
+          const variableName = series.name;
+          // Ensure the summary object exists before statistics are calculated.
+          this.$set(this.summaries, variableName, {});
+          headers.push({
+            value: variableName,
+            text: variableName + ' (' + series.unit + ')',
+            sortable: true,
           });
 
-          for (let j in series.data) {
-            let found = false;
-            
-            let dt = series.data[j].xFormated;
-
-            for (let k=0; k<this.tableItemsList[key].length && !found; k++) {
-              if (this.tableItemsList[key][k].datetime.value == dt) {
-                this.tableItemsList[key][k][vname] = { 
-                  value: series.data[j].y
-                };
-                if (this.source === 0) {
-                  this.tableItemsList[key][k][vname].color = series.data[j].flag_color;
-                }
-                found = true;
-              }
+          // Reuse the existing nested values/flag colors for CSV and QC display.
+          series.data.forEach(point => {
+            const datetime = point.xFormated;
+            let row = rowByDatetime.get(datetime);
+            if (!row) {
+              row = { datetime: { value: datetime } };
+              rowByDatetime.set(datetime, row);
+              rows.push(row);
             }
-
-            if (!found) {
-              this.tableItemsList[key].push({
-                datetime: { value: dt },
-              })
-              this.tableItemsList[key][this.tableItemsList[key].length-1][vname] = {
-                value: series.data[j].y
-              };
-              if (this.source === 0) {
-                this.tableItemsList[key][this.tableItemsList[key].length-1][vname].color = series.data[j].flag_color;
-              }
+            row[variableName] = { value: point.y };
+            if (this.source === 0) {
+              row[variableName].color = point.flag_color;
             }
-          }
+          });
         });
+
+        // Vue 2 requires $set when inserting/replacing dynamically named keys.
+        this.$set(this.tableHeadersList, key, headers);
+        this.$set(this.tableItemsList, key, rows);
         this.updateStatistics(key);
+
+        // The original rows contain {value, color} objects, which Vuetify
+        // would sort as objects rather than dates/numbers. Supply flat sortable
+        // fields and keep the originals under __cells for rendering/export.
+        const displayRows = rows.map((row, index) => {
+          const flat = { __rowIndex: index, __cells: row };
+          headers.forEach(header => {
+            const cell = row[header.value];
+            let value = cell && cell.value != null ? cell.value : null;
+            if (header.value !== 'datetime' && typeof value === 'string' &&
+                value.trim() !== '' && Number.isFinite(Number(value))) {
+              value = Number(value);
+            }
+            flat[header.value] = value;
+          });
+          return flat;
+        });
+        displayRows.sort((a, b) => String(a.datetime).localeCompare(String(b.datetime)));
+        this.$set(this.displayTableItemsList, key, displayRows);
+      },
+
+      // Raw observations can carry the QC flag color in each cell.
+      getReportCellStyle(cell, column) {
+        if (this.currentSource === 0 && column !== 'datetime' && cell && cell.color) {
+          return { backgroundColor: cell.color };
+        }
+        return {};
+      },
+
+      // Match the original MIN/MAX highlighting; exclude blank observations.
+      reportValueClass(variableName, cell) {
+        if (variableName === 'datetime' || !cell || cell.value == null ||
+            cell.value === '' || !Number.isFinite(Number(cell.value))) return '';
+        const stats = this.summaries[variableName];
+        if (!stats) return '';
+        if (stats.MAX && stats.MAX.value != null && Number(cell.value) === Number(stats.MAX.value)) {
+          return 'max-value';
+        }
+        if (stats.MIN && stats.MIN.value != null && Number(cell.value) === Number(stats.MIN.value)) {
+          return 'min-value';
+        }
+        if(cell.value == -99.9) {
+          console.log(cell);
+          return 'white_text';
+        }
+        return '';
+      },
+
+      // A real zero or negative SUM is a result, not a missing value.
+      summaryDisplay(variableName, metric) {
+        const stats = this.summaries[variableName];
+        if (!stats) return '—';
+        if (metric === 'COUNT') return stats.COUNT == null ? '—' : stats.COUNT;
+        if (!stats.COUNT) return '—';
+        const result = stats[metric];
+        const value = (metric === 'MIN' || metric === 'MAX') ? result && result.value : result;
+        return value == null || value === '' ? '—' : value;
       },
 
       updateStatistics(key) {
-        for(let v=1; v<this.tableHeadersList[key].length; v++){
-          let avg;
+        const rows = this.tableItemsList[key] || [];
+        const headers = this.tableHeadersList[key] || [];
+
+        // Each variable has its own statistics. Set the entire result through
+        // Vue 2's $set so chart zooms refresh the table's summary rows.
+        headers.slice(1).forEach(header => {
+          const variableName = header.value;
           let sum = 0;
-          let validSum = 0; // Just in case the 'sum' variable get some 'null' value in some point. That will be invalid to make statistics like avg, for example.
-          let count = 0;
           let min = null;
-          let min_ts = null;
           let max = null;
-          let max_ts = null;
-          let stddev = 0;
+          let minTimestamp = null;
+          let maxTimestamp = null;
+          const validValues = [];
 
-          for(let item=0; item<this.tableItemsList[key].length; item++) {
-            let value = (this.tableItemsList[key][item][this.tableHeadersList[key][v].value] || {}).value;
-            if(value != null && !isNaN(value)) {
-              count += 1;
-              sum += value;
-              if(min == null || min > value) {
-                min = value;
-                min_ts = this.tableItemsList[key][item]['datetime'].value;
-              }
-              if(max == null || max < value) {
-                max = value;
-                max_ts = this.tableItemsList[key][item]['datetime'].value;
-              }
-            }
-          }
+          rows.forEach(row => {
+            const cell = row[variableName];
+            const rawValue = cell ? cell.value : null;
+            // Zero and negative values are valid observations; blanks are not.
+            if (rawValue === null || rawValue === undefined || rawValue === '') return;
 
-          if(count > 0) {
-            avg = sum / count;
-            if(count > 1) {              
-              for(let item=0; item<this.tableItemsList[key].length; item++) {
-                let value = (this.tableItemsList[key][item][this.tableHeadersList[key][v].value] || {}).value;
-                if(value != null && !isNaN(value)) {
-                  stddev += Math.pow((value - avg), 2);
-                }
-              }
-              stddev = Math.sqrt(stddev / (count))
+            const value = Number(rawValue);
+
+            // Exclude missing data from statistical calculations
+            if (!Number.isFinite(value) || value === -99.9) return;
+
+            validValues.push(value);
+            sum += value;
+            if (min === null || value < min) {
+              min = value;
+              minTimestamp = row.datetime.value;
             }
-          }else{
-            avg = null;
-            stddev = null;
-          }
-          this.summaries[this.tableHeadersList[key][v].value]['SUM'] = sum !== null ? sum.toFixed(2) : null;
-          this.summaries[this.tableHeadersList[key][v].value]['AVG'] = avg !== null ? avg.toFixed(2) : null;
-          this.summaries[this.tableHeadersList[key][v].value]['MIN'] = {
-            value: min !== null ? min.toFixed(2) : null,
-            timestamp: min_ts
-          }
-          this.summaries[this.tableHeadersList[key][v].value]['MAX'] = {
-            value: max !== null ? max.toFixed(2) : null,
-            timestamp: max_ts
-          }
-          this.summaries[this.tableHeadersList[key][v].value]['STDDEV'] = stddev !== null ? stddev.toFixed(2): null;
-          this.summaries[this.tableHeadersList[key][v].value]['COUNT'] = count;
-        }
+            if (max === null || value > max) {
+              max = value;
+              maxTimestamp = row.datetime.value;
+            }
+          });
+
+          const count = validValues.length;
+          const avg = count ? sum / count : null;
+          // Keep the original population standard deviation (divide by count).
+          const stddev = count > 1
+            ? Math.sqrt(validValues.reduce((total, value) => total + Math.pow(value - avg, 2), 0) / count)
+            : (count === 1 ? 0 : null);
+
+          this.$set(this.summaries, variableName, {
+            SUM: count ? sum.toFixed(2) : null,
+            AVG: avg === null ? null : avg.toFixed(2),
+            MIN: { value: min === null ? null : min.toFixed(2), timestamp: minTimestamp },
+            MAX: { value: max === null ? null : max.toFixed(2), timestamp: maxTimestamp },
+            STDDEV: stddev === null ? null : stddev.toFixed(2),
+            COUNT: count,
+          });
+        });
       },
+
 
       getDatepickFormat(){
+
           return this.source === 4 || this.source === 3 ? 'month': 'date';
+
       },
+
+
 
       allowedDates(val){
+
           if(this.source === 4)
+
             return val.split('-')[1] == '01' // just january
+
           return true;
+
       },
 
-      arrayToCSV(array) {
-        const header = "data:text/csv;charset=utf-8,";
-        const keys = Object.keys(array[0]);
-        let result = keys.join(",") + "\n";
-        array.forEach(function(obj){
-            result += keys.map(k => obj[k].value).join(",") + "\n";
+
+
+      arrayToCSV(array, headers) {
+        if (!array || !array.length) return null;
+
+        // Use all headers, not the keys of the first row: observations can be sparse.
+        const keys = (headers || []).map(header => header.value);
+        const escapeCell = value => {
+          const str = value == null ? '' : String(value);
+          return /[",\r\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+        };
+
+        const lines = [keys.map(escapeCell).join(',')];
+        array.forEach(row => {
+          lines.push(keys.map(key => {
+            const cell = row[key];
+            return escapeCell(cell ? cell.value : '');
+          }).join(','));
         });
-        return header + encodeURIComponent(result);
+        return 'data:text/csv;charset=utf-8,' + encodeURIComponent(lines.join('\r\n'));
       },
+
 
       exportCSV(key) {
-        const csvContent = this.arrayToCSV(this.tableItemsList[key]);
+
+        const csvContent = this.arrayToCSV(this.tableItemsList[key], this.tableHeadersList[key]);
+        if (!csvContent) return;
+
         const link = document.createElement("a");
+
         let variableName = this.tab.slice(4);
+
         link.download = `${this.station['text']} ${variableName} ${this.initial_date} - ${this.final_date}.csv`;
+
         link.href = csvContent;
+
         const event = new MouseEvent('click');
+
         link.dispatchEvent(event);
+
       },
 
-      setCellColor() {
-        if (this.source === 0) {
-          return (row, data, index) => {
-            for (let i = 1; i < data.length; i++) {
-              const element = $(row).find('td:eq('+i+')');
-              const color = element.attr('data-color');
-              element.css('background-color',  color);
-            }
-          }
-        }
-        return (row, data, index) => {
-          for (let i = 1; i < data.length; i++) {
-            // $(row).find('td:eq('+i+')').css('color', this.getColor(parseFloat(data[i]), this.tableHeadersList[this.tab.slice(4)][i].value));
-            $(row).find('td:eq('+i+')').css('color', "#000");
-          }
-        }
-      },
+
 
       getColor(value, variable) {
+
         if(this.summaries[variable]['MAX'].value == value.toFixed(2)) {
+
           if (!['PRECIP', 'SOLRHEAT', 'SOLARRAD'].includes(variable) || value > 0.0) {
+
             return "#f00";
+
           }
+
         }
+
         if(this.summaries[variable]['MIN'].value == value.toFixed(2)) {
+
           if (!['PRECIP', 'SOLRHEAT', 'SOLARRAD'].includes(variable) || value > 0.0) {
+
             return "#00f";
+
           }
+
         }
+
         return "#000";
+
       },
+
     },
+
   });
-  
+
 </script>
-{% endblock %}
 
-{% block extrastyle %}
 <style>
-  .space-between {
-    display: flex;
-    flex-direction: row;
-    width: 100%;
-    justify-content: space-between;
-  }
+  [v-cloak] { display: none; }
 
-  .table-legend {
-    display: flex;
-    padding: 6px;
-    border: 1px solid grey;
-    border-radius: 12px
-  }
+  /* Station report scope: never tint the application's main background. */
+  .sr-page { padding: 35px !important; max-height: none !important; background: #fff !important; }
+  .sr-page .sr-app, .sr-page .sr-app .v-application--wrap { background: #fff !important; min-height: auto; }
+  .sr-page .sr-shell { width: 100%; padding: 0 8px 40px; margin: 0 auto; }
+  .sr-page .sr-page-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
+  .sr-page .sr-page-header h1 { color: #252c34; margin: 0 0 6px; }
+  .sr-page .sr-page-header p { font-size: 14px; margin: 0; color: #6b7280; }
 
-  .table-legend .column {
-    display: flex;
-    flex-direction: column;
-  }
+  .sr-page .sr-panel { border: 1px solid #e2e5e9; border-radius: 11px; background: #fff; box-shadow: 0 2px 10px rgba(20,29,38,.025); }
+  .sr-page .sr-filters { padding: 22px 24px 19px; }
+  .sr-page .sr-panel-heading { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid #edf0f2; margin-bottom: 21px; }
+  .sr-page .sr-panel-heading-main { display: flex; align-items: center; gap: 12px; }
+  .sr-page .sr-panel-icon { height: 37px; width: 37px; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; border: 1px solid #e7e8ec; border-radius: 9px; background: #f9fafb; }
+  .sr-page .sr-panel-heading h2, .sr-page .sr-results-header h2 { font-size: 17px; line-height: 1.35; font-weight: 700; color: #252e38; margin: 0; }
+  .sr-page .sr-panel-heading p, .sr-page .sr-results-header p { color: #77818e; font-size: 12.5px; margin: 3px 0 0; }
+  .sr-page .sr-filter-form { margin: 0; padding: 0; }
+  .sr-page .sr-field-label { font-size: 11px; color: #78828e; font-weight: 700; letter-spacing: .65px; margin-bottom: 14px; }
+  .sr-page .sr-main-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .sr-page .sr-period-label { margin-top: 23px; }
+  .sr-page .sr-periods { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .sr-page .sr-period-box { border: 1px solid #e6e9ec; background: #fcfcfd; border-radius: 9px; padding: 14px 16px 16px; min-width: 0; }
+  .sr-page .sr-period-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; min-height: 20px; }
+  .sr-page .sr-period-heading h3 { font-size: 14px; font-weight: 700; color: #333c48; margin: 0; }
+  .sr-page .sr-period-heading span:last-child { margin-left: auto; color: #8a94a0; font-size: 11px; }
+  .sr-page .sr-dot { display: inline-block; height: 8px; width: 8px; border-radius: 50%; }
+  .sr-page .sr-dot-from { background: #15956d; }
+  .sr-page .sr-dot-to { background: #df9643; }
+  .sr-page .sr-period-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: start; gap: 12px; }
+  .sr-page .sr-period-fields.sr-one-field { grid-template-columns: 1fr; }
+  .sr-page .sr-period-fields > * { min-width: 0; }
+  .sr-page .sr-period-fields .v-input { min-width: 0; }
+  .sr-page .sr-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 1px solid #edf0f2; margin-top: 20px; padding-top: 18px; }
+  .sr-page .sr-form-hint { display: flex; align-items: center; gap: 8px; color: #77818d; font-size: 12px; max-width: 560px; }
+  .sr-page .sr-run-btn { min-height: 39px; padding: 0 18px !important; letter-spacing: 0 !important; font-weight: 600; }
 
-  .item {
-    display: flex;
-    justify-content: start;
-    align-items: center;
-    min-width: 115px;
-  }
+  .sr-page .sr-messages { margin-top: 16px; }
+  .sr-page .sr-messages > .v-alert:not(.v-alert--is-displayed) { margin: 0; }
+  .sr-page .sr-progress-panel { border: 1px solid #e2e7ed; border-radius: 10px; padding: 20px; background: #fff; margin: 16px 0; }
+  .sr-page .sr-progress-row { display: flex; align-items: center; gap: 13px; }
+  .sr-page .sr-progress-row strong { display: block; color: #35404b; font-size: 13px; }
+  .sr-page .sr-progress-row span { color: #7b8591; display: block; font-size: 12px; margin-top: 2px; }
+  .sr-page .sr-empty-state { margin-top: 26px; border: 1px dashed #d7dfe5; border-radius: 11px; padding: 45px 18px; text-align: center; background: #fff; }
+  .sr-page .sr-empty-state h2 { font-size: 16px; font-weight: 700; color: #394351; margin: 12px 0 5px; }
+  .sr-page .sr-empty-state p { font-size: 13px; color: #7f8a96; max-width: 530px; margin: auto; }
 
-  .item .color {
-    width: 16px;
-    height: 16px;
-  }
+  .sr-page .sr-results { margin-top: 31px; }
+  .sr-page .sr-results-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sr-page .sr-station-context { display: flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid #e3e6ea; border-radius: 7px; font-size: 12px; font-weight: 600; color: #5e6977; max-width: 100%; }
+  .sr-page .sr-tabs-frame { border: 1px solid #e2e5ea; background: #fafbfc; border-radius: 9px; padding: 5px 8px 5px 8px; }
+  .sr-page .sr-variable-tabs { background: transparent !important; }
+  .sr-page .sr-tabs-content { overflow: visible; background: #fff !important; }
+  .sr-page .sr-report-stack { display: grid; grid-template-columns: minmax(0,1fr); gap: 19px; padding: 21px 0 4px; }
+  .sr-page .sr-chart-panel { padding: 20px 22px 15px; min-width: 0; }
+  .sr-page .sr-table-panel { padding: 0; min-width: 0; overflow: hidden; }
+  .sr-page .sr-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 15px; margin-bottom: 14px; border-bottom: 1px solid #eef0f2; }
+  .sr-page .sr-section-heading h3 { font-size: 16px; color: #27313c; font-weight: 700; margin: 0; }
+  .sr-page .sr-section-heading p { font-size: 12px; color: #7c8793; margin: 3px 0 0; }
+  .sr-page .sr-section-kind { font-size: 12px; color: #86919b; display: inline-flex; gap: 5px; align-items: center; }
+  .sr-page .sr-chart-body { padding: 8px 0 0; min-width: 0; }
+  .sr-page .sr-table-heading { padding: 20px 22px 17px; margin: 0; }
+  .sr-page .sr-download-btn { font-weight: 600; letter-spacing: 0; }
+  .sr-page .sr-table-scroll { padding: 17px 20px 18px; width: 100%; overflow-x: auto; }
 
-  .item .type {
-    width: 16px;
-    height: 16px;
-    font-size: 12px;
-  }
+  /* Native Vuetify v-data-table; no jQuery DataTables wrappers required. */
+  .sr-page .sr-report-vtable { width: 100%; color: #3b4653; font-size: 12.5px; }
+  .sr-page .sr-report-vtable .v-data-table__wrapper { overflow-x: auto; }
+  .sr-page .sr-report-vtable table { min-width: 550px; width: 100%; border-collapse: collapse; }
+  .sr-page .sr-report-vtable thead th { background: #f5f7f9; color: #485563 !important; font-size: 12px; padding: 12px 13px !important; font-weight: 700; border: 1px solid #e4e8eb !important; white-space: nowrap; }
+  .sr-page .sr-report-vtable thead th .v-icon { color: #6d7b88 !important; }
+  .sr-page .sr-timezone-label { display: block; font-size: 10.5px; color: #8994a0; font-weight: 400; white-space: nowrap; }
+  .sr-page .sr-report-vtable tbody td { height: 38px; padding: 9px 13px !important; border: 1px solid #edf0f2 !important; vertical-align: middle; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sr-page .sr-report-vtable tbody tr:not(.sr-summary-row):nth-child(even) { background: #fbfcfd; }
+  .sr-page .sr-report-vtable tbody tr:not(.sr-summary-row):hover { background: #f4f6f8; }
+  .sr-page .sr-report-vtable .sr-date-cell { font-weight: 600; color: #495460; }
+  .sr-page .sr-report-vtable .min-value { color: #2563eb; font-weight: 700; }
+  .sr-page .sr-report-vtable .max-value { color: #d32f2f; font-weight: 700; }
+  .sr-page .sr-report-vtable .white_text { color: #fff; }
+  .sr-page .sr-report-vtable tbody .sr-summary-row td { background: #fafbfc; border: 1px solid #e5e9ed !important; padding: 10px 12px !important; height: auto; }
+  .sr-page .sr-report-vtable tbody .sr-summary-row:first-of-type td { border-top: 2px solid #d8dfe6 !important; }
+  .sr-page .sr-report-vtable tbody .sr-summary-row .sr-summary-label { color: #576370; font-weight: 700; font-size: 11.5px; }
+  .sr-page .sr-report-vtable .v-data-footer { font-size: 12px; color: #647281; border-top: 1px solid #e6eaf0; }
+  .sr-page .sr-report-vtable .v-data-footer__select .v-select { margin-left: 10px; }
+  .sr-page .sr-statistics-note { padding: 10px 3px 0; margin: 0; color: rgb(245, 104, 104); font-size: 11px; }
+  .sr-page .sr-extreme-label { color: #87919c; font-weight: 400; font-size: 10.5px; margin-top: 3px; }
+  .sr-page .sr-extreme-time { font-size: 11px; font-weight: 400; color: #717d89; }
 
-  .item .name {
-    padding-left: 4px;
-    font-size: 14px;
-  }
+  .sr-page .sr-legend-top { display: flex; align-items: flex-start; gap: 13px; flex-wrap: wrap; padding: 14px 21px; border-bottom: 1px solid #eef0f2; background: #fcfcfd; }
+  .sr-page .sr-legend-title { color: #5b6774; font-size: 12px; font-weight: 700; white-space: nowrap; padding-top: 1px; }
+  .sr-page .sr-legend-items { display: flex; align-items: center; flex-wrap: wrap; column-gap: 18px; row-gap: 9px; }
+  .sr-page .sr-legend-entry { font-size: 11.5px; color: #687584; display: inline-flex; align-items: center; gap: 6px; }
+  .sr-page .sr-extreme-sample { font-weight: 700; font-size: 13px; min-width: 16px; }
+  .sr-page .sr-status-dot { display: inline-block; height: 10px; width: 10px; border-radius: 3px; border: 1px solid rgba(0,0,0,.08); }
+  .sr-page .good-quality { background-color: {{ quality_flag_colors.Good }}; }
+  .sr-page .bad-quality { background-color: {{ quality_flag_colors.Bad }}; }
+  .sr-page .suspicious { background-color: {{ quality_flag_colors.Suspicious }}; }
+  .sr-page .missing { background-color: {{ quality_flag_colors.Missing|default:'#b0bec5' }}; }
+  .sr-page .not-checked { background-color: {{ quality_flag_colors.Not_checked }}; }
+  .sr-page .min-value { color: #2a63d6; }
+  .sr-page .max-value { color: #cc3447; }
 
-  .good-quality {
-    background-color: {{ quality_flag_colors.Good }};
-  }
+  /* Keep Vuetify's outlined fields looking like outlined fields, not legacy underlines. */
+  .sr-page .v-text-field input:not([type=checkbox]):not([type=radio]),
+  .sr-page .v-text-field input:focus { border-bottom: 0 !important; box-shadow: none !important; outline: none !important; }
+  .sr-page .v-text-field--outlined .v-input__slot { background: #fff !important; }
+  .sr-page .v-text-field--outlined fieldset { border-color: #d6dde5; }
 
-  .bad-quality {
-    background-color: {{ quality_flag_colors.Bad }};
+  @media (max-width: 1000px) {
+    .sr-page .sr-periods { grid-template-columns: 1fr; }
   }
-
-  .not-checked {
-    background-color: {{ quality_flag_colors.Not_checked }};
-  }
-
-  .suspicious {
-    background-color: {{ quality_flag_colors.Suspicious }};
-  }
-
-  .max-heigh-100{
-    max-height: 100px;
-    overflow: auto;
-  }
-
-  .min-value {
-    color: #0000ff;
-  }
-
-  .max-value {
-    color: #ff0000;
-  }
-
-  .add-comma:not(:last-child):after {
-    content: ", ";
-  }
-
-  .highcharts-data-table table {
-      border-collapse: collapse;
-      border-spacing: 0;
-      background: white;
-      min-width: 100%;
-      margin-top: 10px;
-      font-family: sans-serif;
-      font-size: 0.9em;
-  }
-
-  .highcharts-data-table td, .highcharts-data-table th, .highcharts-data-table caption {
-      border: 1px solid silver;
-      padding: 0.5em;
-  }
-
-  .highcharts-data-table tr:nth-child(even), .highcharts-data-table thead tr {
-      background: #f8f8f8;
-  }
-
-  .highcharts-data-table tr:hover {
-      background: #eff;
-  }
-
-  .highcharts-data-table caption {
-      border-bottom: none;
-      font-size: 1.1em;
-      font-weight: bold;
-  }
-
-  table.dataTable tfoot th, table.dataTable tfoot td {
-    padding: 2px;
-    border-top: 1px solid #ddd;
+  @media (max-width: 680px) {
+    .sr-page { padding: 12px !important; }
+    .sr-page .sr-shell { padding: 0 2px 28px; }
+    .sr-page .sr-page-header { margin-bottom: 18px; }
+    .sr-page .sr-filters { padding: 16px 15px 14px; }
+    .sr-page .sr-main-fields { grid-template-columns: 1fr; gap: 11px; }
+    .sr-page .sr-period-box { padding: 12px 11px 14px; }
+    .sr-page .sr-period-heading span:last-child { display: none; }
+    .sr-page .sr-period-fields { grid-template-columns: 1fr; gap: 6px; }
+    .sr-page .sr-form-footer { flex-direction: column; align-items: stretch; }
+    .sr-page .sr-run-btn { width: 100%; }
+    .sr-page .sr-chart-panel { padding: 15px 11px; }
+    .sr-page .sr-table-heading { padding: 16px 13px 14px; }
+    .sr-page .sr-table-scroll { padding: 13px 10px; }
+    .sr-page .sr-tabs-frame { padding: 0; }
   }
 </style>
 
-<!--Let browser know website is optimized for mobile-->
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/> 
 {% endblock %}
