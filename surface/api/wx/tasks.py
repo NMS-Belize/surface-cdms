@@ -21,6 +21,7 @@ from itertools import islice
 
 import math, cmath
 from matplotlib.transforms import Bbox
+from matplotlib import cm, colors
 from metpy.interpolate import interpolate_to_grid
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
@@ -5834,354 +5835,175 @@ def aquacrop_gen_daily_data():
         logger.error(f'Error on aquacrop_gen_daily_data: {repr(e)}')
 
 
-# fetch interpolation data
+# ########################################################################################
+from .spatial_analysis_helpers import (
+    NO_DATA_IMAGE_URL,
+    clean_custom_points,
+    configured_bounds,
+    fetch_station_observations,
+    validate_image_parameters,
+)
+
+
+def _render_spatial_image(points, image_parameters, bounds):
+    """Apply Cressman interpolation, colorize, and mask the image efficiently.
+
+    Uses the existing country/region alpha-mask image. No hardcoded coordinates,
+    no intermediate PNG, and no Python per-pixel alpha loops.
+    """
+    if not points or len(points) < image_parameters["minimum_neighbors"]:
+        return NO_DATA_IMAGE_URL
+
+    lon = np.asarray([item["longitude"] for item in points], dtype="float64")
+    lat = np.asarray([item["latitude"] for item in points], dtype="float64")
+    values = np.asarray([item["measured"] for item in points], dtype="float64")
+    valid = np.isfinite(lon) & np.isfinite(lat) & np.isfinite(values)
+    valid &= values != float(settings.MISSING_VALUE)
+    if valid.sum() < image_parameters["minimum_neighbors"]:
+        return NO_DATA_IMAGE_URL
+
+    # interpolate_to_grid is the same existing helper your tasks used before.
+    _gx, _gy, grid = interpolate_to_grid(
+        lon[valid],
+        lat[valid],
+        values[valid],
+        interp_type="cressman",
+        minimum_neighbors=image_parameters["minimum_neighbors"],
+        hres=image_parameters["hres"],
+        search_radius=image_parameters["search_radius"],
+        boundary_coords={
+            "west": bounds["west"],
+            "east": bounds["east"],
+            "south": bounds["south"],
+            "north": bounds["north"],
+        },
+    )
+
+    grid = np.ma.masked_invalid(np.ma.asarray(grid, dtype="float64"))
+    if grid.ndim != 2:
+        raise ValueError("Interpolation must return a two-dimensional grid.")
+    if not np.ma.count(grid):
+        return NO_DATA_IMAGE_URL
+
+    rgba = cm.get_cmap(image_parameters["cmap"])(
+        colors.Normalize(vmin=image_parameters["vmin"], vmax=image_parameters["vmax"])(grid),
+        bytes=True,
+    )
+    rgba = np.asarray(rgba, dtype="uint8")
+    # Original implementation used imshow(grid, origin='lower'). cv2.imwrite
+    # writes its first row at the top, so the array must be vertically flipped.
+    rgba = np.flipud(rgba).copy()
+    rgba[..., 3] = np.where(np.flipud(np.ma.getmaskarray(grid)), 0, rgba[..., 3])
+
+    # The PNG mask determines output resolution and the irregular geographic
+    # outline; its alpha combines with the interpolated grid's missing-data alpha.
+    shape_path = settings.SPATIAL_ANALYSIS_SHAPE_FILE_PATH
+    region_mask = cv2.imread(str(shape_path), cv2.IMREAD_UNCHANGED)
+    if region_mask is None:
+        raise FileNotFoundError("Spatial analysis shape/mask image not found: {}".format(shape_path))
+    if region_mask.ndim != 3 or region_mask.shape[2] != 4:
+        raise ValueError("Spatial analysis shape/mask PNG must include an alpha channel.")
+    height, width = region_mask.shape[:2]
+    max_output_pixels = int(getattr(settings, "SPATIAL_ANALYSIS_MAX_OUTPUT_PIXELS", 16000000))
+    if height * width > max_output_pixels:
+        raise ValueError("Shape mask image is too large ({} pixels).".format(height * width))
+
+    rgba = cv2.resize(rgba, (width, height), interpolation=cv2.INTER_LINEAR)
+    shape_alpha = region_mask[..., 3].astype("float32") / 255.0
+    rgba[..., 3] = np.rint(rgba[..., 3].astype("float32") * shape_alpha).astype("uint8")
+
+    out_dir = Path(getattr(settings, "SPATIAL_ANALYSIS_OUTPUT_DIR",
+                           "/surface/static/images/spatial_img"))
+    url_prefix = getattr(settings, "SPATIAL_ANALYSIS_OUTPUT_URL",
+                         "/static/images/spatial_img/").rstrip("/")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filename = "{}.png".format(uuid.uuid4().hex)
+    final_path = out_dir / filename
+    tmp_path = out_dir / ("{}.tmp.png".format(uuid.uuid4().hex))
+    try:
+        # OpenCV expects BGRA when writing PNGs.
+        bgra = cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA)
+        if not cv2.imwrite(str(tmp_path), bgra):
+            raise IOError("Could not write the interpolation PNG.")
+        os.replace(str(tmp_path), str(final_path))
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    return "{}/{}".format(url_prefix, filename)
+
+
 @shared_task
 def fetch_interpolation_data_task(
-    *,
-    start_datetime,
-    end_datetime,
-    variable_id,
-    agg="instant",
-    source="raw_data",
-    quality_flags=None
+    *, start_datetime, end_datetime, variable_id,
+    agg="instant", source="raw_data", quality_flags=None,
 ):
-    """
-    Fetches and aggregates climate interpolation data.
-    Returns a Python dict (Celery-safe).
-    """
-
-    where_query = ""
-
-    # RAW DATA SOURCE LOGIC
-    if source == "raw_data":
-        dt_query = "datetime"
-        value_query = "measured"
-        source_query = "raw_data"
-
-        if quality_flags:
-            try:
-                [int(qf) for qf in quality_flags.split(',')]
-            except ValueError:
-                raise ValueError("Invalid quality_flags value.")
-
-            where_query = (
-                f" measured != {settings.MISSING_VALUE} "
-                f"AND quality_flag IN ({quality_flags}) AND "
-            )
-        else:
-            where_query = f" measured != {settings.MISSING_VALUE} AND "
-
-    # SUMMARY DATA SOURCES
-    else:
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT sampling_operation_id
-                FROM wx_variable
-                WHERE id=%(variable_id)s
-            """, params={'variable_id': variable_id})
-            sampling_operation = cursor.fetchone()[0]
-
-        if sampling_operation in [6, 7]:
-            value_query = "sum_value"
-        elif sampling_operation == 3:
-            value_query = "min_value"
-        elif sampling_operation == 4:
-            value_query = "max_value"
-        else:
-            value_query = "avg_value"
-
-        if source == "hourly":
-            dt_query = "datetime"
-            source_query = "hourly_summary"
-        elif source == "daily":
-            dt_query = "day"
-            source_query = "daily_summary"
-        elif source == "monthly":
-            dt_query = "date"
-            source_query = "monthly_summary"
-        elif source == "yearly":
-            dt_query = "date"
-            source_query = "yearly_summary"
-
-    # TIME FILTERING
-    if agg == "instant":
-        where_query += (
-            "variable_id=%(variable_id)s AND "
-            + dt_query + "=%(datetime)s"
-        )
-        params = {
-            'datetime': start_datetime,
-            'variable_id': variable_id
-        }
-    else:
-        where_query += (
-            "variable_id=%(variable_id)s AND "
-            + dt_query + " >= %(start_datetime)s AND "
-            + dt_query + " <= %(end_datetime)s"
-        )
-        params = {
-            'start_datetime': start_datetime,
-            'end_datetime': end_datetime,
-            'variable_id': variable_id
-        }
-
-    # QUERY EXECUTION
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            SELECT
-                a.station_id,
-                b.name,
-                b.code,
-                b.latitude,
-                b.longitude,
-                a.""" + value_query + """ AS measured
-            FROM """ + source_query + """ a
-            INNER JOIN wx_station b ON a.station_id=b.id
-            WHERE """ + where_query,
-            params=params
-        )
-        raw_data = cursor.fetchall()
-
-    data = []
-
-    for row in raw_data:
-        data.append({
-            'station_id': row[0],
-            'name': row[1],
-            'code': row[2],
-            'latitude': row[3],
-            'longitude': row[4],
-            'measured': row[5],
-        })
-
-    # AGGREGATION
-    if agg != "instant" and raw_data:
-        df = pd.json_normalize(data)
-        data = json.loads(
-            df.groupby(
-                ['station_id', 'name', 'code', 'longitude', 'latitude']
-            )
-            .agg(agg)
-            .reset_index()
-            .sort_values('name')
-            .to_json(orient="records")
-        )
-
+    """Return station values with validated-value and effective-QC precedence."""
+    data = fetch_station_observations(
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+        variable_id=variable_id,
+        agg=agg,
+        source=source,
+        quality_flags=quality_flags,
+    )
     return {"data": data}
 
 
-
-# fetch interpolation image
 @shared_task
 def fetch_interpolation_img_task(
-    start_datetime,
-    end_datetime,
-    variable_id,
-    cmap,
-    hres,
-    minimum_neighbors,
-    search_radius,
-    agg,
-    source,
-    vmin,
-    vmax,
-    quality_flags,
-    stands_llat,
-    stands_llon,
-    stands_ulat,
-    stands_ulon
+    start_datetime, end_datetime, variable_id, cmap, hres, minimum_neighbors,
+    search_radius, agg, source, vmin, vmax, quality_flags,
+    stands_llat, stands_llon, stands_ulat, stands_ulon,
 ):
-
-    # dir where spatial analysis image overlay can be found. Create it if it doesn't exits else just move on
-    out_dir = Path("/surface/static/images/spatial_img") 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    # dir where spatial analysis image overlay can be found. Create it if it doesn't exits else just move on
-    out_dir = Path("/surface/static/images/spatial_img") 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    stations_df = pd.read_sql_query("""
-        SELECT id,name,alias_name,code,latitude,longitude
-        FROM wx_station
-        WHERE longitude!=0
-        """,
-                                    con=connection
-                                    )
-    
-    stations = geopandas.GeoDataFrame(
-        stations_df, 
-        geometry=geopandas.points_from_xy(stations_df.longitude, stations_df.latitude)
+    """Generate an image using the same station values as the data task."""
+    bounds = {
+        "south": float(stands_llat),
+        "west": float(stands_llon),
+        "north": float(stands_ulat),
+        "east": float(stands_ulon),
+    }
+    image_parameters = validate_image_parameters({
+        "cmap": cmap,
+        "hres": hres,
+        "minimum_neighbors": minimum_neighbors,
+        "search_radius": search_radius,
+        "vmin": vmin,
+        "vmax": vmax,
+    }, bounds=bounds)
+    points = fetch_station_observations(
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+        variable_id=variable_id,
+        agg=agg,
+        source=source,
+        quality_flags=quality_flags,
     )
-    
-    stations.crs = 'epsg:4326'
-
-    where_query = ""
-    if source == "raw_data":
-        dt_query = "datetime"
-        value_query = "measured"
-        source_query = "raw_data"
-        if quality_flags:
-            try:
-                [int(qf) for qf in quality_flags.split(',')]
-            except ValueError:
-                raise ValueError("Invalid quality_flags value.")
-
-            where_query = f" measured != {settings.MISSING_VALUE} AND quality_flag IN ({quality_flags}) AND "
-        else:
-            where_query = f" measured != {settings.MISSING_VALUE} AND "
-    else:
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT sampling_operation_id
-                FROM wx_variable
-                WHERE id=%(variable_id)s
-                """,
-                           params={'variable_id': variable_id}
-                           )
-            sampling_operation = cursor.fetchone()[0]
-
-        if sampling_operation in [6, 7]:
-            value_query = "sum_value"
-        elif sampling_operation == 3:
-            value_query = "min_value"
-        elif sampling_operation == 4:
-            value_query = "max_value"
-        else:
-            value_query = "avg_value"
-
-        if source == "hourly":
-            dt_query = "datetime"
-            source_query = "hourly_summary"
-
-        elif source == "daily":
-            dt_query = "day"
-            source_query = "daily_summary"
-
-        elif source == "monthly":
-            dt_query = "date"
-            source_query = "monthly_summary"
-
-        elif source == "yearly":
-            dt_query = "date"
-            source_query = "yearly_summary"
-
-    if agg == "instant":
-        where_query += "variable_id=%(variable_id)s AND " + dt_query + "=%(datetime)s"
-        params = {'datetime': start_datetime, 'variable_id': variable_id}
-    else:
-        where_query += "variable_id=%(variable_id)s AND " + dt_query + " >= %(start_datetime)s AND " + dt_query + " <= %(end_datetime)s"
-        params = {'start_datetime': start_datetime, 'end_datetime': end_datetime, 'variable_id': variable_id}
-
-    climate_data = pd.read_sql_query(
-        "SELECT station_id,variable_id," + dt_query + "," + value_query + """
-        FROM """ + source_query + """
-        WHERE """ + where_query + "",
-        params=params,
-        con=connection
-    )
-
-    if len(climate_data) == 0:
-        return {"data":"/static/images/no-interpolated-data.png"}
-
-    df_merged = pd.merge(left=climate_data, right=stations, how='left', left_on='station_id', right_on='id')
-    df_climate = df_merged[["station_id", dt_query, "longitude", "latitude", value_query]]
-
-    if agg != "instant":
-        df_climate = (
-            df_climate
-            .groupby(['station_id', 'longitude', 'latitude'], as_index=False)
-            .agg({value_query: agg})
-        )
-
-    gx, gy, img = interpolate_to_grid(
-        df_climate["longitude"],
-        df_climate["latitude"],
-        df_climate[value_query],
-        interp_type='cressman',
-        minimum_neighbors=int(minimum_neighbors),
-        hres=float(hres),
-        search_radius=float(search_radius),
-        boundary_coords={'west': stands_llon, 'east': stands_ulon, 'south': stands_llat, 'north': stands_ulat}
-    )
-
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    ax.imshow(img, origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
-    fname = str(uuid.uuid4())
-    fig.savefig("/surface/static/images/spatial_img/" + fname + ".png", dpi='figure', format='png', transparent=True,
-                bbox_inches=Bbox.from_bounds(2, 0, 2.333, 4.013))
-
-    image1 = cv2.imread("/surface/static/images/spatial_img/" + fname + ".png", cv2.IMREAD_UNCHANGED)
-    image2 = cv2.imread(settings.SPATIAL_ANALYSIS_SHAPE_FILE_PATH, cv2.IMREAD_UNCHANGED)
-    image1 = cv2.resize(image1, dsize=(image2.shape[1], image2.shape[0]))
-    for i in range(image1.shape[0]):
-        for j in range(image1.shape[1]):
-            image1[i][j][3] = image2[i][j][3]
-    cv2.imwrite("/surface/static/images/spatial_img/" + fname + "-output.png", image1)
-
-    return {"data":f"/static/images/spatial_img/{fname}-output.png"}
+    return {"data": _render_spatial_image(points, image_parameters, bounds)}
 
 
-# fetch interpolation image after custom value has been added
 @shared_task
 def fetch_mod_interpolation_img_task(
-    stands_llat,
-    stands_llon,
-    stands_ulat,
-    stands_ulon,
-    parameters,
-    vmin,
-    vmax,
-    json_body_data
+    stands_llat, stands_llon, stands_ulat, stands_ulon,
+    parameters, vmin, vmax, json_body_data,
 ):
-
-    df_climate = pd.json_normalize(json_body_data)
-
-    # dir where spatial analysis image overlay can be found. Create it if it doesn't exits else just move on
-    out_dir = Path("/surface/static/images/spatial_img") 
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        df_climate = df_climate[["station_id", "longitude", "latitude", "measured"]]
-    except KeyError:
-        return {"data":"/static/images/no-interpolated-data.png"}
-
-    gx, gy, img = interpolate_to_grid(
-        df_climate["longitude"],
-        df_climate["latitude"],
-        df_climate["measured"],
-        interp_type='cressman',
-        minimum_neighbors=int(parameters["minimum_neighbors"]),
-        hres=float(parameters["hres"]),
-        search_radius=float(parameters["search_radius"]),
-        boundary_coords={'west': stands_llon, 'east': stands_ulon, 'south': stands_llat, 'north': stands_ulat}
-    )
-
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    ax.imshow(img, origin='lower', cmap=parameters["cmap"]["value"], vmin=vmin, vmax=vmax)
-    
-    fname = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ_") + str(uuid.uuid4())
-
-    fig.savefig("/surface/static/images/spatial_img/" + fname + ".png", dpi='figure', format='png', transparent=True,
-                bbox_inches=Bbox.from_bounds(2, 0, 2.333, 4.013))
-    
-    image1 = cv2.imread("/surface/static/images/spatial_img/" + fname + ".png", cv2.IMREAD_UNCHANGED)
-    image2 = cv2.imread(settings.SPATIAL_ANALYSIS_SHAPE_FILE_PATH, cv2.IMREAD_UNCHANGED)
-    image1 = cv2.resize(image1, dsize=(image2.shape[1], image2.shape[0]))
-
-    for i in range(image1.shape[0]):
-        for j in range(image1.shape[1]):
-            image1[i][j][3] = image2[i][j][3]
-
-    cv2.imwrite("/surface/static/images/spatial_img/" + fname + "-output.png", image1)
-
-    return {"data":f"/static/images/spatial_img/{fname}-output.png"}
-
+    """Re-render the grid after users select, add or edit observation points."""
+    bounds = {
+        "south": float(stands_llat),
+        "west": float(stands_llon),
+        "north": float(stands_ulat),
+        "east": float(stands_ulon),
+    }
+    image_parameters = validate_image_parameters({
+        "cmap": parameters.get("cmap", "Spectral_r"),
+        "hres": parameters.get("hres"),
+        "minimum_neighbors": parameters.get("minimum_neighbors"),
+        "search_radius": parameters.get("search_radius"),
+        "vmin": vmin,
+        "vmax": vmax,
+    }, bounds=bounds)
+    points = clean_custom_points(json_body_data)
+    return {"data": _render_spatial_image(points, image_parameters, bounds)}
+# ########################################################################################
 
 # Remove stale interpolation image clean up tasks
 @shared_task

@@ -60,6 +60,9 @@ from geopandas import geopandas
 from material import *
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.transforms import Bbox
+from matplotlib import cm, colors
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 from metpy.interpolate import interpolate_to_grid
 from pandas import json_normalize
 from rest_framework import viewsets, status, generics, views, permissions
@@ -70,6 +73,8 @@ from rest_framework.response import Response
 from slugify import slugify
 from celery.result import AsyncResult
 
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_GET, require_POST
 from tempestas_api import settings
 from wx import serializers, tasks
 from wx.decoders.hobo import read_file as read_file_hobo
@@ -687,126 +692,164 @@ def ScheduleDataExport(request):
 
 
 # ######################################################################################
+from .spatial_analysis_helpers import (
+    clean_custom_points,
+    configured_bounds,
+    parse_analysis_request,
+    validate_image_parameters,
+)
+
+# Keep your EXISTING imports of these SURFACE symbols in views.py:
+#   WxPermissionRequiredMixin, LoginRequiredMixin,
+#   wx_mapped_permission_required, QualityFlag
 
 
+class SpatialAnalysisView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
+    template_name = "wx/spatial_analysis.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["quality_flags"] = QualityFlag.objects.all()
+        return context
+
+
+def _spatial_bad_request(message):
+    return JsonResponse({"message": str(message)}, status=400)
+
+
+@require_GET
 @wx_mapped_permission_required
 def GetInterpolationData(request):
-    params = {
-        'start_datetime': request.GET.get('start_datetime'),
-        'end_datetime': request.GET.get('end_datetime'),
-        'variable_id': request.GET.get('variable_id'),
-        'agg': request.GET.get('agg', 'instant'),
-        'source': request.GET.get('source', 'raw_data'),
-        'quality_flags': request.GET.get('quality_flags'),
-    }
-
+    try:
+        params = parse_analysis_request(request.GET)
+    except ValueError as error:
+        return _spatial_bad_request(error)
     task = tasks.fetch_interpolation_data_task.delay(**params)
-
     return JsonResponse({"task_id": task.id})
 
 
+@require_GET
 @wx_mapped_permission_required
 def GetInterpolationImage(request):
+    try:
+        params = parse_analysis_request(request.GET)
+        bounds = configured_bounds()
+        image_params = validate_image_parameters(request.GET, bounds=bounds)
+    except ValueError as error:
+        return _spatial_bad_request(error)
 
-    params = {
-        'start_datetime': request.GET.get('start_datetime', None),
-        'end_datetime': request.GET.get('end_datetime', None),
-        'variable_id': request.GET.get('variable_id', None),
-        'cmap': request.GET.get('cmap', 'Spectral_r'),
-        'hres': request.GET.get('hres', 0.01),
-        'minimum_neighbors': request.GET.get('minimum_neighbors', 1),
-        'search_radius': request.GET.get('search_radius', 0.7),
-        'agg': request.GET.get('agg', "instant"),
-        'source': request.GET.get('source', "raw_data"),
-        'vmin': request.GET.get('vmin', 0),
-        'vmax': request.GET.get('vmax', 30),
-        'quality_flags': request.GET.get('quality_flags', None),
-        'stands_llat': settings.SPATIAL_ANALYSIS_INITIAL_LATITUDE,
-        'stands_llon': settings.SPATIAL_ANALYSIS_INITIAL_LONGITUDE,
-        'stands_ulat': settings.SPATIAL_ANALYSIS_FINAL_LATITUDE,
-        'stands_ulon': settings.SPATIAL_ANALYSIS_FINAL_LONGITUDE,
-    }
-
-    task = tasks.fetch_interpolation_img_task.delay(**params)
-
+    task_params = dict(params)
+    task_params.update(image_params)
+    task_params.update({
+        "stands_llat": bounds["south"],
+        "stands_llon": bounds["west"],
+        "stands_ulat": bounds["north"],
+        "stands_ulon": bounds["east"],
+    })
+    task = tasks.fetch_interpolation_img_task.delay(**task_params)
     return JsonResponse({"task_id": task.id})
 
 
+@require_GET
 @wx_mapped_permission_required
 def GetColorMapBar(request):
-    start_datetime_req = request.GET.get('start_datetime', '')
-    end_datetime_req = request.GET.get('end_datetime', '')
-    variable_id = request.GET.get('variable_id', '')
-    cmap = request.GET.get('cmap', 'Spectral_r')
-    agg = request.GET.get('agg', "instant")
-    vmin = request.GET.get('vmin', 0)
-    vmax = request.GET.get('vmax', 30)
-
+    """Draw only the color scale; raw/hourly timestamps display local time."""
     try:
-        start_datetime = pytz.UTC.localize(datetime.datetime.strptime(start_datetime_req, '%Y-%m-%dT%H:%M:%S.%fZ'))
-        end_datetime = pytz.UTC.localize(datetime.datetime.strptime(end_datetime_req, '%Y-%m-%dT%H:%M:%S.%fZ'))
-
-        start_datetime = start_datetime.astimezone(pytz.timezone(settings.TIMEZONE_NAME))
-        end_datetime = end_datetime.astimezone(pytz.timezone(settings.TIMEZONE_NAME))
-    except ValueError:
-        try:
-            start_datetime = pytz.UTC.localize(datetime.datetime.strptime(start_datetime_req, '%Y-%m-%d'))
-            end_datetime = pytz.UTC.localize(datetime.datetime.strptime(end_datetime_req, '%Y-%m-%d'))
-
-        except ValueError:
-            return JsonResponse({"message": "Invalid date format"}, status=status.HTTP_400_BAD_REQUEST)
+        params = parse_analysis_request(request.GET)
+        image_params = validate_image_parameters(request.GET)
+    except ValueError as error:
+        return _spatial_bad_request(error)
 
     with connection.cursor() as cursor:
         cursor.execute("""
-            SELECT a.name,b.symbol
-            FROM wx_variable a INNER JOIN wx_unit b ON a.unit_id=b.id
-            WHERE a.id=%(variable_id)s
-            """,
-                       params={'variable_id': variable_id}
-                       )
+            SELECT variable.name, unit.symbol
+            FROM wx_variable variable
+            LEFT JOIN wx_unit unit ON unit.id = variable.unit_id
+            WHERE variable.id = %s
+        """, [params["variable_id"]])
         variable = cursor.fetchone()
+    if variable is None:
+        return JsonResponse({"message": "Variable not found."}, status=404)
 
-    fig = plt.figure(figsize=(9, 1.5))
-    plt.imshow([[2]], origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.gca().set_visible(False)
-    cax = plt.axes([0.1, 0.2, 0.8, 0.2])
-    title = variable[0] + ' (' + variable[1] + ') - ' + start_datetime.strftime("%d/%m/%Y %H:%M:%S")
-    if agg != 'instant':
-        title += ' to ' + end_datetime.strftime("%d/%m/%Y %H:%M:%S")
-        title += ' (' + agg + ')'
-    cax.set_title(title)
-    plt.colorbar(orientation='horizontal', cax=cax)
+    def format_period(value):
+        if params["source"] in ("raw_data", "hourly"):
+            instant = datetime.datetime.fromisoformat(value)
+            return instant.astimezone(pytz.timezone(settings.TIMEZONE_NAME)).strftime("%d/%m/%Y %H:%M:%S")
+        # Summary dates are calendar labels, NOT UTC timestamps. Don't shift them.
+        return datetime.date.fromisoformat(value).strftime("%d/%m/%Y")
 
-    FigureCanvas(fig)
-    buf = io.BytesIO()
-    plt.savefig(buf, dpi='figure', format='png', transparent=True, bbox_inches='tight')
-    plt.close(fig)
-    response = HttpResponse(buf.getvalue(), content_type='image/png')
+    title = "{} ({}) - {}".format(
+        variable[0], variable[1] or "", format_period(params["start_datetime"])
+    )
+    if params["agg"] != "instant":
+        title += " to {} ({})".format(
+            format_period(params["end_datetime"]), params["agg"]
+        )
 
-    return response
+    # Figure is created without pyplot's global state to avoid cross-request leaks.
+    fig = Figure(figsize=(9, 1.45))
+    FigureCanvasAgg(fig)
+    axis = fig.add_axes([0.10, 0.27, 0.80, 0.24])
+    scale = cm.ScalarMappable(
+        norm=colors.Normalize(vmin=image_params["vmin"], vmax=image_params["vmax"]),
+        cmap=cm.get_cmap(image_params["cmap"]),
+    )
+    fig.colorbar(scale, cax=axis, orientation="horizontal")
+    axis.set_title(title, fontsize=9, pad=12)
+    output = io.BytesIO()
+    try:
+        fig.savefig(output, format="png", transparent=True, dpi=110)
+        return HttpResponse(output.getvalue(), content_type="image/png")
+    finally:
+        output.close()
+        fig.clear()
 
 
-@csrf_exempt
+@csrf_protect  # Do not exempt a POST that accepts user-supplied grid data.
+@require_POST
 @wx_mapped_permission_required
 def InterpolatePostData(request):
-    if request.method != 'POST':
-        return HttpResponse(status=405)
+    """Validate edited/custom station points before starting an expensive task."""
+    if request.content_type != "application/json":
+        return _spatial_bad_request("Expected application/json request body.")
+    max_bytes = int(getattr(settings, "SPATIAL_ANALYSIS_MAX_POST_BYTES", 2000000))
+    if len(request.body) > max_bytes:
+        return JsonResponse({"message": "Request body is too large."}, status=413)
+    try:
+        body = json.loads(request.body)
+        if not isinstance(body, dict):
+            raise ValueError("Request body must be a JSON object.")
+        if not isinstance(body.get("parameters"), dict):
+            raise ValueError("parameters must be an object.")
+        if "data" not in body:
+            raise ValueError("data is required.")
+        bounds = configured_bounds()
+        image_params = validate_image_parameters({
+            **body["parameters"],
+            "vmin": body.get("vmin"),
+            "vmax": body.get("vmax"),
+        }, bounds=bounds)
+        points = clean_custom_points(body["data"])
+    except (ValueError, TypeError, json.JSONDecodeError) as error:
+        return _spatial_bad_request(error)
 
-    json_body = json.loads(request.body)
-
-    params = {
-        'stands_llat': settings.SPATIAL_ANALYSIS_INITIAL_LATITUDE,
-        'stands_llon': settings.SPATIAL_ANALYSIS_INITIAL_LONGITUDE,
-        'stands_ulat': settings.SPATIAL_ANALYSIS_FINAL_LATITUDE,
-        'stands_ulon': settings.SPATIAL_ANALYSIS_FINAL_LONGITUDE,
-        'parameters': json_body['parameters'],
-        'vmin': json_body['vmin'],
-        'vmax': json_body['vmax'],
-        'json_body_data': json_body['data'],
+    # Preserve the task's existing argument names and the {task_id: ...} response.
+    task_params = {
+        "stands_llat": bounds["south"],
+        "stands_llon": bounds["west"],
+        "stands_ulat": bounds["north"],
+        "stands_ulon": bounds["east"],
+        "parameters": {
+            "hres": image_params["hres"],
+            "minimum_neighbors": image_params["minimum_neighbors"],
+            "search_radius": image_params["search_radius"],
+            "cmap": image_params["cmap"],
+        },
+        "vmin": image_params["vmin"],
+        "vmax": image_params["vmax"],
+        "json_body_data": points,
     }
-
-    task = tasks.fetch_mod_interpolation_img_task.delay(**params)
-
+    task = tasks.fetch_mod_interpolation_img_task.delay(**task_params)
     return JsonResponse({"task_id": task.id})
 
 
@@ -9235,16 +9278,6 @@ def update_maintenance_report_summary(request, id):
     response={}
 
     return JsonResponse(response, status=status.HTTP_200_OK)
-
-class SpatialAnalysisView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
-    template_name = "wx/spatial_analysis.html"
-    
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context['quality_flags'] = QualityFlag.objects.all()
-
-        return context
 
 
 @api_view(['GET'])

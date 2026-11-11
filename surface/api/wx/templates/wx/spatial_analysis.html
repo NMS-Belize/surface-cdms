@@ -100,6 +100,7 @@
             <div class="sa-sidebar-scroll">
               <div class="sa-sidebar-intro">Configure analysis</div>
               <v-form ref="form" v-model="valid" lazy-validation>
+                {% csrf_token %}
                 <div class="sa-section-heading"><span>DATA SELECTION</span></div>
                 <div class="sa-fields">
                   <v-autocomplete v-model="variable" :items="variables" item-text="name" item-value="id" return-object
@@ -160,7 +161,7 @@
                   <div class="sa-period-fields" :class="{'sa-period-single': !(source && ['raw_data', 'hourly'].includes(source.value))}">
                     <v-menu ref="end_date_menu" v-model="end_date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px">
                       <template v-slot:activator="{ on }"><v-text-field v-model="end_date" v-on="on" readonly label="Date" prepend-inner-icon="mdi-calendar-outline" outlined dense hide-details="auto" required></v-text-field></template>
-                      <v-date-picker v-model="end_date" no-title scrollable :type="getDatepickFormat()" :allowed-dates="allowedDates" @input="end_date_menu = false"></v-date-picker>
+                      <v-date-picker v-model="end_date" no-title scrollable :type="getDatepickFormat()" :allowed-dates="allowedEndDates" @input="end_date_menu = false"></v-date-picker>
                     </v-menu>
                     <v-menu v-if="source && source.value === 'raw_data'" ref="end_time_menu" v-model="end_time_menu" :close-on-content-click="false" :return-value.sync="end_time" transition="scale-transition" offset-y min-width="290px">
                       <template v-slot:activator="{ on }"><v-text-field v-model="end_time" v-on="on" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-text-field></template>
@@ -170,10 +171,21 @@
                   </div>
                 </div>
 
+                <div class="sa-period-policy" v-if="source">
+                  <v-icon size="15" color="grey darken-1">mdi-calendar-clock-outline</v-icon>
+                  <span>Maximum range: <strong>[[ periodLimits[source.value].toLocaleString() ]] days</strong> for [[ source.text ]].
+                    <template v-if="source.value === 'raw_data' || source.value === 'hourly'">Times use [[ timezone ]].</template>
+                    <template v-else>Summary periods use calendar dates.</template>
+                  </span>
+                </div>
+                <v-alert v-if="dateRangeError" type="error" outlined dense class="sa-period-error" role="alert">
+                  [[ dateRangeError ]]
+                </v-alert>
+
                 <v-alert v-model="no_data" dismissible type="warning" dense class="sa-inline-alert">No station observations were found for this selection.</v-alert>
 
                 <div class="sa-action-area">
-                  <v-btn color="primary" depressed block large class="sa-interpolate text-none" @click="interpolateData" :loading="loading_overlay" :disabled="loading_overlay || !variable || !source || !aggregation">
+                  <v-btn color="primary" depressed block large class="sa-interpolate text-none" @click="interpolateData" :loading="loading_overlay" :disabled="loading_overlay || !variable || !source || !aggregation || !!dateRangeError">
                     <v-icon left>mdi-map-search</v-icon> Generate interpolation
                   </v-btn>
                   <p><v-icon size="14">mdi-information-outline</v-icon> The interpolated surface is calculated from the selected observations.</p>
@@ -247,7 +259,7 @@
       </div>
 
       <!-- Interpolation progress covers the work area while both tasks finish. -->
-      <v-overlay :value="loading_overlay" :z-index="1100" opacity="0.44">
+      <v-overlay :value="loading_overlay" :z-index="2100" opacity="0.44">
         <div class="sa-loading-card">
           <div class="sa-loading-icon"><v-progress-circular indeterminate :size="54" :width="4" color="primary"><span>[[ Math.floor(progress) ]]%</span></v-progress-circular></div>
           <h3>Generating spatial analysis</h3>
@@ -258,7 +270,7 @@
       </v-overlay>
 
       <!-- Advanced settings dialog -->
-      <v-dialog v-model="parameters_dialog" max-width="530" content-class="sa-dialog">
+      <v-dialog v-model="parameters_dialog" max-width="530" :z-index="2000" content-class="sa-dialog">
         <v-card class="sa-dialog-card">
           <div class="sa-dialog-top"><span class="sa-dialog-symbol"><v-icon color="primary">mdi-cog-outline</v-icon></span><div><h2>Interpolation parameters</h2><p>Fine-tune the spatial interpolation model.</p></div><v-spacer></v-spacer><v-btn icon @click="parameters_dialog = false"><v-icon>mdi-close</v-icon></v-btn></div>
           <v-card-text class="sa-dialog-body">
@@ -276,7 +288,7 @@
       </v-dialog>
 
       <!-- Custom observation dialog -->
-      <v-dialog v-model="add_value_dialog" max-width="620" content-class="sa-dialog sa-point-dialog" scrollable eager>
+      <v-dialog v-model="add_value_dialog" max-width="620" :z-index="2000" content-class="sa-dialog sa-point-dialog" scrollable eager>
         <v-card class="sa-dialog-card">
           <div class="sa-dialog-top"><span class="sa-dialog-symbol"><v-icon color="primary">mdi-map-marker-plus-outline</v-icon></span><div><h2>Add observation point</h2><p>Place a custom measurement on the interpolation map.</p></div><v-spacer></v-spacer><v-btn icon @click="closeAddValue"><v-icon>mdi-close</v-icon></v-btn></div>
           <v-card-text class="sa-dialog-body">
@@ -341,6 +353,63 @@
     LIcon
   } = Vue2Leaflet;
 
+  // Timezone helpers that use the browser's built-in Intl API.
+  // Moment.js is available in SURFACE, but Moment Timezone is not guaranteed.
+  // This keeps all local date/time selections in settings.TIMEZONE_NAME
+  // without loading another JavaScript library.
+  const saZoneFormatters = Object.create(null);
+
+  function saZonedDateParts(utcMilliseconds, timeZone) {
+    if (!saZoneFormatters[timeZone]) {
+      saZoneFormatters[timeZone] = new Intl.DateTimeFormat('en-US', {
+        timeZone: timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hourCycle: 'h23'
+      });
+    }
+    const pieces = saZoneFormatters[timeZone].formatToParts(new Date(utcMilliseconds));
+    const values = {};
+    pieces.forEach(piece => {
+      if (piece.type !== 'literal') values[piece.type] = Number(piece.value);
+    });
+    return values;
+  }
+
+  function saTodayInTimeZone(timeZone) {
+    const p = saZonedDateParts(Date.now(), timeZone);
+    return [p.year, String(p.month).padStart(2, '0'), String(p.day).padStart(2, '0')].join('-');
+  }
+
+  function saLocalDateTimeToUtcMillis(date, time, timeZone) {
+    // Interpret yyyy-mm-dd HH:mm as a WALL-CLOCK time in the configured zone.
+    // Use explicit validation so JS Date does not silently normalize invalid dates.
+    const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ''));
+    const timeMatch = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(time || '00:00'));
+    if (!dateMatch || !timeMatch) return null;
+    const year = Number(dateMatch[1]), month = Number(dateMatch[2]), day = Number(dateMatch[3]);
+    const hour = Number(timeMatch[1]), minute = Number(timeMatch[2]);
+    const second = Number(timeMatch[3] || '0');
+    if (year < 100 || hour > 23 || minute > 59 || second > 59) return null;
+    const wallMillis = Date.UTC(year, month - 1, day, hour, minute, second);
+    const check = new Date(wallMillis);
+    if (check.getUTCFullYear() !== year || check.getUTCMonth() + 1 !== month ||
+        check.getUTCDate() !== day) return null;
+
+    // Convert wall-clock to UTC by comparing the wall time represented by a
+    // candidate instant in the installation timezone (including DST offsets).
+    let candidate = wallMillis;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const p = saZonedDateParts(candidate, timeZone);
+      const observedWall = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+      const delta = wallMillis - observedWall;
+      if (delta === 0) return candidate;
+      candidate += delta;
+    }
+    // Nonexistent local time during a DST spring-forward transition.
+    return null;
+  }
+
   new Vue({
     el: "#app",
     vuetify: new Vuetify(),
@@ -364,6 +433,15 @@
     data: {
       mapKey: 0,
       timezone: "{{ TIMEZONE_NAME|escapejs }}",
+      // These match spatial_analysis_helpers.parse_analysis_request().
+      // Optional SpatialAnalysisView context values mirror any settings.py overrides.
+      periodLimits: {
+        raw_data: {{ spatial_max_raw_days|default:7 }},
+        hourly: {{ spatial_max_hourly_days|default:31 }},
+        daily: {{ spatial_max_daily_days|default:366 }},
+        monthly: {{ spatial_max_monthly_days|default:18250 }},
+        yearly: {{ spatial_max_yearly_days|default:36500 }}
+      },
       quality_flags: [
         {% for quality_flag in quality_flags %}
           {value: {{ quality_flag.id }}, text: "{{ quality_flag.name }}", name: "{{ quality_flag.name }}"},
@@ -667,8 +745,10 @@
       end_date_menu: false,
       time_menu: false,
       end_time_menu: false,
-      start_date: moment().format('YYYY-MM-DD'),
-      end_date: moment().add(1, 'day').format('YYYY-MM-DD'),
+      // Use SURFACE's configured timezone, not the browser's local timezone.
+      start_date: saTodayInTimeZone("{{ TIMEZONE_NAME|escapejs }}"),
+      end_date: moment(saTodayInTimeZone("{{ TIMEZONE_NAME|escapejs }}"), 'YYYY-MM-DD', true)
+        .add(1, 'day').format('YYYY-MM-DD'),
       start_time: "00:00",
       end_time: "00:00",
       variable: null,
@@ -998,23 +1078,36 @@
         this.editTable_save() // get the update interpolation image
       },
 
-      formatDatetimeToRequest(date, time){
-        if(this.source.value === 'daily' || this.source.value === 'monthly' || this.source.value === 'yearly')
-          return moment(`${date} ${time}`).tz(this.timezone, true).format('YYYY-MM-DD');
-        return moment(`${date} ${time}`).tz(this.timezone, true).toISOString();
+      formatDatetimeToRequest(date, time) {
+        // Summary tables use calendar dates, not UTC timestamps.
+        if (this.source.value === 'daily') return date;
+        if (this.source.value === 'monthly' || this.source.value === 'yearly')
+          return `${date}-01`;
+        // For raw/hourly data, the backend expects an offset-aware ISO timestamp.
+        const timestamp = saLocalDateTimeToUtcMillis(date, time, this.timezone);
+        if (timestamp === null) throw new Error('Invalid date/time in the configured timezone.');
+        return new Date(timestamp).toISOString();
       },
 
-      formatDatetime(date, time){
-          return moment(`${date} ${time}`).tz(this.timezone, true).format('YYYY-MM-DD HH:mm:ss');        
+      formatDatetime(date, time) {
+        // Label shown in the CSV: wall-clock time in SURFACE's timezone.
+        const calendarDate = (this.source.value === 'monthly' || this.source.value === 'yearly')
+          ? `${date}-01` : date;
+        return `${calendarDate} ${time || '00:00'}:00`;
       },
 
       getEndpointParameters() {
         this.formattedStartDate = this.formatDatetime(this.start_date, this.start_time);
-        this.formattedEndDate = this.formatDatetime(this.end_date, this.end_time);
+        // An instant has no range: send the same instant twice, otherwise the
+        // server could reject an invisible, stale end date.
+        const instant = this.aggregation && this.aggregation.value === 'instant';
+        const finalDate = instant ? this.start_date : this.end_date;
+        const finalTime = instant ? this.start_time : this.end_time;
+        this.formattedEndDate = this.formatDatetime(finalDate, finalTime);
         this.formattedVariable = this.variable.name;
 
         let parameters = "start_datetime=" + this.formatDatetimeToRequest(this.start_date, this.start_time);
-        parameters += "&end_datetime=" +  this.formatDatetimeToRequest(this.end_date, this.end_time);
+        parameters += "&end_datetime=" + this.formatDatetimeToRequest(finalDate, finalTime);
         parameters += "&variable_id=" + this.variable.id;
         parameters += "&agg=" + this.aggregation.value;
         parameters += "&cmap=" + this.interpolation_parameters.cmap.value;
@@ -1030,15 +1123,16 @@
 
       changeSource(){
         if (!this.source || !this.source.value) return;
+        const now = moment(saTodayInTimeZone(this.timezone), 'YYYY-MM-DD', true);
         if (this.source.value === 'monthly') {
-          this.start_date = moment().format('YYYY-MM');
-          this.end_date = moment().add(1, 'month').format('YYYY-MM');
+          this.start_date = now.format('YYYY-MM');
+          this.end_date = now.clone().add(1, 'month').format('YYYY-MM');
         } else if (this.source.value === 'yearly') {
-          this.start_date = moment().format('YYYY-01');
-          this.end_date = moment().add(1, 'year').format('YYYY-01');
+          this.start_date = now.format('YYYY-01');
+          this.end_date = now.clone().add(1, 'year').format('YYYY-01');
         } else {
-          this.start_date = moment().format('YYYY-MM-DD');
-          this.end_date = moment().add(1, 'day').format('YYYY-MM-DD');
+          this.start_date = now.format('YYYY-MM-DD');
+          this.end_date = now.clone().add(1, 'day').format('YYYY-MM-DD');
         }
       },
 
@@ -1047,14 +1141,53 @@
       },
 
       allowedDates(val){
-          if(this.source.value === 'yearly')
-            return val.split('-')[1] == '01' // just january
-          return true;
+        if (this.source && this.source.value === 'yearly')
+          return val.split('-')[1] === '01'; // January represents the year.
+        return true;
+      },
+
+      // Returns an absolute UTC millisecond value for raw/hourly; for summary
+      // sources, UTC-midnight is ONLY used for calendar arithmetic (no timezone
+      // conversion of the period sent to the backend).
+      parseAnalysisPeriod(date, time) {
+        if (!this.source || !date) return null;
+        const source = this.source.value;
+        if (source === 'raw_data' || source === 'hourly') {
+          return saLocalDateTimeToUtcMillis(date, time, this.timezone);
+        }
+        const calendarDate = (source === 'monthly' || source === 'yearly') ? `${date}-01` : date;
+        const parsed = moment.utc(calendarDate, 'YYYY-MM-DD', true);
+        return parsed.isValid() ? parsed.valueOf() : null;
+      },
+
+      // The picker prevents invalid end-date choices; dateRangeError also
+      // handles the selected time-of-day at the exact 7/31-day boundary.
+      allowedEndDates(date) {
+        if (!this.allowedDates(date)) return false;
+        if (!this.source || !this.aggregation || this.aggregation.value === 'instant') return true;
+        const start = this.parseAnalysisPeriod(this.start_date, this.start_time);
+        const end = this.parseAnalysisPeriod(date, this.end_time);
+        if (start === null || end === null) return true;
+        return end >= start && end - start <= this.periodLimits[this.source.value] * 86400000;
+      },
+
+      getApiErrorMessage(error, fallback) {
+        const payload = error && error.response && error.response.data;
+        return (payload && (payload.message || payload.detail)) || fallback;
+      },
+
+      getCsrfToken() {
+        const input = this.$el.querySelector('input[name="csrfmiddlewaretoken"]');
+        return input ? input.value : '';
       },
 
       interpolateData() {
         if (!this.$refs.form || !this.$refs.form.validate()) return;
         if (!this.variable || !this.source || !this.aggregation) return;
+        if (this.dateRangeError) {
+          this.showAlert(this.dateRangeError, 'error', false);
+          return;
+        }
 
         this.no_data = false;
         this.mod_img = false;
@@ -1070,20 +1203,20 @@
           .then(res => {
             this.imgTaskId = res.data.task_id;
             this.startInterpolateImgPolling();
-          }).catch(() => {
+          }).catch(error => {
             this.imageProcessing = false;
             this.syncLoadingOverlay();
-            this.showAlert("Unable to start interpolation image generation.", "error", false);
+            this.showAlert(this.getApiErrorMessage(error, "Unable to start interpolation image generation."), "error", false);
           });
 
         axios.get("data?" + parameters)
           .then(res => {
             this.dataTaskId = res.data.task_id;
             this.startInterpolateDataPolling();
-          }).catch(() => {
+          }).catch(error => {
             this.dataProcessing = false;
             this.syncLoadingOverlay();
-            this.showAlert("Unable to retrieve interpolation data.", "error", false);
+            this.showAlert(this.getApiErrorMessage(error, "Unable to retrieve interpolation data."), "error", false);
           });
       },
 
@@ -1255,14 +1388,16 @@
           vmin: this.vmin,
           vmax: this.vmax,
           data: this.availableMarkers
+        }, {
+          headers: { 'X-CSRFToken': this.getCsrfToken() }
         }).then(res => {
           this.imgTaskId = res.data.task_id;
           this.startInterpolateImgPolling();
-        }).catch(() => {
+        }).catch(error => {
           this.imageProcessing = false;
           this.syncLoadingOverlay();
           this.mod_img = false;
-          this.showAlert("Unable to update interpolation. Your station edits were kept.", "error", false);
+          this.showAlert(this.getApiErrorMessage(error, "Unable to update interpolation. Your station edits were kept."), "error", false);
         });
       },
 
@@ -1480,6 +1615,25 @@
       });
     },
     computed: {
+      dateRangeError() {
+        if (!this.source || !this.aggregation) return null;
+        const source = this.source.value;
+        const limit = this.periodLimits[source];
+        if (!Number.isFinite(Number(limit)) || Number(limit) <= 0)
+          return 'No valid date-range limit is configured for this data source.';
+
+        const start = this.parseAnalysisPeriod(this.start_date, this.start_time);
+        if (start === null) return 'Select a valid starting date and time.';
+        if (this.aggregation.value === 'instant') return null;
+
+        const end = this.parseAnalysisPeriod(this.end_date, this.end_time);
+        if (end === null) return 'Select a valid ending date and time.';
+        if (end < start) return 'The end date/time must not be earlier than the start.';
+        if (end - start > Number(limit) * 86400000)
+          return `The selected ${this.source.text.toLowerCase()} period exceeds the maximum of ${Number(limit).toLocaleString()} days.`;
+        return null;
+      },
+
       // availableMarkers(){
       //   return this.markers.filter(x => {
       //     return x.name in this.$refs.data_table.selection;
@@ -2328,7 +2482,9 @@
   /* Below-map measurements, styled consistently with other SURFACE tables. */
   .sa-page .sa-observations-section {
       position: relative;
-      z-index: 900;
+      /* This section must stay below Vuetify's dialog overlays (z-index ~200+).
+         900 was covering modal dialogs, despite the rounded map overlap. */
+      z-index: 2;
 
       /* Pull the section upward over the map */
       margin-top: -40px;
@@ -2528,5 +2684,22 @@
     .sa-page .sa-sidebar-heading .sa-panel-title { font-size: 16px; }
     .sa-page .sa-sidebar-heading p { font-size: 11px; }
   }
+  /* Clear period limits and validation, matching the rest of SURFACE. */
+  .sa-page .sa-period-policy {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 9px 3px 5px;
+    color: #697480;
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+  .sa-page .sa-period-policy strong { color: #303b47; font-weight: 700; }
+  .sa-page .sa-period-error {
+    margin: 9px 0 4px !important;
+    font-size: 12px;
+  }
+  /* Leave the rounded 40px observation-sheet overlap unchanged; only its
+     stacking level was reduced so Vuetify dialogs and menus remain in front. */
 </style>
 {% endblock %}
