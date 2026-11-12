@@ -1,105 +1,325 @@
 {% extends "wx/station_base.html" %}
-{% block content %}
+{% load wx_filters %}
 
-<div id="station-delete-app" class="srf-container" v-cloak>
+{% block station_content %}
+<!--
+  Station deletion confirmation.
 
-  <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-    <span class="srf-display-1 text-uppercase">Delete station</span>
-  </div>
-
-  <div class="srf-layout flex-column srf-padding" style="width:100%;">
-
-    {% if delete_error %}
-      <div class="delete-error-box">
-        {{ delete_error }}
-      </div>
-    {% endif %}
-
-    <p>
-      Are you sure you want to
-      <strong class="bold">delete</strong>
-      the station:
-      <strong class="bold">{{ station.name }}</strong>?
-    </p>
-
-    <form action="" method="POST" @submit="handleDeleteSubmit">
-      {% csrf_token %}
-
-      <button
-        class="btn-outline-default btn-small metadata-btn-danger"
-        type="submit"
-        :disabled="isSubmitting"
-        :class="{ 'btn-disabled': isSubmitting }"
-      >
-        [[ isSubmitting ? 'Deleting...' : 'Yes, delete' ]]
-      </button>
-
-      <a href="{% url 'station-detail' station.id %}">
-        <button
-          class="btn-outline-default btn-small metadata-btn-success"
-          type="button"
-          :disabled="isSubmitting"
-        >
-          Cancel
-        </button>
-      </a>
-
-    </form>
-
-  </div>
-</div>
-
+  IMPORTANT: This is station_content, not content. The shared station_base.html
+  must remain in charge of the workspace header, station navigation, and
+  page-level spacing. This page deliberately does not add an srf-container.
+-->
 <style>
-.metadata-btn-danger {
-  color: red !important;
-  border-color: red !important;
-}
+  /* All styles are scoped to this station-management child page. */
+  .station-base-page .sd-page,
+  .station-base-page .sd-page .v-application,
+  .station-base-page .sd-page .v-application--wrap {
+    background: #fff !important;
+    color: #292929;
+  }
 
-.metadata-btn-success {
-  color: #4CAF50 !important;
-  border-color: #4CAF50 !important;
-}
+  /* Vuetify's default 100vh min-height creates a large blank area on short pages. */
+  .station-base-page .sd-page .v-application--wrap {
+    min-height: auto !important;
+  }
 
-.btn-disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+  .station-base-page .sd-page {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
 
-.delete-error-box {
-  color: #b00020;
-  border: 1px solid #b00020;
-  background-color: #fff5f5;
-  padding: 10px 14px;
-  margin-bottom: 16px;
-  border-radius: 4px;
-}
+  .station-base-page .sd-heading {
+    margin: 0 0 18px;
+  }
+
+  .station-base-page .sd-heading h2 {
+    margin: 0;
+    color: #292929;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .station-base-page .sd-heading p {
+    margin: 5px 0 0;
+    color: #737373;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  /* The warning is intentionally a small, focused panel rather than a full-width page. */
+  .station-base-page .sd-card {
+    width: 100%;
+    max-width: 740px;
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid #e7e7e7;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .025);
+  }
+
+  .station-base-page .sd-card-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 24px;
+  }
+
+  .station-base-page .sd-danger-icon {
+    display: flex;
+    flex: 0 0 44px;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    border: 1px solid #f2d8da;
+    border-radius: 10px;
+    background: #fff5f5;
+    color: #b52d37;
+  }
+
+  .station-base-page .sd-danger-icon .material-icons-outlined {
+    font-size: 23px;
+    line-height: 1;
+  }
+
+  .station-base-page .sd-card-body {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .station-base-page .sd-card-body h3 {
+    margin: 2px 0 7px;
+    color: #292929;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.45;
+  }
+
+  .station-base-page .sd-card-body p {
+    margin: 0;
+    color: #696969;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .station-base-page .sd-station-details {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-top: 19px;
+    padding: 14px 15px;
+    border: 1px solid #e9e9e9;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+
+  .station-base-page .sd-station-details .material-icons-outlined {
+    color: #7e7e7e;
+    font-size: 21px;
+    flex: 0 0 auto;
+  }
+
+  .station-base-page .sd-station-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+  }
+
+  .station-base-page .sd-station-label {
+    color: #838383;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .station-base-page .sd-station-info strong {
+    color: #303030;
+    font-size: 13px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .station-base-page .sd-station-code {
+    color: #737373;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .station-base-page .sd-caution {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 16px;
+    color: rgb(245, 104, 104);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .station-base-page .sd-caution .material-icons-outlined {
+    font-size: 17px;
+    flex: 0 0 auto;
+    margin-top: 1px;
+  }
+
+  .station-base-page .sd-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 17px 24px;
+    border-top: 1px solid #ededed;
+    background: #fff;
+  }
+
+  .station-base-page .sd-actions .v-btn {
+    flex: 0 0 auto;
+    min-height: 37px;
+    margin: 0 !important;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: none;
+    letter-spacing: 0;
+    box-shadow: none;
+  }
+
+  .station-base-page .sd-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    max-width: 740px;
+    margin: 0 0 15px;
+    padding: 13px 15px;
+    border: 1px solid #f0c6c9;
+    border-radius: 8px;
+    background: #fff7f7;
+    color: #a82231;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .station-base-page .sd-error .material-icons-outlined {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: 19px;
+  }
+
+  @media (max-width: 600px) {
+    .station-base-page .sd-card-main { padding: 18px 15px; gap: 12px; }
+    .station-base-page .sd-danger-icon { flex-basis: 39px; height: 39px; }
+    .station-base-page .sd-actions { padding: 15px; }
+  }
+
+  @media (max-width: 400px) {
+    .station-base-page .sd-actions { flex-direction: column-reverse; align-items: stretch; }
+    .station-base-page .sd-actions .v-btn { width: 100%; }
+  }
 </style>
 
+<!--
+  Use a dedicated Vue root so the Station Management header's Vue instance
+  remains isolated. The form is a native POST to the existing Django DeleteView.
+-->
+<div id="station-delete-app" class="sd-page" v-cloak>
+  <v-app>
+    <header class="sd-heading">
+      <h2>Delete station</h2>
+      <p>Review the station details before confirming this action.</p>
+    </header>
+
+    {% if delete_error %}
+    <!-- Preserve the error returned by Django if deletion is not allowed. -->
+    <div class="sd-error" role="alert">
+      <i class="material-icons-outlined" aria-hidden="true">error_outline</i>
+      <div>{{ delete_error }}</div>
+    </div>
+    {% endif %}
+
+    <section class="sd-card" aria-labelledby="sd-confirm-title">
+      <div class="sd-card-main">
+
+        <div class="sd-card-body">
+          <h3 id="sd-confirm-title">Are you sure you want to delete this station?</h3>
+          <p>You are about to delete the following station from SURFACE.</p>
+
+          <div class="sd-station-details">
+            <i class="material-icons-outlined" aria-hidden="true">place</i>
+            <div class="sd-station-info">
+              <span class="sd-station-label">Selected station</span>
+              <strong>{{ station.name }}</strong>
+              {% if station.code %}
+              <span class="sd-station-code">Code: {{ station.code }}</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="sd-caution">
+            <i class="material-icons-outlined" aria-hidden="true">warning_amber</i>
+            <span>This is a destructive operation. It cannot be undone from this page.</span>
+          </div>
+        </div>
+      </div>
+
+      <!--
+        Never replace this with an AJAX delete call: Django's existing
+        station-delete view handles permission checks, CSRF, validation,
+        confirmation errors, and redirecting after a successful POST.
+      -->
+      <form action="" method="POST" @submit="handleDeleteSubmit">
+        {% csrf_token %}
+        <div class="sd-actions">
+          <v-btn
+            color="success"
+            href="{% url 'station-detail' station.id %}"
+            :disabled="isSubmitting"
+          >
+            Cancel
+          </v-btn>
+          <v-btn
+            color="#FF5252"
+            dark
+            depressed
+            type="submit"
+            :loading="isSubmitting"
+            :disabled="isSubmitting"
+          >
+            <v-icon left size="18">mdi-delete-outline</v-icon>
+            [[ isSubmitting ? 'Deleting...' : 'Delete station' ]]
+          </v-btn>
+        </div>
+      </form>
+    </section>
+  </v-app>
+</div>
 {% endblock %}
 
 {% block localjavascript %}
-
 <script>
-  (function() {
+  (function () {
     new Vue({
-      el: "#station-delete-app",
-
-      delimiters: ["[[", "]]"],
-
-      data: {
-        // Used to stop users from clicking the delete button multiple times
-        isSubmitting: false
+      el: '#station-delete-app',
+      vuetify: new Vuetify(),
+      delimiters: ['[[', ']]'],
+      data: function () {
+        return {
+          isSubmitting: false
+        };
       },
-
       methods: {
-        handleDeleteSubmit: function() {
-          // Allow Django's normal DeleteView POST request to continue,
-          // but disable the buttons while the request is submitting.
+        handleDeleteSubmit: function (event) {
+          // The browser must complete the normal POST. Only guard against
+          // accidental repeated submissions and show the in-progress state.
+          if (this.isSubmitting) {
+            event.preventDefault();
+            return;
+          }
           this.isSubmitting = true;
         }
       }
     });
   })();
 </script>
-
 {% endblock %}

@@ -1,557 +1,493 @@
 {% extends "wx/station_base.html" %}
-{% block station_content %}
 {% load material_form %}
+{% load wx_filters %}
+{% block station_content %}
 
+<!--
+  Station metadata editor / station detail (shared Django inheritance).
+  station_detail.html extends this template and overrides station_detail_content.
+  Do not move that block or replace the Django Material form with separate fields.
+
+  Parent station_base.html mounts its own Vue app on #station-base-ui. This page
+  mounts a DIFFERENT Vue 2 app on #station-update-app, avoiding nested Vue roots.
+-->
+{% url 'station-detail' station.id as station_detail_route %}
 <style>
-  #station-form {
-    max-width: 95%; 
-    margin: 0 auto;
+  [v-cloak] { display: none !important; }
+  .su-page { width: 100%; min-width: 0; color: #292929; }
+  .su-page * { box-sizing: border-box; }
+  .su-page #station-form { width: 100%; max-width: none; margin: 0; }
+  .su-page .su-vapp, .su-page .su-vapp .v-application--wrap { background: #fff !important; }
+  .su-page .su-vapp .v-application--wrap { min-height: auto !important; }
+
+  /* Match Create Station's compact page spacing; station_base owns outer padding. */
+  .su-page .su-intro { margin: 0 0 17px; }
+  .su-page .su-intro h2 { margin: 0; font-size: 17px; font-weight: 700; color: #292929; line-height: 1.45; }
+  .su-page .su-intro p { margin: 4px 0 0; font-size: 12px; color: #737373; line-height: 1.55; }
+  .su-page .su-section {
+    margin-bottom: 17px; border: 1px solid #e7e7e7; border-radius: 11px;
+    background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.025);
+  }
+  .su-page .su-section-head {
+    display: flex; align-items: center; gap: 11px; padding: 16px 19px;
+    border-bottom: 1px solid #eee;
+  }
+  .su-page .su-section-head-copy { min-width: 0; flex: 1; }
+  .su-page .su-section-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: #282828; line-height: 1.4; }
+  .su-page .su-section-head p { margin: 3px 0 0; font-size: 12px; color: #7d7d7d; line-height: 1.5; }
+  .su-page .su-head-icon {
+    width: 34px; height: 34px; flex: none; display: inline-flex;
+    align-items: center; justify-content: center; border-radius: 8px;
+    background: #f5f5f5; color: #686868;
+  }
+  .su-page .su-head-icon .material-icons-outlined { font-size: 20px; }
+  .su-page .su-section-body { padding: 18px 19px; min-width: 0; }
+
+  /* Leaflet uses its own layout; do not style unrelated SURFACE maps. */
+  .su-page .su-map-instruction {
+    display: flex; align-items: center; gap: 7px;
+    color: rgb(245, 104, 104); font-size: 12px; margin: 0 0 12px;
+  }
+  .su-page .su-map-instruction .material-icons-outlined { font-size: 17px; color: #888; }
+  .su-page #mapid {
+    width: 100%; max-width: none; height: 375px; margin: 0;
+    border: 1px solid #dedede; border-radius: 9px;
+    background: #f7f7f7; overflow: hidden; z-index: 0;
+  }
+  .su-page #mapid:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; }
+  .su-page .su-coordinates { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 0 0; font-size: 11px; color: #747474; }
+  .su-page .su-coordinates strong { color: #444; font-weight: 650; }
+  .su-page .su-map-coordinates-control {
+    padding: 7px 9px; background: rgba(255,255,255,.96);
+    border: 1px solid #e3e3e3; border-radius: 5px;
+    font-size: 11px; line-height: 1.5; box-shadow: 0 1px 5px rgba(0,0,0,.08);
+  }
+  .su-page .su-map-fullscreen {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; text-decoration: none; color: #222;
+    font-size: 17px; font-weight: 700; background: #fff;
   }
 
-  .hide_content {
-    display: none;
+  /* Native Vuetify 2 tabs, matching the blue-slider tabs on Configuration Settings. */
+  .su-page .su-metadata-tabs { margin-bottom: 11px; border-bottom: 1px solid #eaeaea; background: #fff !important; }
+  .su-page .su-metadata-tabs .v-tabs-bar { background: #fff !important; }
+  .su-page .su-metadata-tabs .v-tab {
+    padding: 0 16px; min-height: 44px; font-size: 12px; font-weight: 650;
+    text-transform: none; letter-spacing: 0;
   }
-  
-  /* Hide options by default */
-  .form-item {
-    display: none;
+  .su-page .su-metadata-tabs .v-tab.v-tab--active,
+  .su-page .su-metadata-tabs .v-tab.v-tab--active .v-icon { color: #1976d2 !important; }
+  .su-page .su-metadata-tabs .v-tab .v-icon { font-size: 18px; }
+  .su-page .su-required-note { display: flex; align-items: center; gap: 7px; font-size: 11px; color: rgb(245, 104, 104); margin: 0 0 12px; }
+  .su-page .su-required-note .material-icons-outlined { font-size: 16px; }
+
+  /* The Django Material form still owns ALL field names, values and validation.
+     The initial visibility guard avoids a flash of all seven groups pre-mount. */
+  .su-page .su-generated-fields { min-height: 85px; visibility: hidden; }
+  .su-page .su-generated-fields.su-form-ready { visibility: visible; }
+  .su-page .su-generated-fields [hidden] { display: none !important; }
+  .su-page .su-generated-fields h5 {
+    margin: 18px 0 36px; color: #373737; font-weight: 700;
+    font-size: 15px; line-height: 1.4;
   }
-  
-    .srf-field-checkbox label {
-      display: flex;
-      align-items: center;
-      height: 100%;
-      max-height: 76px;
-      padding-left: 11.25px;
-      padding-right: 11.25px;
-      margin-bottom: 25px !important;
-    }
-    div.required label::before {
-      content: "** " !important;
-      color: red !important;
-    }
-    .map-small {
-      max-width: 80%; 
-      height: 511.25px !important;
-      border-radius: 20px;
-      border: 2px solid rgba(0, 0, 0, 0.628);
-      /* margin: 0 auto; */
+  .su-page .su-generated-fields .row { margin-bottom: 8px; }
+  .su-page .su-generated-fields .input-field { margin-top: 12px; }
+  .su-page .su-generated-fields .help-block { color: #858585; font-size: 11px; }
+  .su-page .su-generated-fields .srf-field-checkbox label {
+    display: flex; align-items: center; min-height: 28px;
+    margin: 2px 0 12px !important;
   }
-    .map-large {
-      max-width: 1022.50px; 
-      height: 622.50px !important;
-    }
-    .mouse-coordinates-box {
-      bottom: 5px;
-      left: 5px;
-      background-color: white;
-      padding: 2px;
-      width: 185px;
-      font-size: 12px;
-      border-radius: 2px;
-      box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-        0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
-    }
-    #mapid {
-      margin-bottom: 20px;
-    }
-    .fullscreen-button-width {
-      width: 100px !important;
-    }
-    .transparent-caret {
-      caret-color: transparent !important;
-      cursor: default;
-    }
-    input::-webkit-calendar-picker-indicator {
-      display: none !important;
-    }
-    h5 {
-      margin-bottom: 25px !important;
-    }
-  
-  
-    /* Style the tab links */
-    .tab {
-        display: inline-block;
-        cursor: pointer;
-        padding: 10px 20px;
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-        font-size: .875rem;
-        font-weight: 600;
-        color: #9e9e9e;
-        letter-spacing: .0892857143em;
-        text-transform: uppercase;
-    }
-  
-    .tab:hover {
-        background-color: #dddddda9;
-    }
-  
-    .active-tab {
-        border-bottom: 2px solid #1976d2 ;
-        color: #1976d2;
-    }
-  
-    .active-tab:hover {
-      background-color: #1976d24a ;
-    }
-  
-    /* Hide all sections by default */
-    .tab-content {
-        display: none;
-        /* padding: 20px; */
-        border-top: none;
-    }
-  
-    /* Style visible content */
-    .show-tab {
-        display: block;
-    }
-  
-    /* Optional styling */
-    .tab-bar {
-        display: flex;
-        overflow-x: auto; /* Enables horizontal scrolling */
-        white-space: nowrap; /* Prevents breaking of text into new lines */
-        padding: 10px;
-    }
-  
-    /* Hide scrollbar but allow scrolling */
-    .tab-bar::-webkit-scrollbar {
-        display: none; /* For Chrome, Safari, and Opera */
-    }
-  
-    .tab-container {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        /* padding: 10px; */
-        margin-bottom: 0px;
-    }
-  
-    .tab-bar {
-        display: flex;
-        overflow-x: auto;
-        white-space: nowrap; /* Prevents breaking of text into new lines */
-        flex-grow: 1;
-        margin: 0 10px; /* Space between the arrows and tabs */
-    }
-  
-    .scroll-arrow {
-        cursor: pointer;
-        user-select: none;
-        padding: 10px;
-    }
-  
-  
-    /* buttons styling */
-    .metadata-btn-danger {
-      color: red !important;
-      border-color: red !important;
-    }
-  
-    .metadata-btn-success {
-      color: #4CAF50 !important;
-      border-color: #4CAF50 !important;
-    }
-  
-    .metadata-btn-info {
-      color: #1976d2 !important;
-      border-color: #1976d2 !important;
-    }
+  .su-page .su-generated-fields div.required label::before { content: '* '; color: #b32633; }
+  .su-page .su-generated-fields .su-warning {
+    border: 1px solid #f0ddaa; border-radius: 7px; padding: 11px 13px;
+    font-size: 12px; color: #795c23; background: #fffaf0;
+  }
+  /* The legacy detail page still uses these field help hints. */
+  .su-page #id_international_exchange_container .help-block { display: none; }
+  .su-page #id_international_exchange_container:hover .help-block,
+  .su-page #id_international_exchange_container:focus-within .help-block { display: block; }
 
-    #id_international_exchange_container .help-block {
-      display: none; /* Hide international-exchange help-block by default */
-    }
+  .su-page .su-actions {
+    display: flex; justify-content: flex-end; align-items: center;
+    gap: 9px; flex-wrap: wrap; padding: 1px 2px 28px;
+  }
+  .su-page .su-actions .v-btn { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 650; border-radius: 7px; box-shadow: none; }
 
-    #id_international_exchange_container:hover .help-block {
-      display: block; /* Show international-exchange help-block when the parent is hovered */
-    }
+  /* .su-page .su-action-link {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 9px 16px; min-height: 36px; color: #555 !important;
+    border: 1px solid #dedede; border-radius: 7px;
+    font-size: 12px; font-weight: 650; text-decoration: none !important;
+  }
+  .su-page .su-action-link:hover { background: #f7f7f7; } */
 
-    #id_international_exchange_container .help-block {
-      width: 300px;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      top: 100%;
-      z-index: 100;
-      margin-top: 0.2em;
-      background: #F8F9FA;
-      border-radius: 8px;
-      padding: 16px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-      /* font-family: Arial, sans-serif; */
-      font-size: 13px;
-      color: #5F6368;
-      /* color: #3a3d3f; */
-      line-height: 1.5;
-    }
-  </style>
+  .su-page .su-action-link { 
+    color: #ffffff !important; background-color: #ff5252; border: 1px solid #ff5252; 
+    border-radius: 7px; padding: 9px 16px; min-height: 36px; line-height: 18px; font-size: 12px; 
+    font-weight: 650; text-decoration: none !important; 
+  }
+  .su-page .su-action-link:hover { background-color: #ff7979; border-color: #ff7979; }
 
-<!-- <h4>Update {{ station.name }}</h4> -->
+  .su-page .su-busy {
+    position: fixed; inset: 0; z-index: 4000; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 15px; color: #3c3c3c; background: rgba(255,255,255,.84);
+    backdrop-filter: blur(2px);
+  }
+  .su-page .su-busy span { font-size: 13px; font-weight: 650; }
+  @media (max-width: 640px) {
+    .su-page .su-section-head { padding: 14px; }
+    .su-page .su-section-body { padding: 14px; }
+    .su-page #mapid { height: 300px; }
+    .su-page .su-actions { justify-content: stretch; }
+    .su-page .su-actions .v-btn, .su-page .su-actions .su-action-link { flex: 1 1 auto; }
+  }
+</style>
 
-<form method="POST" id="station-form">
+<div class="su-page" id="station-update-app" v-cloak>
+  <v-app class="su-vapp">
+    <!-- Native POST and CSRF handling remain unchanged. Using novalidate lets
+         Vue reveal the relevant tab before displaying any browser errors from
+         required inputs in initially hidden metadata sections. -->
+    <form id="station-form" method="POST" novalidate @submit="onSubmit">
+      {% csrf_token %}
 
-  <h6>Select station location on the map</h6>
+      <header class="su-intro">
+        <h2>{% if request.path == station_detail_route %}Station metadata{% else %}Edit station metadata{% endif %}</h2>
+        <p>{% if request.path == station_detail_route %}Review this station's location and metadata by category.{% else %}Update the location and metadata. Select a category to edit its fields.{% endif %}</p>
+      </header>
 
-  <div id="mapid" class="map-small"></div>
+      <section class="su-section" aria-labelledby="su-location-title">
+        <header class="su-section-head">
+          <span class="su-head-icon"><i class="material-icons-outlined" aria-hidden="true">place</i></span>
+          <div class="su-section-head-copy">
+            <h3 id="su-location-title">Station location</h3>
+            <p>{% if request.path == station_detail_route %}Current registered location for this station.{% else %}Click the map or edit latitude and longitude in the form below.{% endif %}</p>
+          </div>
+        </header>
+        <div class="su-section-body">
+          <p class="su-map-instruction">
+            {% if request.path == station_detail_route %}Station position is shown for reference.{% else %}Select a position on the map to update the coordinates. You can also expand the map.{% endif %}
+          </p>
+          <div id="mapid" aria-label="Station location map"></div>
+          <p class="su-coordinates" aria-live="polite">
+            <span>Latitude: <strong>[[ latitude === null ? 'Not set' : latitude.toFixed(5) ]]</strong></span>
+            <span>Longitude: <strong>[[ longitude === null ? 'Not set' : longitude.toFixed(5) ]]</strong></span>
+          </p>
+        </div>
+      </section>
 
-  <h6 style="color: #9e9e9e;">Options prefixed with <span style="color: red;">**</span> are required!</h6>
+      <section class="su-section" aria-labelledby="su-metadata-title">
+        <header class="su-section-head">
+          <span class="su-head-icon"><i class="material-icons-outlined" aria-hidden="true">assignment</i></span>
+          <div class="su-section-head-copy">
+            <h3 id="su-metadata-title">Station metadata</h3>
+            <p>Browse the seven metadata categories without leaving this page.</p>
+          </div>
+        </header>
+        <div class="su-section-body">
+          <v-tabs class="su-metadata-tabs" v-model="activeTab" show-arrows background-color="white" aria-label="Station metadata categories">
+            <v-tabs-slider color="blue"></v-tabs-slider>
+            <v-tab><v-icon left>mdi-information-outline</v-icon>Station information</v-tab>
+            <v-tab><v-icon left>mdi-tree-outline</v-icon>Local environment</v-tab>
+            <v-tab><v-icon left>mdi-tools</v-icon>Instrumentation &amp; maintenance</v-tab>
+            <v-tab><v-icon left>mdi-weather-partly-cloudy</v-icon>Observing practices</v-tab>
+            <v-tab><v-icon left>mdi-database-cog-outline</v-icon>Data processing</v-tab>
+            <v-tab><v-icon left>mdi-history</v-icon>Historical events</v-tab>
+            <v-tab><v-icon left>mdi-file-document-outline</v-icon>Other metadata</v-tab>
+          </v-tabs>
+          <p class="su-required-note">
+            {% if request.path == station_detail_route %}Fields are displayed for reference.{% else %}Required fields must be completed before saving.{% endif %}
+          </p>
+          <div v-if="formLayoutWarning" class="su-warning" role="status">
+            The generated metadata sections could not be grouped reliably. Showing all fields to avoid hiding information.
+          </div>
+          <div id="su-generated-fields" class="su-generated-fields">
+            {% form %}
+              {% attr form.is_automatic 'group' class %}srf-field-checkbox{% endattr %}
+              {% attr form.is_active 'group' class %}srf-field-checkbox{% endattr %}
+              {% attr form.is_synoptic 'group' class %}srf-field-checkbox{% endattr %}
+              {% attr form.international_exchange 'group' class %}srf-field-checkbox{% endattr %}
+            {% endform %}
+          </div>
+        </div>
+      </section>
 
-  <div class="tab-container">
-    <div class="scroll-arrow" onclick="tabLeft()">
-      <i aria-hidden="true" class="v-icon notranslate mdi mdi-chevron-left theme--light"></i>
+      <!-- Critical inheritance hook: station_detail.html OVERRIDES this block.
+           Its read-only page must not inherit the Save/Cancel buttons. -->
+      {% block station_detail_content %}
+        {% if request|has_any_feature_permission:"stations-list:write" %}
+        <div class="su-actions">
+          <a href="{% url 'station-detail' station.id %}" class="su-action-link">Cancel</a>
+
+          <v-btn type="submit" depressed color="primary" :loading="submitting" :disabled="submitting">
+            <v-icon left small>mdi-content-save-outline</v-icon>Save changes
+          </v-btn>
+        </div>
+        {% else %}
+        <div class="su-actions">
+          <a href="{% url 'station-detail' station.id %}" class="su-action-link">Back to station</a>
+        </div>
+        {% endif %}
+      {% endblock %}
+    </form>
+    <div v-if="submitting" class="su-busy" role="status" aria-live="polite">
+      <v-progress-circular indeterminate color="primary" size="38" width="3"></v-progress-circular>
+      <span>Saving station metadata...</span>
     </div>
-    <div class="tab-bar">
-        <div class="tab active-tab" onclick="openTab('option1')">STATION INFORMATION</div>
-        <div class="tab" onclick="openTab('option2')">LOCAL ENVIRONMENT</div>
-        <div class="tab" onclick="openTab('option3')">INSTRUMENTATION AND MAINTENANCE</div>
-        <div class="tab" onclick="openTab('option4')">OBSERVING PRACTICES</div>
-        <div class="tab" onclick="openTab('option5')">DATA PROCESSING</div>
-        <div class="tab" onclick="openTab('option6')">HISTORICAL EVENTS</div>
-        <div class="tab" onclick="openTab('option7')">OTHER METADATA</div>
-    </div>
-    <div class="scroll-arrow" onclick="tabRight()">
-      <i aria-hidden="true" class="v-icon notranslate mdi mdi-chevron-right theme--light"></i>
-    </div>
-  </div>
-
-    {% csrf_token %}
-    <div>
-      {% form %}
-        {% attr form.is_automatic 'group' class %}srf-field-checkbox{% endattr %}
-        {% attr form.is_active 'group' class %}srf-field-checkbox{% endattr %}
-        {% attr form.is_synoptic 'group' class %}srf-field-checkbox{% endattr %}
-        {% attr form.international_exchange 'group' class %}srf-field-checkbox{% endattr %}
-      {% endform %}
-    </div>
-
-{% block station_detail_content %}
-      <button type="submit" class="btn-outline-default btn-small metadata-btn-success">Submit</button>
-
-      <a href="{% url 'station-detail' station.id %}">
-
-        <button type="button" class="btn-outline-default btn-small metadata-btn-danger">Cancel and back</button>
-
-      </a>
+  </v-app>
+</div>
 {% endblock %}
 
-</form>
-  
-  {% endblock %} {% block localjavascript %}
-  <script>
-    
-    // map
-    $(document).ready(function() {
-      // var tempLat = "{{ MAP_LATITUDE|safe }}";
-      // var tempLng = "{{ MAP_LONGITUDE|safe }}";
-      var tempZoom = 12;
-      var tempLat = "{{ station.latitude }}";
-      var tempLng = "{{ station.longitude }}";
-      // var tempZoom = 0;
-
-      $('select').formSelect();
-
-      $('#id_station_list').DataTable({
-        scrollX: true,
-        columnDefs: [
-          {
-            targets: [0, 1, 2],
-            className: 'mdl-data-table__cell--non-numeric'
-          }
-        ]
-      });
-
-      // changing cursor to crosshair while over the map
-      document.getElementById('mapid').style.cursor = "crosshair";
-
-      // map js
-      var mymap = L.map('mapid', {
-        zoomControl: true
-      }).setView([tempLat, tempLng], tempZoom);
-
-      var osmUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-      var osmAttrib = 'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors';
-
-      var osm = new L.TileLayer(osmUrl, {
-        minZoom: 1,
-        maxZoom: 100,
-        attribution: osmAttrib
-      });
-
-      // add zoom control with top left options
-      mymap.zoomControl.setPosition('topleft');
-      
-      mymap.addLayer(osm);
-
-      // getting map coordinates when the mouse moves and inserting it into any html element with a specific class
-      mymap.on('mousemove',function(e){
-        $('.mouse-lat').html(`${e.latlng.lat}`)
-        
-        $('.mouse-lng').html(`${e.latlng.lng}`)
-      })
-      // creating control to show latitude and longitude values
-      var latLngInfo = L.control({position: 'bottomleft'});
-
-      latLngInfo.onAdd = function (mymap) {
-          this._div = L.DomUtil.create('div', 'mouse-coordinates-box'); // create a div with a class "latLngInfo"
-          this.update();
-          return this._div;
+{% block localjavascript %}
+{% url 'station-detail' station.id as station_detail_route %}
+<script>
+(function () {
+  // Page-specific Vue root. The shared station_base header has its own Vue app.
+  new Vue({
+    el: '#station-update-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data: function () {
+      return {
+        activeTab: 0,
+        isDetailPage: {% if request.path == station_detail_route %}true{% else %}false{% endif %},
+        formLayoutWarning: false,
+        submitting: false,
+        latitude: null,
+        longitude: null,
+        leafletMap: null,
+        stationMarker: null
       };
-
-      // method used to update the control based on feature properties passed
-      latLngInfo.update = function () {
-          this._div.innerHTML = 'Latitude:&nbsp&nbsp<span class="mouse-lat"></span></br>Longitude:&nbsp&nbsp<span class="mouse-lng"></span> ';
-      };
-
-      // adding the custom control to the map
-      latLngInfo.addTo(mymap);
-
-      // var to hold marker based on clicking action
-      var newStationMarker;
-
-      // fxn to add a marker
-      function addNewMarker(lat, lng) {
-        // clearing existing marker
-        if (newStationMarker != undefined) {
-          mymap.removeLayer(newStationMarker);
-        }
-
-        // adding a marker to show where user clicked
-        newStationMarker = L.marker([lat,lng]).addTo(mymap).bindPopup('Station Location').openPopup();
+    },
+    watch: {
+      activeTab: function () { this.$nextTick(this.showSelectedMetadataCategory); }
+    },
+    mounted: function () {
+      this.prepareMetadataCategories();
+      this.showSelectedMetadataCategory();
+      this.syncSynopticFields();
+      this.initLocationMap();
+      // Material forms render their own select controls. Initialize only those
+      // inside this form, not dropdowns in the shared station header.
+      if (window.jQuery && typeof window.jQuery.fn.formSelect === 'function') {
+        window.jQuery(this.$el).find('#su-generated-fields select').formSelect();
       }
-
-      addNewMarker(tempLat, tempLng);
-
-      // getting map coordinates based on clicking action and passing it to the latitude and longitude feild
-      mymap.on('click',function(e){
-
-        // Adding the active class to the label of the longitude and latitude field
-        document.getElementById('id_latitude_container').querySelector("label").classList.add("active");
-        document.getElementById('id_longitude_container').querySelector("label").classList.add("active");
-
-        // Passing the latitude and longitude values into the latitude and the longitude form field.
-        document.getElementById('id_latitude').value = e.latlng.lat;
-        document.getElementById('id_longitude').value = e.latlng.lng;
-
-        // add a new marker
-        addNewMarker(e.latlng.lat, e.latlng.lng);
-      });
-
-      // adding a resize button to the map
-      var isFullScreen = false;
-
-      L.Control.resizeMap = L.Control.extend({        
-        onAdd: function(mymap) {
-          var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-
-          var button = L.DomUtil.create('a', 'leaflet-control-button fullscreen-button-width', container);
-
-          button.innerHTML = '<span class="transparent-caret"><b>RESIZE MAP</b></span>';
-
-          L.DomEvent.disableClickPropagation(button);
-          
-          L.DomEvent.on(button, 'click', function(){
-            // var mapId = document.getElementById('mapid');
-            // mapId.classList.toggle("map-large");
-            // mapId.classList.toggle("map-small");
-
-            if(isFullScreen == false){
-              document.getElementById('mapid').requestFullscreen();
-
-              isFullScreen = true;
-            }
-            else {
-              document.exitFullscreen();
-
-              isFullScreen = false;
-            }
-
-          });
-
-          return container;
-        },
-      });
-
-      L.control.mapResize = function(opts) {
-        return new L.Control.resizeMap(opts);
-      }
-
-      L.control.mapResize({ position: 'topright' }).addTo(mymap);
-
-
-      // fxn to update map latitude
-      function updateLatitude(lat) {
-        var currentLng = mymap.getCenter().lng; // get the current longitude
-        
-        // set the map view
-        mymap.setView([lat, currentLng], 5);
-
-        // setting the marker
-        addNewMarker(lat, currentLng);
-      }
-
-      // fxn to update map longitude
-      function updateLongitude(lng) {
-        var currentLat = mymap.getCenter().lat; // get the current latitude
-        mymap.setView([currentLat, lng],5);
-
-        // setting the marker
-        addNewMarker(currentLat, lng);
-      }
-
-      // event listener to any changes to the latitude column
-      document.getElementById('id_latitude').addEventListener('input', function() {
-        var lat = parseFloat(this.value);
-        
-        // make sure the number is valid
-        if (!isNaN(lat)) {
-          updateLatitude(lat);
+      window.addEventListener('pageshow', this.onPageShow);
+    },
+    beforeDestroy: function () {
+      window.removeEventListener('pageshow', this.onPageShow);
+      if (this._synopticCheckbox) this._synopticCheckbox.removeEventListener('change', this.syncSynopticFields);
+      if (this._latInput) this._latInput.removeEventListener('input', this.onCoordinateInput);
+      if (this._lngInput) this._lngInput.removeEventListener('input', this.onCoordinateInput);
+      if (this._fullscreenListener) document.removeEventListener('fullscreenchange', this._fullscreenListener);
+      if (this.leafletMap) this.leafletMap.remove();
+    },
+    methods: {
+      prepareMetadataCategories: function () {
+        var container = this.$el.querySelector('#su-generated-fields');
+        if (!container) return;
+        // These are the exact heading labels generated by the existing
+        // Django Material form, in the same order as the v-tabs above.
+        var labels = [
+          'station information', 'local environment',
+          'instrumentation and maintenance', 'observing practices',
+          'data processing', 'historical events', 'other metadata'
+        ];
+        var panes = new Array(labels.length).fill(null);
+        var headings = container.querySelectorAll('h5');
+        for (var i = 0; i < headings.length; i++) {
+          var label = headings[i].textContent.trim().toLowerCase().replace(/\s+/g, ' ');
+          var index = labels.indexOf(label);
+          if (index === -1) continue;
+          // The original station_update.html selected the grandparent of each
+          // heading. Keep that exact grouping to preserve generated inputs.
+          var group = headings[i].parentElement && headings[i].parentElement.parentElement;
+          if (group && group !== container && !panes[index]) panes[index] = group;
         }
-      });
-
-      // event listener to any changes to the longitude column
-      document.getElementById('id_longitude').addEventListener('input', function() {
-        var lng = parseFloat(this.value);
-        
-        // make sure the number is valid
-        if (!isNaN(lng)) {
-          updateLongitude(lng);
-        }
-      });
-
-    });
-
-    // control for tab options below map
-    function openTab(tabId) {
-        // Hide all tab content
-        var tabs = document.getElementsByClassName("tab-content");
-        for (var i = 0; i < tabs.length; i++) {
-            tabs[i].classList.remove("show-tab");
-        }
-
-        // Remove active class from all tabs
-        var tabLinks = document.getElementsByClassName("tab");
-        for (var i = 0; i < tabLinks.length; i++) {
-            tabLinks[i].classList.remove("active-tab");
-        }
-
-        // Show the selected tab content and set active tab
-        document.getElementById(tabId).classList.add("show-tab");
-        event.currentTarget.classList.add("active-tab");
-    }
-
-    function tabLeft() {
-        document.querySelector('.tab-bar').scrollBy({
-            left: -300, // Adjust the scroll amount
-            behavior: 'smooth'
+        // If Django's generated layout changes, keep every field accessible
+        // rather than accidentally hiding form controls or server-side errors.
+        var unique = panes.filter(Boolean).filter(function (pane, i, list) {
+          return list.indexOf(pane) === i;
         });
-    }
-
-    function tabRight() {
-        document.querySelector('.tab-bar').scrollBy({
-            left: 300, // Adjust the scroll amount
-            behavior: 'smooth'
-        });
-    }
-
-    // add the necessary attributes to the calss options
-    window.addEventListener('DOMContentLoaded', function() {
-      // Find all h5 elements
-      const h5Tags = document.querySelectorAll('h5');
-      
-      // Loop through each h5 tag to find the tab options
-      h5Tags.forEach(function(h5) {
-          if (h5.textContent.trim() === "Station Information") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option1');
-              grandparent.setAttribute('class', 'tab-content show-tab');
-          }
-
-          else if (h5.textContent.trim() === "Local Environment") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option2');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-
-          else if (h5.textContent.trim() === "Instrumentation and Maintenance") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option3');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-
-          else if (h5.textContent.trim() === "Observing Practices") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option4');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-
-          else if (h5.textContent.trim() === "Data Processing") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option5');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-
-          else if (h5.textContent.trim() === "Historical Events") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option6');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-
-          else if (h5.textContent.trim() === "Other Metadata") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option7');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-      });
-
-  });
-
-
-    // Function to toggle visibility of containers based on checkbox status
-    function toggleSynopticContainers() {
-      const isChecked = document.getElementById('id_is_synoptic').checked;
-      const containers = ['id_synoptic_code_container', 'id_synoptic_type_container'];
-
-      containers.forEach(id => {
-        const container = document.getElementById(id);
-        if (isChecked) {
-          container.classList.remove('hide_content');
+        if (panes.some(function (pane) { return !pane; }) || unique.length !== labels.length) {
+          console.warn('Station metadata: generated form headings did not match the expected groups.');
+          this.formLayoutWarning = true;
+          this._metadataPanes = null;
         } else {
-          container.classList.add('hide_content');
+          this._metadataPanes = panes;
+          panes.forEach(function (pane, i) {
+            pane.classList.add('su-form-pane');
+            pane.setAttribute('data-station-tab', String(i));
+          });
         }
-      });
+
+        var synoptic = container.querySelector('#id_is_synoptic');
+        if (synoptic) {
+          this._synopticCheckbox = synoptic;
+          synoptic.addEventListener('change', this.syncSynopticFields);
+        }
+        container.classList.add('su-form-ready');
+      },
+      showSelectedMetadataCategory: function () {
+        if (!this._metadataPanes) return;
+        var selected = Number(this.activeTab);
+        this._metadataPanes.forEach(function (pane, index) {
+          pane.hidden = index !== selected;
+        });
+      },
+      syncSynopticFields: function () {
+        var container = this.$el.querySelector('#su-generated-fields');
+        var checkbox = container && container.querySelector('#id_is_synoptic');
+        if (!checkbox) return;
+        // Keep the original form behavior, without globally hiding unrelated
+        // controls or replacing the Django checkbox's actual checked state.
+        ['id_synoptic_code_container', 'id_synoptic_type_container'].forEach(function (id) {
+          var target = container.querySelector('#' + id);
+          if (target) target.hidden = !checkbox.checked;
+        });
+      },
+      onSubmit: function (event) {
+        if (this.submitting) { event.preventDefault(); return; }
+        if (this.isDetailPage) { event.preventDefault(); return; }
+        // Browser validation of fields in hidden tabs can fail without being
+        // able to focus the invalid input. Reveal its category first.
+        var form = event.target;
+        var controls = Array.prototype.slice.call(form.elements || []);
+        var invalid = controls.find(function (control) {
+          return control.willValidate && !control.checkValidity();
+        });
+        if (invalid) {
+          event.preventDefault();
+          var pane = invalid.closest('.su-form-pane');
+          if (pane) {
+            this.activeTab = Number(pane.getAttribute('data-station-tab'));
+            this.showSelectedMetadataCategory();
+          }
+          this.$nextTick(function () {
+            if (typeof invalid.focus === 'function') invalid.focus();
+            if (typeof invalid.reportValidity === 'function') invalid.reportValidity();
+          });
+          return;
+        }
+        // Let the original Django view perform the native POST/redirect.
+        this.submitting = true;
+      },
+      onPageShow: function (event) {
+        if (event.persisted) this.submitting = false;
+      },
+      parseCoordinate: function (value, low, high) {
+        if (value === null || value === undefined || String(value).trim() === '') return null;
+        var n = Number(value);
+        return Number.isFinite(n) && n >= low && n <= high ? n : null;
+      },
+      initLocationMap: function () {
+        var mapEl = this.$el.querySelector('#mapid');
+        if (!mapEl || !window.L) {
+          console.warn('Station update: Leaflet is unavailable; the metadata form remains usable.');
+          return;
+        }
+        var latInput = this.$el.querySelector('#id_latitude');
+        var lngInput = this.$el.querySelector('#id_longitude');
+        var lat = this.parseCoordinate(latInput ? latInput.value : '{{ station.latitude|default_if_none:""|escapejs }}', -90, 90);
+        var lng = this.parseCoordinate(lngInput ? lngInput.value : '{{ station.longitude|default_if_none:""|escapejs }}', -180, 180);
+        // Backend station position is a fallback if a field is not rendered.
+        if (lat === null) lat = this.parseCoordinate('{{ station.latitude|default_if_none:""|escapejs }}', -90, 90);
+        if (lng === null) lng = this.parseCoordinate('{{ station.longitude|default_if_none:""|escapejs }}', -180, 180);
+        this.latitude = lat;
+        this.longitude = lng;
+        var hasPosition = lat !== null && lng !== null;
+        var center = hasPosition ? [lat, lng] : [17.25, -88.75];
+        var map = window.L.map(mapEl, { zoomControl: true }).setView(center, hasPosition ? 12 : 8);
+        this.leafletMap = map;
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          minZoom: 1, maxZoom: 19,
+          attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        if (hasPosition) this.stationMarker = window.L.marker(center).addTo(map);
+
+        var vm = this;
+        // Detail view is read-only, regardless of map CSS in station_detail.html.
+        if (!this.isDetailPage) {
+          map.on('click', function (event) {
+            vm.setStationCoordinates(event.latlng.lat, event.latlng.lng, false);
+          });
+        }
+        var hover = window.L.control({ position: 'bottomleft' });
+        hover.onAdd = function () {
+          this._div = window.L.DomUtil.create('div', 'su-map-coordinates-control');
+          this._div.textContent = 'Move over the map to see coordinates';
+          return this._div;
+        };
+        hover.addTo(map);
+        map.on('mousemove', function (event) {
+          hover._div.textContent = 'Lat ' + event.latlng.lat.toFixed(5) +
+                                   ' · Lng ' + event.latlng.lng.toFixed(5);
+        });
+        var fullscreen = window.L.control({ position: 'topright' });
+        fullscreen.onAdd = function () {
+          var button = window.L.DomUtil.create('a', 'leaflet-bar su-map-fullscreen');
+          button.href = '#';
+          button.title = 'Expand map';
+          button.setAttribute('aria-label', 'Toggle full-screen map');
+          button.textContent = '⛶';
+          window.L.DomEvent.disableClickPropagation(button);
+          window.L.DomEvent.on(button, 'click', function (event) {
+            window.L.DomEvent.preventDefault(event);
+            if (document.fullscreenElement === mapEl) {
+              if (document.exitFullscreen) document.exitFullscreen();
+            } else if (mapEl.requestFullscreen) {
+              mapEl.requestFullscreen();
+            }
+          });
+          return button;
+        };
+        fullscreen.addTo(map);
+        this._fullscreenListener = function () {
+          if (vm.leafletMap) vm.leafletMap.invalidateSize();
+        };
+        document.addEventListener('fullscreenchange', this._fullscreenListener);
+        if (!this.isDetailPage) {
+          if (latInput) latInput.addEventListener('input', this.onCoordinateInput);
+          if (lngInput) lngInput.addEventListener('input', this.onCoordinateInput);
+          this._latInput = latInput;
+          this._lngInput = lngInput;
+        }
+        this.$nextTick(function () { map.invalidateSize(); });
+      },
+      onCoordinateInput: function () {
+        var latInput = this.$el.querySelector('#id_latitude');
+        var lngInput = this.$el.querySelector('#id_longitude');
+        var lat = this.parseCoordinate(latInput && latInput.value, -90, 90);
+        var lng = this.parseCoordinate(lngInput && lngInput.value, -180, 180);
+        if (lat !== null && lng !== null) this.setStationCoordinates(lat, lng, true);
+      },
+      setStationCoordinates: function (lat, lng, fromInputs) {
+        if (this.isDetailPage || !Number.isFinite(lat) || !Number.isFinite(lng) ||
+            lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+        this.latitude = lat;
+        this.longitude = lng;
+        if (this.leafletMap) {
+          if (this.stationMarker) this.leafletMap.removeLayer(this.stationMarker);
+          this.stationMarker = window.L.marker([lat, lng]).addTo(this.leafletMap);
+          this.leafletMap.panTo([lat, lng]);
+        }
+        if (fromInputs) return;
+        // Django fields remain the POST source of truth. Update those inputs,
+        // not a separate Vue-only coordinate value.
+        [['id_latitude', lat], ['id_longitude', lng]].forEach(function (item) {
+          var input = document.getElementById(item[0]);
+          if (!input) return;
+          input.value = String(item[1]);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          var wrapper = input.closest('.input-field');
+          var label = wrapper && wrapper.querySelector('label');
+          if (label) label.classList.add('active');
+        });
+      }
     }
-
-    // Event listener for the checkbox
-    document.getElementById('id_is_synoptic').addEventListener('change', toggleSynopticContainers);
-
-    // Initial check to set the right state on page load
-    toggleSynopticContainers();
-  </script>
-</div>
+  });
+})();
+</script>
 {% endblock %}

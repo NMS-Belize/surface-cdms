@@ -1,439 +1,283 @@
 {% extends "wx/station_base.html" %}
-{% block station_content %}
 {% load material_form %}
 {% load wx_filters %}
+{% block station_content %}
 
-
+<!--
+  Create Station: this page owns only the creation form and its Vue 2 app.
+  station_base.html continues to own the separate shared header/navigation Vue root.
+  CSS deliberately avoids bare nav, form, .tab, .row and .v-tab selectors because
+  SURFACE includes global Materialize and Vuetify styles.
+-->
 <style>
-  .oscar_fail_btn:hover {
-    color: white !important;
+  [v-cloak] { display: none !important; }
+  .sc-page { width: 100%; min-width: 0; color: #292929; }
+  .sc-page .sc-app,
+  .sc-page .sc-app .v-application--wrap { background: #fff !important; }
+  .sc-page .sc-app .v-application--wrap { min-height: auto !important; }
+  .sc-page * { box-sizing: border-box; }
+  .sc-page .sc-intro { margin: 0 0 17px; }
+  .sc-page .sc-intro h2 { margin: 0; font-size: 17px; font-weight: 700; color: #292929; line-height: 1.45; }
+  .sc-page .sc-intro p { margin: 4px 0 0; color: #737373; font-size: 12px; line-height: 1.55; }
+  .sc-page .sc-section { border: 1px solid #e7e7e7; border-radius: 11px; background: #fff; margin-bottom: 17px; overflow: visible; box-shadow: 0 2px 8px rgba(0,0,0,.025); }
+  .sc-page .sc-section-head { display: flex; align-items: center; gap: 11px; padding: 16px 19px; border-bottom: 1px solid #eee; }
+  .sc-page .sc-section-head-copy { min-width: 0; flex: 1; }
+  .sc-page .sc-section-head h3 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.4; color: #282828; }
+  .sc-page .sc-section-head p { margin: 3px 0 0; color: #7d7d7d; font-size: 12px; line-height: 1.5; }
+  .sc-page .sc-head-icon { display: inline-flex; flex: none; justify-content: center; align-items: center; width: 34px; height: 34px; border-radius: 8px; color: #686868; background: #f5f5f5; }
+  .sc-page .sc-head-icon .material-icons-outlined { font-size: 20px; }
+  .sc-page .sc-section-body { padding: 18px 19px; }
+  /* Service controls keep the original SURFACE pill-and-knob interaction.
+     The button has switch semantics; Vue 2 controls its checked state. */
+  .sc-page .sc-service-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
   }
-
-  .hide_main_content {
-    opacity: 0; 
-    pointer-events: none; 
-    user-select: none;
-  }
-
-  .hide_content {
-    display: none;
-  }
-
-
-  #station-form {
-    max-width: 95%; 
-    margin: 0 auto;
-  }
-  
-  .oscar-options-container {
-    margin-top: 20px;
-    width: 50%;
-    /* gap: 20px; Adjusts the spacing between toggle items */
-    /* margin-bottom: 50px; */
-  }
-  .toggle-container {
-    display: flex;
-    gap: 20px; /* Adjusts the spacing between toggle items */
-    margin-bottom: 50px;
-  }
-  
-  .toggle-item {
+  .sc-page .sc-service-item {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    min-height: 78px;
+    padding: 13px 16px;
+    border: 1px solid #e6e6e6;
+    border-radius: 9px;
+    background: #fff;
   }
-  
-  .toggle-label {
-    padding-right: 15px; /* Adjusts the spacing between the label and the switch */
-    font-size: 14px;
-    font-weight: bold;
-  }
-  
-  .toggle-switch {
+  .sc-page .sc-service-info { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .sc-page .sc-service-info strong { font-size: 13px; font-weight: 700; color: #303030; line-height: 1.3; }
+  .sc-page .sc-service-info small { font-size: 11px; color: #777; line-height: 1.45; }
+  .sc-page .sc-service-toggle {
     position: relative;
-    width: 60px;
-    height: 34px;
-    background-color: #ccc;
-    border-radius: 34px;
+    flex: none;
+    width: 56px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #c8c8c8;
     cursor: pointer;
-    transition: background-color 0.4s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    transition: background-color .18s ease, box-shadow .18s ease;
+    appearance: none;
+    -webkit-appearance: none;
   }
-  
-  .toggle-switch.no-toggle {
-    pointer-events: none; /* Disable interaction */
-    background-color: #2196F3; /* Permanently 'on' color */
-  }
-  
-  .toggle-knob {
+  .sc-page .sc-service-toggle:hover:not(:disabled) { box-shadow: 0 0 0 3px rgba(0,0,0,.055); }
+  .sc-page .sc-service-toggle:focus-visible,
+  .sc-page .sc-action-link:focus-visible { outline: 2px solid #1976d2; outline-offset: 3px; }
+  .sc-page .sc-service-knob {
     position: absolute;
-    width: 26px;
-    height: 26px;
-    background-color: white;
-    border-radius: 50%;
     top: 4px;
     left: 4px;
-    transition: transform 0.4s;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .17);
+    transition: transform .18s ease;
+    pointer-events: none;
   }
-  
-  /* Specific colors for each switch */
-  .oscar-switch.active {
-    background-color: #9C27B0; /* Purple color for OSCAR */
+  /* Preserve the established service colors: fixed blue, OSCAR purple,
+     and WIS2Box green. Never make SURFACE user-toggleable. */
+  .sc-page .sc-service-toggle--surface { background: #2196f3; cursor: default; opacity: 1; }
+  .sc-page .sc-service-toggle--surface .sc-service-knob,
+  .sc-page .sc-service-toggle--oscar-on .sc-service-knob,
+  .sc-page .sc-service-toggle--wis2box-on .sc-service-knob { transform: translateX(24px); }
+  .sc-page .sc-service-toggle--oscar-on { background: #9c27b0; }
+  .sc-page .sc-service-toggle--wis2box-on { background: #4caf50; }
+  @media (prefers-reduced-motion: reduce) {
+    .sc-page .sc-service-toggle, .sc-page .sc-service-knob { transition: none; }
   }
-  
-  .export-switch.active {
-    background-color: #9C27B0; /* Purple color for OSCAR */
+  .sc-page .sc-location-advice { display: flex; gap: 8px; align-items: center; margin: 0 0 11px; font-size: 12px; color: rgb(245, 104, 104); }
+  .sc-page .sc-location-advice .material-icons-outlined { font-size: 17px; color: #888; }
+  .sc-page #mapid {cursor: crosshair !important; height: 375px; width: 100%; max-width: none; border: 1px solid #dedede; border-radius: 9px; background: #f7f7f7; margin: 0; overflow: hidden; z-index: 0; }
+  .sc-page #mapid:fullscreen {cursor: crosshair !important; width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .sc-page .sc-coordinates { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 0; color: #747474; font-size: 11px; }
+  .sc-page .sc-coordinates strong { font-weight: 650; color: #444; }
+  .sc-page .sc-map-coordinates-control { background: rgba(255,255,255,.96); border: 1px solid #e3e3e3; padding: 7px 9px; border-radius: 5px; font-size: 11px; line-height: 1.5; box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+  .sc-page .sc-map-fullscreen { color: #222; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; font-size: 13px; font-weight: 700; text-decoration: none; background: #fff; }
+  /* Real Vuetify 2 tabs are used here because these change content within THIS page. */
+  .sc-page .sc-metadata-tabs { border-bottom: 1px solid #eaeaea; background: #fff !important; margin-bottom: 12px; }
+  .sc-page .sc-metadata-tabs .v-tabs-bar { background: #fff !important; }
+  .sc-page .sc-metadata-tabs .v-tab { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 650; min-height: 44px; padding: 0 17px; }
+  .sc-page .sc-metadata-tabs .v-tab.v-tab--active,
+  .sc-page .sc-metadata-tabs .v-tab.v-tab--active .v-icon { color: #1976d2 !important; }
+  .sc-page .sc-metadata-tabs .v-tab .v-icon { font-size: 18px; }
+  .sc-page .sc-generated-fields { min-height: 80px; visibility: hidden; }
+  .sc-page .sc-generated-fields.sc-form-ready { visibility: visible; }
+  .sc-page .sc-generated-fields .sc-form-pane[hidden],
+  .sc-page .sc-generated-fields [hidden] { display: none !important; }
+  .sc-page .sc-generated-fields h5 { font-size: 15px; font-weight: 700; color: #343434; margin: 20px 0 36px; line-height: 1.4; }
+  .sc-page .sc-generated-fields .sc-field-heading { margin: 20px 0 22px; border-top: 1px solid #ececec; padding-top: 15px; font-size: 12px; font-weight: 700; color: #4a4a4a; }
+  .sc-page .sc-generated-fields .sc-field-note { margin: 5px 0 9px; color: #888; font-size: 11px; line-height: 1.4; }
+  .sc-page .sc-generated-fields .row { margin-bottom: 8px; }
+  .sc-page .sc-generated-fields .input-field { margin-top: 12px; }
+  .sc-page .sc-generated-fields .help-block { font-size: 11px; color: #858585; }
+  .sc-page .sc-generated-fields .srf-field-checkbox label { display: flex; align-items: center; min-height: 28px; margin: 2px 0 12px !important; }
+  .sc-page .sc-generated-fields div.required label::before { content: "* "; color: #ba2635; }
+  .sc-page .sc-required-note { display: flex; align-items: center; gap: 7px; font-size: 11px; color: rgb(245, 104, 104); margin: 0 0 10px; }
+  .sc-page .sc-required-note .material-icons-outlined { font-size: 16px; }
+  .sc-page .sc-tab-empty { background: #fafafa; border: 1px dashed #dedede; padding: 20px; border-radius: 8px; font-size: 12px; color: #777; }
+  .sc-page .sc-export-area { padding: 14px 15px; border: 1px solid #e5e5e5; border-radius: 9px; margin: 20px 0 6px; background: #fafafa; }
+  .sc-page .sc-export-area .v-input { margin: 0; }
+  .sc-page .sc-export-area .v-label { font-size: 12px; }
+  .sc-page .sc-export-description { margin: 4px 0 11px; color: #7d7d7d; font-size: 11px; }
+  .sc-page .sc-token-row { display: flex; align-items: flex-end; gap: 8px; max-width: 520px; margin-top: 12px; }
+  .sc-page .sc-token-row .v-input { flex: 1; min-width: 0; }
+  .sc-page .sc-token-row .v-btn { flex: none; margin-bottom: 3px; }
+  .sc-page .sc-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; padding: 14px 2px 32px; }
+  .sc-page .sc-actions .v-btn { text-transform: none; letter-spacing: 0; border-radius: 7px; font-size: 12px; font-weight: 650; box-shadow: none; }
+  .sc-page .sc-action-link { color: #ffffff !important; background-color: #ff5252; border: 1px solid #ff5252; border-radius: 7px; padding: 9px 16px; min-height: 36px; line-height: 18px; font-size: 12px; font-weight: 650; text-decoration: none !important; }
+  .sc-page .sc-action-link:hover { background-color: #ff7979; border-color: #ff7979; }
+  .sc-page .sc-error { display: flex; gap: 12px; border: 1px solid #f0c4c8; border-left: 3px solid #bd2937; border-radius: 8px; padding: 16px; margin: 0 0 16px; background: #fff9f9; }
+  .sc-page .sc-error-icon { color: #b32633; font-size: 21px; }
+  .sc-page .sc-error h3 { font-size: 15px; font-weight: 750; margin: 0 0 5px; color: #9b2430; }
+  .sc-page .sc-error p { margin: 0 0 10px; font-size: 12px; color: #6f343b; line-height: 1.55; }
+  .sc-page .sc-error-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+  .sc-page .sc-error-actions .v-btn { font-size: 12px; font-weight: 650; text-transform: none; letter-spacing: 0; }
+  .sc-page .sc-busy { position: fixed; z-index: 4000; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; color: #3c3c3c; background: rgba(255,255,255,.84); backdrop-filter: blur(2px); }
+  .sc-page .sc-busy span { font-size: 13px; font-weight: 650; text-align: center; }
+  @media (max-width: 960px) {
+    .sc-page .sc-service-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   }
-  
-  .wis2box-switch.active {
-    background-color: #4CAF50 ; /* Green color for WIS2BOX */
+  @media (max-width: 640px) {
+    .sc-page .sc-section-head { padding: 14px; }
+    .sc-page .sc-section-body { padding: 14px; }
+    .sc-page .sc-service-grid { grid-template-columns: 1fr; }
+    .sc-page #mapid { height: 300px; }
+    .sc-page .sc-actions { justify-content: stretch; }
+    .sc-page .sc-actions .v-btn, .sc-page .sc-actions .sc-action-link { flex: 1 1 auto; }
   }
-  
-  .toggle-switch.active .toggle-knob {
-    transform: translateX(26px);
-  }
-  
-  /* Hide options by default */
-  .form-item {
-    display: none;
-  }
-  
-    .srf-field-checkbox label {
-      display: flex;
-      align-items: center;
-      height: 100%;
-      max-height: 76px;
-      padding-left: 11.25px;
-      padding-right: 11.25px;
-      margin-bottom: 25px !important;
-    }
-    div.required label::before {
-      content: "** " !important;
-      color: red !important;
-    }
-    .map-small {
-      max-width: 80%; 
-      height: 511.25px !important;
-      border-radius: 20px;
-      border: 2px solid rgba(0, 0, 0, 0.628);
-      /* margin: 0 auto; */
-  }
-    .map-large {
-      max-width: 1022.50px; 
-      height: 622.50px !important;
-    }
-    .mouse-coordinates-box {
-      bottom: 5px;
-      left: 5px;
-      background-color: white;
-      padding: 2px;
-      width: 185px;
-      font-size: 12px;
-      border-radius: 2px;
-      box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-        0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
-    }
-    #mapid {
-      margin-bottom: 20px;
-    }
-    .fullscreen-button-width {
-      width: 100px !important;
-    }
-    .transparent-caret {
-      caret-color: transparent !important;
-      cursor: default;
-    }
-    input::-webkit-calendar-picker-indicator {
-      display: none !important;
-    }
-    h5 {
-      margin-bottom: 25px !important;
-    }
-  
-  
-    .spinner {
-        display: none;
-        border: 8px solid #f3f3f3;
-        border-top: 8px solid #3498db;
-        border-radius: 50%;
-        width: 70px;
-        height: 70px;
-        animation: spin 2s linear infinite;
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        margin-left: -35px;
-        margin-top: -50px;
-        z-index: 1001;
-    }
-  
-  
-    .overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(255, 255, 255, 0.306);
-        z-index: 1000;
-        backdrop-filter: blur(5px);
-    }
-  
-  
-    .spinner-text {
-        display: none;
-        position: fixed;
-        top: 60%;
-        left: 50%;
-        transform: translateX(-50%);
-        color: #5a5a5a;
-        font-size: 20px !important;
-        text-align: center;
-        z-index: 1001;
-    }
-  
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-  
-    .subInfo {
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 16px;
-      margin-top: 0px;
-    }
-  
-    #additionalInfo {
-      margin-top: 30px !important;
-    }
-  
-    /* Style the tab links */
-    /* Style the tab links */
-    .tab {
-        display: inline-block;
-        cursor: pointer;
-        padding: 10px 20px;
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-        font-size: .875rem;
-        font-weight: 600;
-        color: #9e9e9e;
-        letter-spacing: .0892857143em;
-        text-transform: uppercase;
-    }
-  
-    .tab:hover {
-        background-color: #dddddda9;
-    }
-  
-    .active-tab {
-        border-bottom: 2px solid #1976d2 ;
-        color: #1976d2;
-    }
-  
-    .active-tab:hover {
-      background-color: #1976d24a ;
-    }
-  
-    /* Hide all sections by default */
-    .tab-content {
-        display: none;
-        border-top: none;
-    }
-  
-    /* Style visible content */
-    .show-tab {
-        display: block;
-    }
-  
-    /* Optional styling */
-    .tab-bar {
-        display: flex;
-        overflow-x: auto; /* Enables horizontal scrolling */
-        white-space: nowrap; /* Prevents breaking of text into new lines */
-        padding: 10px;
-    }
-  
-    /* Hide scrollbar but allow scrolling */
-    .tab-bar::-webkit-scrollbar {
-        display: none; /* For Chrome, Safari, and Opera */
-    }
-  
-    .tab-container {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        /* padding: 10px; */
-        margin-bottom: 0px;
-    }
-  
-    .tab-bar {
-        display: flex;
-        overflow-x: auto;
-        white-space: nowrap; /* Prevents breaking of text into new lines */
-        flex-grow: 1;
-        margin: 0 10px; /* Space between the arrows and tabs */
-    }
-  
-    .scroll-arrow {
-        cursor: pointer;
-        user-select: none;
-        padding: 10px;
-    }
-  
-    /* buttons styling */
-    .metadata-btn-danger {
-      color: red !important;
-      border-color: red !important;
-    }
-  
-    .metadata-btn-success {
-      color: #4CAF50 !important;
-      border-color: #4CAF50 !important;
-    }
-  
-    .metadata-btn-info {
-      color: #1976d2 !important;
-      border-color: #1976d2 !important;
-    }
-    
-    #id_international_exchange_container .help-block {
-      display: none; /* Hide international-exchange help-block by default */
-    }
-
-    #id_international_exchange_container:hover .help-block {
-      display: block; /* Show international-exchange help-block when the parent is hovered */
-    }
-
-    #id_international_exchange_container .help-block {
-      width: 300px;
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      top: 100%;
-      z-index: 100;
-      margin-top: 0.2em;
-      background: #F8F9FA;
-      border-radius: 8px;
-      padding: 16px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-      /* font-family: Arial, sans-serif; */
-      font-size: 13px;
-      color: #5F6368;
-      /* color: #3a3d3f; */
-      line-height: 1.5;
-    }
-
 </style>
 
-  <form method="POST" id="station-form">
-
-    {% if is_oscar_error_msg %}
-      <!-- <div id="oscar_error_container">
-
-        <h6 style=" font-weight: bolder;">OSCAR Upload Failed!</h6>
-
-        <div style="color: rgb(255, 0, 0); width: 70%;">{{ oscar_error_msg|linebreaks }}</div>
-    
-        <h6>How would you like to proceed?</h6>
-      
-        <button class="btn-outline-default btn-small metadata-btn-success" type="submit">
-          Proceed Without OSCAR
-        </button>
-
-        <button class="btn-outline-default btn-small metadata-btn-info" type="button" onclick="show_main_content()">
-          Go Back to Edit
-        </button>
-      </div> -->
-      <div id="oscar_error_container" style="padding: 20px; background-color: #f8d7da; border-left: 5px solid #f44336; border-radius: 0px 20px 20px 0px;">
-
-        <h4 style="font-weight: bolder; color: #d32f2f;">
-            <i class="fa fa-exclamation-triangle" aria-hidden="true"></i> OSCAR Upload Failed!
-        </h4>
-
-        <div style="color: #d32f2f; font-size: 1rem; line-height: 1.5; white-space: pre-wrap;"> <!-- Preserves line breaks -->
-          {{ oscar_error_msg|linebreaks }}
-        </div>
-
-        <h6 style="font-weight: bolder; color: #d32f2f;">How would you like to proceed?</h6>
-
-        <button class="btn oscar_fail_btn" style="margin-right: 10px;" type="submit">
-          <i class="fa fa-exclamation-circle"></i> Proceed Without OSCAR
-        </button>
-
-        <button class="btn oscar_fail_btn" type="button" onclick="show_main_content()">
-            <i class="fa fa-edit"></i> Go Back to Edit
-        </button>
-
-        <!-- <button class="btn-outline-default btn-small metadata-btn-danger" type="submit">
-          Proceed Without OSCAR
-        </button>
-        <button class="btn-outline-default btn-small metadata-btn-success" type="button" onclick="show_main_content()">
-          Go Back to Edit
-        </button> -->
-
-      </div>
-    
-    {% endif %}
-
-    {% if is_oscar_error_msg %}
-    <div id="main_content" class="hide_main_content">
-    {% else %}
-    <div id="main_content" class="">
-    {% endif %}
-
-      <h6>Select all options the Station should support</h6>
-
-      <div class="toggle-container">
-        <div class="toggle-item">
-          <label class="toggle-label">SURFACE</label>
-          <div class="toggle-switch active no-toggle">
-            <div class="toggle-knob"></div>
-          </div>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label" style="padding-left: 30px;">OSCAR</label>
-          <div class="toggle-switch oscar-switch" onclick="toggleOptions('oscar')">
-            <div class="toggle-knob"></div>
-          </div>
-        </div>
-        <div class="toggle-item">
-          <label class="toggle-label" style="padding-left: 30px;">WIS2BOX</label>
-          <div class="toggle-switch wis2box-switch" onclick="toggleOptions('wis2box')">
-            <div class="toggle-knob"></div>
-          </div>
-        </div>
-      </div>  
-      
+<div id="station-create-app" class="sc-page" v-cloak>
+  <v-app class="sc-app">
+    <form id="station-form" method="POST" @submit="onSubmit">
       {% csrf_token %}
 
-      <h6>Select station location on the map</h6>
-
-      <!-- station map -->
-      <div id="mapid" class="map-small"></div>
-
-      <h6 style="color: #9e9e9e;">Options prefixed with <span style="color: red;">**</span> are required!</h6>
-
-      <div class="tab-container">
-        <div class="scroll-arrow" onclick="tabLeft()">
-          <i aria-hidden="true" class="v-icon notranslate mdi mdi-chevron-left theme--light"></i>
-        </div>
-        <div class="tab-bar">
-            <div class="tab active-tab" onclick="openTab('option1')">SURFACE Requirements</div>
-            <div id="oscar_specific_settings" class="tab" onclick="openTab('option2')">OSCAR SPECIFIC SETTINGS</div>
-            <div id="wis2box_specific_settings" class="tab" onclick="openTab('option3')">WIS2BOX SPECIFIC SETTINGS</div>
-        </div>
-        <div class="scroll-arrow" onclick="tabRight()">
-          <i aria-hidden="true" class="v-icon notranslate mdi mdi-chevron-right theme--light"></i>
-        </div>
-      </div>
-      
+      {% if is_oscar_error_msg %}
+      <!-- Preserve the Django OSCAR fallback: submitting again continues without OSCAR. -->
+      <section v-show="!oscarErrorDismissed" class="sc-error" role="alert">
+        <i class="material-icons-outlined sc-error-icon" aria-hidden="true">error_outline</i>
         <div>
-          {% form %}
+          <h3>OSCAR publication failed</h3>
+          <p>{{ oscar_error_msg|linebreaks }}</p>
+          <p>Choose whether to proceed with station creation without OSCAR or review the form.</p>
+          <div class="sc-error-actions">
+            <v-btn color="error" outlined type="submit" formnovalidate :disabled="submitting">
+              <v-icon left small>mdi-check</v-icon> Proceed without OSCAR
+            </v-btn>
+            <v-btn color="primary" text type="button" @click="oscarErrorDismissed = true">
+              Back to editing
+            </v-btn>
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
+      <div v-show="!hasOscarError || oscarErrorDismissed">
+        <header class="sc-intro">
+          <h2>Station setup</h2>
+          <p>Choose the services, set the station location, then complete the metadata below.</p>
+        </header>
+
+        <section class="sc-section" aria-labelledby="sc-services-heading">
+          <header class="sc-section-head">
+            <span class="sc-head-icon"><i class="material-icons-outlined" aria-hidden="true">hub</i></span>
+            <div class="sc-section-head-copy">
+              <h3 id="sc-services-heading">Connected services</h3>
+              <p>Enable the integrations this station needs. SURFACE is always enabled.</p>
+            </div>
+          </header>
+          <div class="sc-section-body">
+            <div class="sc-service-grid">
+              <div class="sc-service-item">
+                <span class="sc-service-info">
+                  <strong>SURFACE</strong>
+                  <small>Always enabled</small>
+                </span>
+                <!-- SURFACE is a required service; it is intentionally not editable. -->
+                <button type="button" role="switch" aria-checked="true"
+                        aria-label="SURFACE (always enabled)"
+                        class="sc-service-toggle sc-service-toggle--surface" disabled>
+                  <span class="sc-service-knob" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="sc-service-item">
+                <span class="sc-service-info">
+                  <strong>OSCAR</strong>
+                  <small>WIGOS metadata and publication</small>
+                </span>
+                <button type="button" role="switch"
+                        class="sc-service-toggle"
+                        :class="{'sc-service-toggle--oscar-on': oscarEnabled}"
+                        :aria-checked="oscarEnabled ? 'true' : 'false'"
+                        aria-label="Enable OSCAR integration"
+                        @click="toggleService('oscar')">
+                  <span class="sc-service-knob" aria-hidden="true"></span>
+                </button>
+              </div>
+              <div class="sc-service-item">
+                <span class="sc-service-info">
+                  <strong>WIS2Box</strong>
+                  <small>International data exchange</small>
+                </span>
+                <button type="button" role="switch"
+                        class="sc-service-toggle"
+                        :class="{'sc-service-toggle--wis2box-on': wis2boxEnabled}"
+                        :aria-checked="wis2boxEnabled ? 'true' : 'false'"
+                        aria-label="Enable WIS2Box integration"
+                        @click="toggleService('wis2box')">
+                  <span class="sc-service-knob" aria-hidden="true"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sc-section" aria-labelledby="sc-location-heading">
+          <header class="sc-section-head">
+            <span class="sc-head-icon"><i class="material-icons-outlined" aria-hidden="true">place</i></span>
+            <div class="sc-section-head-copy">
+              <h3 id="sc-location-heading">Station location</h3>
+              <p>Choose a location on the map or enter latitude and longitude in the form below.</p>
+            </div>
+          </header>
+          <div class="sc-section-body">
+            <p class="sc-location-advice">Click the map to position the station marker. Use the expand control to view the map full screen.</p>
+            <div id="mapid" role="application" aria-label="Interactive station location map"></div>
+            <p class="sc-coordinates">
+              <span>Latitude: <strong>[[ selectedLatitude === null ? 'Not selected' : selectedLatitude.toFixed(5) ]]</strong></span>
+              <span>Longitude: <strong>[[ selectedLongitude === null ? 'Not selected' : selectedLongitude.toFixed(5) ]]</strong></span>
+            </p>
+          </div>
+        </section>
+
+        <section class="sc-section" aria-labelledby="sc-metadata-heading">
+          <header class="sc-section-head">
+            <span class="sc-head-icon"><i class="material-icons-outlined" aria-hidden="true">assignment</i></span>
+            <div class="sc-section-head-copy">
+              <h3 id="sc-metadata-heading">Station metadata</h3>
+              <p>Complete the SURFACE fields and any enabled integration settings.</p>
+            </div>
+          </header>
+          <div class="sc-section-body">
+            <v-tabs v-model="activeTab" class="sc-metadata-tabs" background-color="white" show-arrows>
+              <v-tabs-slider color="blue"></v-tabs-slider>
+              <v-tab><v-icon left>mdi-database-outline</v-icon>SURFACE requirements</v-tab>
+              <v-tab :disabled="!oscarEnabled"><v-icon left>mdi-earth</v-icon>OSCAR settings</v-tab>
+              <v-tab :disabled="!wis2boxEnabled"><v-icon left>mdi-earth-arrow-right</v-icon>WIS2Box settings</v-tab>
+            </v-tabs>
+
+            <p class="sc-required-note">Fields marked as required must be completed before submission.</p>
+            <!--
+              The Django Material form generates the actual field groups server-side.
+              Vue 2 toggles their visibility after mount; inputs remain in the DOM so
+              the existing form names, validation and POST payload are preserved.
+            -->
+            <div id="sc-generated-fields" class="sc-generated-fields">
+{% form %}
             {% attr form.is_automatic 'group' class %}srf-field-checkbox{% endattr %}
             {% attr form.is_active 'group' class %}srf-field-checkbox{% endattr %}
             {% attr form.is_synoptic 'group' class %}srf-field-checkbox{% endattr %}
@@ -441,590 +285,344 @@
             {% attr form.end_date 'widget' class %}srf-field-max-300{% endattr %}
             {% attr form.zone 'widget' class %}srf-field-max-300{% endattr %}
           {% endform %}
-        </div>
-
-        <div id="exportOptionsContainer" class="tab-content show-tab">
-          <div style="margin-bottom: 20px;" id="exportOptions">
-              
-            <div class="toggle-item">
-              <label class="toggle-label" style="font-weight: 500; font-size: 20px;">Export Station Metadata to OSCAR on Station Creation</label>
-              <div class="toggle-switch export-switch" onclick="toggleOptions('export')">
-                <div class="toggle-knob"></div>
-              </div>
             </div>
 
-            <div id="token_option" style="width: 50%;">
-              <div>
-                <label for="oscar_api_token">API Token</label>
-                <input type="text" id="oscar_api_token" name="oscar_api_token"/>
+            <div v-show="activeTab === 0 && oscarEnabled" class="sc-export-area">
+              <v-switch v-model="exportToOscar" dense inset hide-details
+                        label="Publish metadata to OSCAR when the station is created"></v-switch>
+              <p class="sc-export-description">Requires an OSCAR API token. This does not change the normal SURFACE station save.</p>
+              <div v-show="exportToOscar" class="sc-token-row">
+                <v-text-field id="oscar_api_token" name="oscar_api_token"
+                              :disabled="!oscarEnabled || !exportToOscar"
+                              :type="showToken ? 'text' : 'password'"
+                              label="OSCAR API token" outlined dense hide-details="auto"
+                              autocomplete="off" placeholder="Enter token"></v-text-field>
+                <v-btn type="button" outlined small @click="showToken = !showToken">
+                  <v-icon left small>[[ showToken ? 'mdi-eye-off-outline' : 'mdi-eye-outline' ]]</v-icon>
+                  [[ showToken ? 'Hide' : 'Show' ]]
+                </v-btn>
               </div>
             </div>
-            
           </div>
+        </section>
+
+        <div class="sc-actions">
+          <a class="sc-action-link" href="{% url 'stations-map' %}">Cancel</a>
+
+          <!-- create btn -->
+          {% if request|has_any_feature_permission:"stations-list:write" %}
+          <v-btn color="primary" depressed type="submit" :loading="submitting" :disabled="submitting">
+            <v-icon left>mdi-check</v-icon>Create station
+          </v-btn>
+          {% endif %}
         </div>
+      </div>
+    </form>
 
-        {% if request|has_any_feature_permission:"stations-list:write" %}
-        <button type="submit" class="btn-outline-default metadata-btn-success btn-small" onclick="overlayLoader()">Submit</button>
-        {% endif %}
-
-        <a href="{% url 'stations-map' %}">
-
-          <button type="button" class="btn-outline-default metadata-btn-danger btn-small">Cancel</button>
-
-        </a>
-
+    <div v-if="submitting" class="sc-busy" role="status" aria-live="polite">
+      <v-progress-circular color="primary" indeterminate size="38" width="3"></v-progress-circular>
+      <span>[[ oscarExportRequested ? 'Creating station and publishing to OSCAR...' : 'Creating station...' ]]</span>
     </div>
-  </form>
-
-<!-- spinner and overlay -->
-<div id="overlay" class="overlay"></div>
-<div id="spinner" class="spinner"></div>
-<div id="spinner-text" class="spinner-text"><p style="font-size: 20px;">Attempting Station Creation....</p></div>
-
-
-  {% endblock %} {% block localjavascript %}
-  <script>
-    
-    // map
-    $(document).ready(function() {
-      var tempLat = "{{ MAP_LATITUDE|safe }}";
-      var tempLng = "{{ MAP_LONGITUDE|safe }}";
-      var tempZoom = "{{ MAP_ZOOM|safe }}";
-
-      $('select').formSelect();
-
-      $('#id_station_list').DataTable({
-        scrollX: true,
-        columnDefs: [
-          {
-            targets: [0, 1, 2],
-            className: 'mdl-data-table__cell--non-numeric'
-          }
-        ]
-      });
-
-      // changing cursor to crosshair while over the map
-      document.getElementById('mapid').style.cursor = "crosshair";
-
-      // map js
-      var mymap = L.map('mapid', {
-        zoomControl: true
-      }).setView([tempLat, tempLng], tempZoom);
-
-      var osmUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-      var osmAttrib = 'Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-
-      var osm = new L.TileLayer(osmUrl, {
-        minZoom: 1,
-        maxZoom: 100,
-        attribution: osmAttrib
-      });
-
-      // add zoom control with top left options
-      mymap.zoomControl.setPosition('topleft');
-      
-      mymap.addLayer(osm);
-
-      // getting map coordinates when the mouse moves and inserting it into any html element with a specific class
-      mymap.on('mousemove',function(e){
-        $('.mouse-lat').html(`${e.latlng.lat}`)
-
-        $('.mouse-lng').html(`${e.latlng.lng}`)
-      })
-
-      // creating control to show latitude and longitude values
-      var latLngInfo = L.control({position: 'bottomleft'});
-
-      latLngInfo.onAdd = function (mymap) {
-          this._div = L.DomUtil.create('div', 'mouse-coordinates-box'); // create a div with a class "latLngInfo"
-          this.update();
-          return this._div;
-      };
-
-      // method used to update the control based on feature properties passed
-      latLngInfo.update = function () {
-          this._div.innerHTML = 'Latitude:&nbsp&nbsp<span class="mouse-lat"></span></br>Longitude:&nbsp&nbsp<span class="mouse-lng"></span> ';
-      };
-
-      // adding the custom control to the map
-      latLngInfo.addTo(mymap);
-
-      // var to hold marker based on clicking action
-      var newStationMarker;
-
-      // fxn to add a marker
-      function addNewMarker(lat, lng) {
-        // clearing existing marker
-        if (newStationMarker != undefined) {
-          mymap.removeLayer(newStationMarker);
-        }
-
-        // adding a marker to show where user clicked
-        newStationMarker = L.marker([lat,lng]).addTo(mymap).bindPopup('Location of new station').openPopup();
-      }
-
-      // getting map coordinates based on clicking action and passing it to the latitude and longitude feild
-      mymap.on('click',function(e){
-
-        // Adding the active class to the label of the longitude and latitude field
-        document.getElementById('id_latitude_container').querySelector("label").classList.add("active");
-        document.getElementById('id_longitude_container').querySelector("label").classList.add("active");
-
-        // Passing the latitude and longitude values into the latitude and the longitude form field.
-        document.getElementById('id_latitude').value = e.latlng.lat;
-        document.getElementById('id_longitude').value = e.latlng.lng;
-
-        // add a new marker
-        addNewMarker(e.latlng.lat, e.latlng.lng);
-      });
-
-      // adding a resize button to the map
-      var isFullScreen = false;
-
-      L.Control.resizeMap = L.Control.extend({        
-        onAdd: function(mymap) {
-          var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-
-          var button = L.DomUtil.create('a', 'leaflet-control-button fullscreen-button-width', container);
-
-          button.innerHTML = '<span class="transparent-caret"><b>RESIZE MAP</b></span>';
-
-          L.DomEvent.disableClickPropagation(button);
-          
-          L.DomEvent.on(button, 'click', function(){
-            // var mapId = document.getElementById('mapid');
-            // mapId.classList.toggle("map-large");
-            // mapId.classList.toggle("map-small");
-
-            if(isFullScreen == false){
-              document.getElementById('mapid').requestFullscreen();
-
-              isFullScreen = true;
-            }
-            else {
-              document.exitFullscreen();
-
-              isFullScreen = false;
-            }
-
-          });
-
-          return container;
-        },
-      });
-
-      L.control.mapResize = function(opts) {
-        return new L.Control.resizeMap(opts);
-      }
-
-      L.control.mapResize({ position: 'topright' }).addTo(mymap);
-
-
-      // fxn to update map latitude
-      function updateLatitude(lat) {
-        var currentLng = mymap.getCenter().lng; // get the current longitude
-        
-        // set the map view
-        mymap.setView([lat, currentLng], 5);
-
-        // setting the marker
-        addNewMarker(lat, currentLng);
-      }
-
-      // fxn to update map longitude
-      function updateLongitude(lng) {
-        var currentLat = mymap.getCenter().lat; // get the current latitude
-        mymap.setView([currentLat, lng],5);
-
-        // setting the marker
-        addNewMarker(currentLat, lng);
-      }
-
-      // event listener to any changes to the latitude column
-      document.getElementById('id_latitude').addEventListener('input', function() {
-        var lat = parseFloat(this.value);
-        
-        // make sure the number is valid
-        if (!isNaN(lat)) {
-          updateLatitude(lat);
-        }
-      });
-
-      // event listener to any changes to the longitude column
-      document.getElementById('id_longitude').addEventListener('input', function() {
-        var lng = parseFloat(this.value);
-        
-        // make sure the number is valid
-        if (!isNaN(lng)) {
-          updateLongitude(lng);
-        }
-      });
-
-    });
-
-    // js for overlay loader
-    function overlayLoader() {
-      // Show the spinner, text, and overlay
-      document.getElementById('overlay').style.display = 'block';
-      document.getElementById('spinner').style.display = 'block';
-      document.getElementById('spinner-text').style.display = 'block';
-
-      // grab api token
-      var apiTkn = document.getElementById('oscar_api_token').value;
-
-      // check if an api token is entered
-      if (apiTkn.length == 0) {
-        document.querySelector('#spinner-text p').textContent = "Attempting Station Creation...";
-      } else {
-        document.querySelector('#spinner-text p').textContent = "Attempting Station Creation and Metadata Export to OSCAR...";
-      }
-    }
-    // Check if the overlay and spinner are displayed when the page is loaded
-    window.onload = function() {
-        var overlay = document.getElementById('overlay');
-        
-        // Check if the overlay display is currently 'block'
-        if (overlay.style.display === 'block') {
-            // Hide the overlay and spinner if display is 'block'
-            overlay.style.display = 'none';
-            document.getElementById('spinner').style.display = 'none';
-            document.getElementById('spinner-text').style.display = 'none';
-        }
-    };
-    // Hide the spinner and overlay when the page is restored from cache (e.g., when pressing back button)
-    window.addEventListener('pageshow', function(event) {
-        var overlay = document.getElementById('overlay');
-        
-        // Check if the event is triggered from cache
-        if (event.persisted) {
-            overlay.style.display = 'none';
-            document.getElementById('spinner').style.display = 'none';
-            document.getElementById('spinner-text').style.display = 'none';
-        }
-    });
-
-    // WIGOS information group heading
-    document.addEventListener('DOMContentLoaded', function() {
-      // Get the wigos row div by its ID
-      var wigosRowDiv = document.getElementById('id_wigos_part_1_container');
-
-      if (wigosRowDiv) {  // Ensure the wigos row div exists
-        // Get the parent of the wigos div
-        var parentDiv = wigosRowDiv.parentNode.parentNode.parentNode;
-
-        // Create a new <p> element
-        var pElement = document.createElement('p');
-        pElement.textContent = 'WIGOS INFORMATION';
-
-        // Set the id and class for the <p> element
-        pElement.setAttribute('id', 'wigosInfo');
-        pElement.className = 'subInfo';
-
-        // Insert the <p> element before the parent div
-        parentDiv.parentNode.insertBefore(pElement, parentDiv);
-      }
-    });
-    
-    // Other options group heading
-    document.addEventListener('DOMContentLoaded', function() {
-      // Get the current div by its ID
-      var wigosRowDiv = document.getElementById('id_wigos_part_4_container');
-
-      if (wigosRowDiv) {  // Ensure the wigos row div exists
-        // Get the parent of the wigos div
-        var parentDiv = wigosRowDiv.parentNode.parentNode.parentNode;
-
-        // Create a new <p> element
-        var pElement = document.createElement('p');
-        pElement.textContent = 'ADDITIONAL OPTIONS';
-
-        // Set the id and class for the <p> element
-        pElement.setAttribute('id', 'additionalInfo');
-        pElement.className = 'subInfo';
-
-        // Insert the <p> element after the parent div
-        parentDiv.insertAdjacentElement('afterend', pElement);
-      }
-    });
-
-
-    // additional options radio buttons control
-    document.addEventListener("DOMContentLoaded", function() {
-      // Automatically add IDs and classes to specific elements
-      var ids = [
-        'id_wigos_part_1_container',
-        'id_wigos_part_2_container',
-        'id_wigos_part_3_container',
-        'id_wigos_part_4_container',
-        'id_wmo_region_container',
-        'id_wmo_station_type_container',
-        'id_international_exchange_container',
-        'id_reporting_status_container'
-      ];
-
-      ids.forEach(function(id) {
-        var element = document.getElementById(id);
-        if (element) {
-          element.classList.add('form-item');
-        }
-      });
-
-      // Automatically assign ID to the <h5> element for "Additional Options"
-      var additionalRequirementsHeader = Array.from(document.getElementsByTagName('h5'))
-        .find(el => el.textContent.includes('Additional Options'));
-      if (additionalRequirementsHeader) {
-        additionalRequirementsHeader.id = 'additional-requirements';
-        additionalRequirementsHeader.classList.add('form-item');
-      }
-
-      // Initialize visibility based on toggle states
-      toggleOptions('oscar');
-      toggleOptions('wis2box');
-      toggleOptions('oscar');
-      toggleOptions('wis2box');
-    });
-
-    // radio buttons at the top of the page
-    function toggleOptions(toggleName) {
-      var toggleElement = document.querySelector('.' + toggleName + '-switch');
-      var isActive = toggleElement.classList.toggle('active');
-
-      var oscarActive = document.querySelector('.oscar-switch').classList.contains('active');
-      var wis2boxActive = document.querySelector('.wis2box-switch').classList.contains('active');
-      var exportActive = document.querySelector('.export-switch').classList.contains('active');
-
-      // Shared container and additional requirements
-      var sharedContainer1 = document.getElementById('id_wigos_part_1_container');
-      var sharedContainer2 = document.getElementById('id_wigos_part_2_container');
-      var sharedContainer3 = document.getElementById('id_wigos_part_3_container');
-      var sharedContainer4 = document.getElementById('id_wigos_part_4_container');
-      var additionalRequirements = document.getElementById('additional-requirements');
-      var wigosInfo = document.getElementById('wigosInfo');
-      var additionalInfo = document.getElementById('additionalInfo');
-
-      if (oscarActive || wis2boxActive) {
-        sharedContainer1.style.display = 'block';
-        sharedContainer2.style.display = 'block';
-        sharedContainer3.style.display = 'block';
-        sharedContainer4.style.display = 'block';
-        additionalRequirements.style.display = 'block';
-        wigosInfo.style.display = 'block';
-        additionalInfo.style.display = 'block';
-      } else {
-        sharedContainer1.style.display = 'none';
-        sharedContainer2.style.display = 'none';
-        sharedContainer3.style.display = 'none';
-        sharedContainer4.style.display = 'none';
-        additionalRequirements.style.display = 'none';
-        wigosInfo.style.display = 'none';
-        additionalInfo.style.display = 'none';
-      }
-
-      // OSCAR-specific containers
-      var exportOptions = document.getElementById('exportOptions');
-      var wmo_regionContainer = document.getElementById('id_wmo_region_container');
-      var reporting_statusContainer = document.getElementById('id_reporting_status_container');
-      var wmo_station_typeContainer = document.getElementById('id_wmo_station_type_container');
-      var oscar_settings_container = document.getElementById('oscar_specific_settings');
-      if (oscarActive) {
-        exportOptions.style.display = 'block';
-        wmo_regionContainer.style.display = 'block';
-        reporting_statusContainer.style.display = 'block';
-        wmo_station_typeContainer.style.display = 'block';
-        oscar_settings_container.style.display = 'block';
-      } else {
-        exportOptions.style.display = 'none';
-        wmo_regionContainer.style.display = 'none';
-        reporting_statusContainer.style.display = 'none';
-        wmo_station_typeContainer.style.display = 'none';
-        oscar_settings_container.style.display = 'none';
-      }
-
-      var tokenOption = document.getElementById('token_option');
-      var tokenInput = document.getElementById('oscar_api_token');
-      
-      if(exportActive) {
-        tokenOption.style.display = 'block';
-        // tokenInput.setAttribute('required', 'required');
-      } else {
-        tokenOption.style.display = 'none';
-        // tokenInput.removeAttribute('required');
-      }
-      
-      // WIS2BOX-specific containers
-      var wis2boxContainer = document.getElementById('id_international_exchange_container');
-      var wis2box_settings_container = document.getElementById('wis2box_specific_settings');
-      
-      if (wis2boxActive) {
-        wis2boxContainer.style.display = 'block';
-        wis2box_settings_container.style.display = 'block';
-      } else {
-        wis2boxContainer.style.display = 'none';
-        wis2box_settings_container.style.display = 'none';
-      }
-    }
-
-
-    //-------------------------wigos fields control start---------------------------//
-    // adding more information to the botton of the last 2 wigos sections
-    //for wigos_part_3
-    // Get the container div by its ID
-    const wigos3Container = document.getElementById('id_wigos_part_3_container');
-
-    // Create a new div element
-    const errorDivWigos3 = document.createElement('div');
-    errorDivWigos3.className = 'errors'; // Add the 'errors' class
-
-    // Create the small element
-    const errorTextWigos3 = document.createElement('small');
-    errorTextWigos3.className = 'error'; // Add the 'error' class
-    errorTextWigos3.textContent = 'Between 0 to 65534'; // Add the error message
-
-    // Append the small element to the div
-    errorDivWigos3.appendChild(errorTextWigos3);
-
-    // Append the errorDiv as the last child of the container
-    wigos3Container.appendChild(errorDivWigos3);
-
-    //for wigos_part_4
-    // Get the container div by its ID
-    const wigos4Container = document.getElementById('id_wigos_part_4_container');
-
-    // Create a new div element
-    const errorDivWigos4 = document.createElement('div');
-    errorDivWigos4.className = 'errors'; // Add the 'errors' class
-
-    // Create the small element
-    const errorTextWigos4 = document.createElement('small');
-    errorTextWigos4.className = 'error'; // Add the 'error' class
-    errorTextWigos4.textContent = '16 characters max'; // Add the error message
-
-    // Append the small element to the div
-    errorDivWigos4.appendChild(errorTextWigos4);
-
-    // Append the errorDiv as the last child of the container
-    wigos4Container.appendChild(errorDivWigos4);
-//-------------------------wigos fields control end---------------------------//
-
-    // adding the an event listener to modify the parent div of additional options to work with tab options
-    document.addEventListener('DOMContentLoaded', function() {
-      const h5Element = document.getElementById('additional-requirements');
-      if (h5Element) {
-        const parentDiv = h5Element.closest('div');
-        if (parentDiv) {
-          parentDiv.id = 'additional-requirements-container';
-          parentDiv.classList.add('show-tab', 'tab-content');
-        }
-      }
-      });
-
-
-    // control for tab options below map
-    function openTab(tabId) {
-        // Hide all tab content
-        var tabs = document.getElementsByClassName("tab-content");
-        for (var i = 0; i < tabs.length; i++) {
-            tabs[i].classList.remove("show-tab");
-        }
-
-        // Remove active class from all tabs
-        var tabLinks = document.getElementsByClassName("tab");
-        for (var i = 0; i < tabLinks.length; i++) {
-            tabLinks[i].classList.remove("active-tab");
-        }
-
-        // Show the selected tab content and set active tab
-        document.getElementById(tabId).classList.add("show-tab");
-        event.currentTarget.classList.add("active-tab");
-
-        //show the additional options and oscar api upload option along with SURFACE REQUIREMENTS
-        if (tabId == 'option1') {
-          document.getElementById('exportOptionsContainer').classList.add("show-tab");
-          document.getElementById('additional-requirements-container').classList.add("show-tab");
-        }
-    }
-
-    // scroll carets control for the tab bar
-    function tabLeft() {
-        document.querySelector('.tab-bar').scrollBy({
-            left: -300, // Adjust the scroll amount
-            behavior: 'smooth'
-        });
-    }
-
-    function tabRight() {
-        document.querySelector('.tab-bar').scrollBy({
-            left: 300, // Adjust the scroll amount
-            behavior: 'smooth'
-        });
-    }
-
-    // add the necessary attributes to the class options
-    window.addEventListener('DOMContentLoaded', function() {
-      // Find all h5 elements
-      const h5Tags = document.querySelectorAll('h5');
-      
-      // Loop through each h5 tag to find the tab options
-      h5Tags.forEach(function(h5) {
-          if (h5.textContent.trim() === "SURFACE Requirements") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option1');
-              grandparent.setAttribute('class', 'tab-content show-tab');
-          }
-
-          else if (h5.textContent.trim() === "OSCAR Specific Settings") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option2');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-
-          else if (h5.textContent.trim() === "WIS2BOX Specific Settings") {
-              // Get the grandparent element of the h5 tag
-              const grandparent = h5.parentElement.parentElement;
-              
-              // Set the id and class attributes to the grandparent
-              grandparent.setAttribute('id', 'option3');
-              grandparent.setAttribute('class', 'tab-content');
-          }
-      });
-
-  });
-
-    //show the main content when the user decided to "go back to edit" after OSCAR push fails
-    function show_main_content() {
-      document.getElementById('main_content').classList.remove('hide_main_content');
-      document.getElementById('oscar_error_container').classList.add('hide_content');
-    }
-  
-  
-    // Function to toggle visibility of containers based on checkbox status
-    function toggleSynopticContainers() {
-      const isChecked = document.getElementById('id_is_synoptic').checked;
-      const containers = ['id_synoptic_code_container', 'id_synoptic_type_container'];
-
-      containers.forEach(id => {
-        const container = document.getElementById(id);
-        if (isChecked) {
-          container.classList.remove('hide_content');
-        } else {
-          container.classList.add('hide_content');
-        }
-      });
-    }
-
-    // Event listener for the checkbox
-    document.getElementById('id_is_synoptic').addEventListener('change', toggleSynopticContainers);
-
-    // Initial check to set the right state on page load
-    toggleSynopticContainers();
-
-  </script>
+  </v-app>
 </div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+(function () {
+  // The parent station_base Vue instance mounts on #station-base-ui only.
+  // Keep this form under a separate root to avoid competing Vue instances.
+  new Vue({
+    el: '#station-create-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data: function () {
+      return {
+        activeTab: 0,
+        oscarEnabled: false,
+        wis2boxEnabled: false,
+        exportToOscar: false,
+        showToken: false,
+        oscarErrorDismissed: false,
+        hasOscarError: {% if is_oscar_error_msg %}true{% else %}false{% endif %},
+        selectedLatitude: null,
+        selectedLongitude: null,
+        submitting: false,
+        leafletMap: null,
+        stationMarker: null
+      };
+    },
+    computed: {
+      oscarExportRequested: function () {
+        return this.oscarEnabled && this.exportToOscar;
+      }
+    },
+    watch: {
+      activeTab: function () { this.$nextTick(this.applyFormVisibility); },
+      oscarEnabled: function () { this.$nextTick(this.applyFormVisibility); },
+      wis2boxEnabled: function () { this.$nextTick(this.applyFormVisibility); }
+    },
+    mounted: function () {
+      this.prepareGeneratedForm();
+      this.applyFormVisibility();
+      this.initMap();
+      // Materialize's select plugin is used by Django material_form controls.
+      // Scope initialization to this form, not all dropdowns across SURFACE.
+      if (window.jQuery && typeof window.jQuery.fn.formSelect === 'function') {
+        window.jQuery(this.$el).find('#sc-generated-fields select').formSelect();
+      }
+      window.addEventListener('pageshow', this.onPageShow);
+    },
+    beforeDestroy: function () {
+      window.removeEventListener('pageshow', this.onPageShow);
+      if (this.leafletMap) this.leafletMap.remove();
+      if (this._latInput) this._latInput.removeEventListener('input', this.onCoordinateInput);
+      if (this._lngInput) this._lngInput.removeEventListener('input', this.onCoordinateInput);
+      if (this._synopticCheckbox) this._synopticCheckbox.removeEventListener('change', this.syncSynopticFields);
+      if (this._fullscreenListener) document.removeEventListener('fullscreenchange', this._fullscreenListener);
+    },
+    methods: {
+      toggleService: function (service) {
+        if (service === 'oscar') {
+          this.oscarEnabled = !this.oscarEnabled;
+          if (!this.oscarEnabled && this.activeTab === 1) this.activeTab = 0;
+        } else if (service === 'wis2box') {
+          this.wis2boxEnabled = !this.wis2boxEnabled;
+          if (!this.wis2boxEnabled && this.activeTab === 2) this.activeTab = 0;
+        }
+      },
+      onSubmit: function (event) {
+        // Native Django form submission is intentional. Do not show an overlay
+        // for a form that the browser rejects due to HTML required fields.
+        if (this.submitting) { event.preventDefault(); return; }
+        if (!(event.submitter && event.submitter.formNoValidate) &&
+            event.target.checkValidity && !event.target.checkValidity()) return;
+        this.submitting = true;
+      },
+      onPageShow: function (event) {
+        // Browser back/forward cache can restore the submitting overlay.
+        if (event.persisted) this.submitting = false;
+      },
+      prepareGeneratedForm: function () {
+        var container = this.$el.querySelector('#sc-generated-fields');
+        if (!container) return;
+        var panes = {};
+        var headings = container.querySelectorAll('h5');
+        for (var i = 0; i < headings.length; i++) {
+          var heading = headings[i];
+          var title = heading.textContent.trim().toLowerCase();
+          var key = null;
+          if (title === 'surface requirements') key = 'surface';
+          else if (title === 'oscar specific settings') key = 'oscar';
+          else if (title === 'wis2box specific settings') key = 'wis2box';
+          else if (title === 'additional options') key = 'additional';
+          if (!key) continue;
+
+          // Django Material creates an outer row around each group heading.
+          // Preserve the original ancestor depth without changing input nodes.
+          var group = heading.parentElement && heading.parentElement.parentElement;
+          if (!group || group === container || container === group.parentElement && !group.children.length) continue;
+          // Avoid hiding unrelated metadata if the generated form layout changes.
+          var duplicate = Object.keys(panes).some(function (p) { return panes[p] === group; });
+          if (duplicate) { console.warn('Station form section grouping changed:', key); continue; }
+          group.classList.add('sc-form-pane');
+          panes[key] = group;
+        }
+        this._formPanes = panes;
+
+        // These fields are shared by OSCAR and WIS2Box. They were shown/hidden
+        // in the legacy form; continue doing so rather than deleting inputs.
+        this._sharedFieldIds = [
+          'id_wigos_part_1_container', 'id_wigos_part_2_container',
+          'id_wigos_part_3_container', 'id_wigos_part_4_container'
+        ];
+        this._oscarFieldIds = [
+          'id_wmo_region_container', 'id_wmo_station_type_container',
+          'id_reporting_status_container'
+        ];
+        this._wis2FieldIds = ['id_international_exchange_container'];
+
+        // Restore the useful WIGOS grouping and field-range hints from the
+        // original creation form, but style them without global h5 mutations.
+        var wigosFirst = container.querySelector('#id_wigos_part_1_container');
+        if (wigosFirst) {
+          var anchor = wigosFirst.parentElement && wigosFirst.parentElement.parentElement &&
+                       wigosFirst.parentElement.parentElement.parentElement;
+          if (anchor && anchor.parentElement) {
+            var label = document.createElement('p');
+            label.className = 'sc-field-heading';
+            label.textContent = 'WIGOS information';
+            anchor.parentElement.insertBefore(label, anchor);
+            this._wigosHeading = label;
+          }
+        }
+        [['id_wigos_part_3_container', 'Value must be between 0 and 65534.'],
+         ['id_wigos_part_4_container', 'Maximum 16 characters.']].forEach(function (entry) {
+          var field = container.querySelector('#' + entry[0]);
+          if (!field) return;
+          var note = document.createElement('p');
+          note.className = 'sc-field-note';
+          note.textContent = entry[1];
+          field.appendChild(note);
+        });
+
+        // Only show the dependent synoptic fields when the Django checkbox is on.
+        var synoptic = container.querySelector('#id_is_synoptic');
+        if (synoptic) {
+          synoptic.addEventListener('change', this.syncSynopticFields);
+          this._synopticCheckbox = synoptic;
+        }
+
+        // Don't leave the form permanently hidden if a heading is absent.
+        // An absent group means the Django form has changed and should be
+        // investigated, not that all other fields should disappear.
+        container.classList.add('sc-form-ready');
+      },
+      setShown: function (element, shown) {
+        if (element) element.hidden = !shown;
+      },
+      setFieldsShown: function (ids, shown) {
+        var container = this.$el.querySelector('#sc-generated-fields');
+        if (!container) return;
+        ids.forEach(function (id) {
+          var el = container.querySelector('#' + id);
+          if (el) el.hidden = !shown;
+        });
+      },
+      applyFormVisibility: function () {
+        if (!this._formPanes) return;
+        this.setShown(this._formPanes.surface, this.activeTab === 0);
+        this.setShown(this._formPanes.additional,
+                      this.activeTab === 0 && (this.oscarEnabled || this.wis2boxEnabled));
+        this.setShown(this._formPanes.oscar, this.activeTab === 1 && this.oscarEnabled);
+        this.setShown(this._formPanes.wis2box, this.activeTab === 2 && this.wis2boxEnabled);
+        var shared = this.oscarEnabled || this.wis2boxEnabled;
+        this.setShown(this._wigosHeading, this.activeTab === 0 && shared);
+        this.setFieldsShown(this._sharedFieldIds || [], shared);
+        this.setFieldsShown(this._oscarFieldIds || [], this.oscarEnabled);
+        this.setFieldsShown(this._wis2FieldIds || [], this.wis2boxEnabled);
+        this.syncSynopticFields();
+      },
+      syncSynopticFields: function () {
+        var container = this.$el.querySelector('#sc-generated-fields');
+        if (!container) return;
+        var synoptic = container.querySelector('#id_is_synoptic');
+        if (!synoptic) return;
+        ['id_synoptic_code_container', 'id_synoptic_type_container'].forEach(function (id) {
+          var el = container.querySelector('#' + id);
+          if (el) el.hidden = !synoptic.checked;
+        });
+      },
+      initMap: function () {
+        var mapElement = this.$el.querySelector('#mapid');
+        if (!mapElement || !window.L) {
+          console.warn('Station map was not initialized: Leaflet not available.');
+          return;
+        }
+        var lat = Number('{{ MAP_LATITUDE|escapejs }}');
+        var lng = Number('{{ MAP_LONGITUDE|escapejs }}');
+        var zoom = Number('{{ MAP_ZOOM|escapejs }}');
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90) lat = 17.25;
+        if (!Number.isFinite(lng) || lng < -180 || lng > 180) lng = -88.75;
+        if (!Number.isFinite(zoom) || zoom < 1) zoom = 8;
+        zoom = Math.min(19, Math.max(1, zoom));
+
+        var map = window.L.map(mapElement, {zoomControl: true}).setView([lat, lng], zoom);
+        this.leafletMap = map;
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          minZoom: 1, maxZoom: 19,
+          attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        var vm = this;
+        map.on('click', function (event) {
+          vm.setStationCoordinates(event.latlng.lat, event.latlng.lng, false);
+        });
+
+        // Preserve the legacy map's hover coordinates without pushing dozens
+        // of reactive Vue updates per second on mousemove.
+        var coord = window.L.control({position: 'bottomleft'});
+        coord.onAdd = function () {
+          this._div = window.L.DomUtil.create('div', 'sc-map-coordinates-control');
+          this._div.textContent = 'Move over map to see coordinates';
+          return this._div;
+        };
+        coord.addTo(map);
+        map.on('mousemove', function (event) {
+          coord._div.textContent = 'Lat ' + event.latlng.lat.toFixed(5) +
+                                   ' · Lng ' + event.latlng.lng.toFixed(5);
+        });
+
+        var fullControl = window.L.control({position: 'topright'});
+        fullControl.onAdd = function () {
+          var node = window.L.DomUtil.create('a', 'leaflet-bar sc-map-fullscreen');
+          node.href = '#';
+          node.title = 'Toggle full-screen map';
+          node.setAttribute('aria-label', node.title);
+          node.textContent = '⛶';
+          window.L.DomEvent.disableClickPropagation(node);
+          window.L.DomEvent.on(node, 'click', function (event) {
+            window.L.DomEvent.preventDefault(event);
+            if (document.fullscreenElement === mapElement) {
+              if (document.exitFullscreen) document.exitFullscreen();
+            } else if (mapElement.requestFullscreen) {
+              mapElement.requestFullscreen();
+            }
+          });
+          return node;
+        };
+        fullControl.addTo(map);
+        this._fullscreenListener = function () {
+          if (vm.leafletMap) vm.leafletMap.invalidateSize();
+        };
+        document.addEventListener('fullscreenchange', this._fullscreenListener);
+
+        // If Django returned coordinates from a failed form submission, render
+        // that point rather than silently discarding the user's selection.
+        var latInput = this.$el.querySelector('#id_latitude');
+        var lngInput = this.$el.querySelector('#id_longitude');
+        if (latInput && lngInput && latInput.value !== '' && lngInput.value !== '') {
+          this.setStationCoordinates(Number(latInput.value), Number(lngInput.value), true);
+        }
+        if (latInput) latInput.addEventListener('input', this.onCoordinateInput);
+        if (lngInput) lngInput.addEventListener('input', this.onCoordinateInput);
+        this._latInput = latInput;
+        this._lngInput = lngInput;
+        window.setTimeout(function () { if (vm.leafletMap) vm.leafletMap.invalidateSize(); }, 0);
+      },
+      onCoordinateInput: function () {
+        var latInput = this.$el.querySelector('#id_latitude');
+        var lngInput = this.$el.querySelector('#id_longitude');
+        if (!latInput || !lngInput || latInput.value === '' || lngInput.value === '') return;
+        this.setStationCoordinates(Number(latInput.value), Number(lngInput.value), true);
+      },
+      setStationCoordinates: function (lat, lng, fromInputs) {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+            lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+        this.selectedLatitude = lat;
+        this.selectedLongitude = lng;
+        var map = this.leafletMap;
+        if (!map) return;
+        if (this.stationMarker) map.removeLayer(this.stationMarker);
+        this.stationMarker = window.L.marker([lat, lng]).addTo(map);
+        map.panTo([lat, lng]);
+        if (fromInputs) return;
+        // Keep the generated Django form fields authoritative for submission.
+        // Dispatch input/change so Materialize labels and validation stay synced.
+        [['id_latitude', lat], ['id_longitude', lng]].forEach(function (entry) {
+          var input = document.getElementById(entry[0]);
+          if (!input) return;
+          input.value = String(entry[1]);
+          input.dispatchEvent(new Event('input', {bubbles: true}));
+          input.dispatchEvent(new Event('change', {bubbles: true}));
+          var label = input.closest('.input-field');
+          if (label) {
+            var node = label.querySelector('label');
+            if (node) node.classList.add('active');
+          }
+        });
+      }
+    }
+  });
+})();
+</script>
 {% endblock %}

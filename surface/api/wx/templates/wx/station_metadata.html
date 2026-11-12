@@ -1,204 +1,577 @@
 {% extends "wx/station_base.html" %}
+{% load wx_filters %}
+
 {% block station_content %}
-{% load material_form %}
-
+<!--
+  Station Metadata station browser.
+  station_base.html already provides the shared gutters and navigation.
+  This child page mounts its own Vue 2 instance without touching the base header.
+-->
 <style>
+  /* Page styles are deliberately scoped: no global nav, table or button overrides. */
+  .station-base-page .smd-page {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    background: #fff;
+    color: #2c2c2c;
+  }
+  .station-base-page .smd-page .v-application,
+  .station-base-page .smd-page .v-application--wrap {
+    background: #fff !important;
+    color: #2c2c2c;
+  }
+  .station-base-page .smd-page .v-application--wrap { min-height: auto !important; }
 
-  /* Metadata Styling Start */
-  .metadata-dropdown-container {
-      width: 50% !important;
+  /* The standard SURFACE heading is unchanged. */
+  .station-base-page .smd-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    padding: 20px 0 18px;
+  }
+  .station-base-page .smd-heading-copy { flex: 1 1 300px; min-width: 0; }
+  .station-base-page .smd-heading h1 {
+    margin: 0;
+    font-weight: inherit;
+    letter-spacing: normal;
+    color: #252525;
+    overflow-wrap: anywhere;
+  }
+  .station-base-page .smd-heading p {
+    margin: 5px 0 0;
+    color: #777;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .station-base-page .smd-back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 37px;
+    margin-top: 2px;
+    padding: 7px 12px;
+    border: 1px solid #e2e2e2;
+    border-radius: 7px;
+    background: #fff;
+    color: #444 !important;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none !important;
+  }
+  .station-base-page .smd-back-link:hover { background: #fafafa; border-color: #d2d2d2; }
+  .station-base-page .smd-back-link .material-icons-outlined { font-size: 18px; }
+
+  .station-base-page .smd-directory {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e4e4e4;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.025);
+  }
+  .station-base-page .smd-directory-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px 24px;
+    padding: 18px 20px;
+    border-bottom: 1px solid #ededed;
+  }
+  .station-base-page .smd-directory-label { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .station-base-page .smd-directory-icon {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dce9f7;
+    border-radius: 9px;
+    background: #f2f7fd;
+    color: #2876be;
+  }
+  .station-base-page .smd-directory-icon .material-icons-outlined { font-size: 21px; }
+  .station-base-page .smd-directory-label h2 {
+    margin: 0;
+    color: #252525;
+    font-size: 16px;
+    line-height: 1.35;
+    font-weight: 700;
+  }
+  .station-base-page .smd-directory-label p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    color: #777;
+    line-height: 1.4;
+  }
+  .station-base-page .smd-search { flex: 0 1 400px; min-width: 240px; }
+  .station-base-page .smd-search .v-input { width: 100%; margin: 0; font-size: 13px; }
+  .station-base-page .smd-search .v-input__slot { background: #fff !important; }
+  .station-base-page .smd-search .v-label { font-size: 13px; }
+
+  /* Operational directory toolbar: counts on the left, view preference on the right. */
+  .station-base-page .smd-browser-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    padding: 12px 20px;
+    background: #fcfcfc;
+    border-bottom: 1px solid #ebebeb;
+  }
+  .station-base-page .smd-browser-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .station-base-page .smd-count {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    background: #f1f1f1;
+    border: 1px solid #e8e8e8;
+    border-radius: 20px;
+    color: #383838;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .station-base-page .smd-sort-note { font-size: 12px; color: #888; }
+  .station-base-page .smd-view-switch {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .station-base-page .smd-view-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #666;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    cursor: pointer;
+  }
+  .station-base-page .smd-view-button .material-icons-outlined { font-size: 17px; }
+  .station-base-page .smd-view-button.is-active {
+    color: #1765ab;
+    background: #eff5fc;
+    border-color: #d7e7f7;
+  }
+  .station-base-page .smd-view-button:not(.is-active):hover { background: #f5f5f5; }
+
+  /* Default: a real directory-style list with stronger, easier-to-scan names. */
+  .station-base-page .smd-station-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+    padding: 8px 20px;
+  }
+  .station-base-page .smd-station-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    min-width: 0;
+    min-height: 75px;
+    padding: 12px 12px;
+    margin: 0;
+    color: #292929 !important;
+    background: #fff;
+    border-bottom: 1px solid #efefef;
+    border-radius: 6px;
+    text-decoration: none !important;
+    transition: background-color .15s ease;
+  }
+  /* Rows form a simple two-column directory on desktop; single column on mobile. */
+  .station-base-page .smd-station-row:hover { background: #f7fafe; }
+  .station-base-page .smd-station-monogram {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 43px;
+    height: 43px;
+    flex: none;
+    border: 1px solid #d9e7f5;
+    border-radius: 10px;
+    background: #edf5fd;
+    color: #2369a8;
+    font-size: 14px;
+    font-weight: 750;
+    letter-spacing: .025em;
+    user-select: none;
+  }
+  .station-base-page .smd-station-main { min-width: 0; flex: 1; }
+  .station-base-page .smd-station-name {
+    display: block;
+    color: #2c2c2c;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .station-base-page .smd-station-detail {
+    display: block;
+    margin-top: 4px;
+    color: #818181;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .station-base-page .smd-station-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    color: #6e6e6e;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  /* Use a text arrow instead of a font glyph so navigation stays clear if icon fonts are late. */
+  .station-base-page .smd-arrow-glyph { font-size: 20px; font-weight: 500; line-height: 1; color: #999; }
+  .station-base-page .smd-station-row:hover .smd-station-action,
+  .station-base-page .smd-station-row:hover .smd-arrow-glyph { color: #1976d2; }
+
+  /* Optional card view: same record data, more airy layout, not a different backend. */
+  .station-base-page .smd-station-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 19px 20px 21px;
+  }
+  .station-base-page .smd-station-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 124px;
+    padding: 17px;
+    border: 1px solid #e5e5e5;
+    border-radius: 9px;
+    background: #fff;
+    color: #2d2d2d !important;
+    text-decoration: none !important;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+  }
+  .station-base-page .smd-station-card:hover {
+    border-color: #b5d1ed;
+    box-shadow: 0 5px 18px rgba(27,92,153,.08);
+    transform: translateY(-1px);
+  }
+  .station-base-page .smd-card-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .station-base-page .smd-card-top .smd-station-name { font-size: 14px; }
+  .station-base-page .smd-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 12px;
+    margin-top: auto;
+    border-top: 1px solid #efefef;
+    font-size: 11px;
+    font-weight: 650;
+    color: #666;
+  }
+  .station-base-page .smd-card-footer .smd-arrow-glyph { font-size: 20px; color: #1976d2; }
+  .station-base-page .smd-station-card:hover .smd-card-footer { color: #1976d2; }
+  .station-base-page .smd-station-row:focus-visible,
+  .station-base-page .smd-station-card:focus-visible,
+  .station-base-page .smd-view-button:focus-visible,
+  .station-base-page .smd-back-link:focus-visible {
+    outline: 2px solid #1976d2;
+    outline-offset: 2px;
   }
 
-  .metadata-label {
-      font-size: 24px;
-      font-weight: 500;
-      margin-bottom: 10px;
-      display: block;
+  .station-base-page .smd-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 210px;
+    padding: 35px 20px;
+    text-align: center;
   }
-
-  .metadata-dropdown {
-      position: relative;
-      width: 100%;
-      cursor: pointer;
-      font-size: 16px;
+  .station-base-page .smd-empty > .material-icons-outlined { font-size: 35px; color: #b3b3b3; }
+  .station-base-page .smd-empty strong { color: #474747; font-size: 13px; }
+  .station-base-page .smd-empty p { margin: 0; color: #888; font-size: 12px; }
+  .station-base-page .smd-clear {
+    min-height: 33px;
+    margin-top: 4px;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 7px;
+    background: #fff;
+    color: #444;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
   }
-
-  .metadata-dropdown .metadata-dropdown-selected {
-      padding: 10px;
-      margin-top: 20px;
-      border-bottom: 2px solid #000000;
-      background-color: #fff;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+  .station-base-page .smd-clear:hover { background: #f8f8f8; }
+  .station-base-page .smd-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    padding: 13px 20px;
+    border-top: 1px solid #ededed;
+    color: #777;
+    font-size: 12px;
   }
-
-  .metadata-dropdown-selected i {
-      transition: transform 0.3s ease; /* Smooth rotation for the icon */
+  .station-base-page .smd-page-controls { display: inline-flex; align-items: center; gap: 9px; }
+  .station-base-page .smd-page-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 7px;
+    background: #fff;
+    color: #444;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
   }
+  .station-base-page .smd-page-button .material-icons-outlined { font-size: 17px; }
+  .station-base-page .smd-page-button:not(:disabled):hover { background: #fafafa; border-color: #bbb; }
+  .station-base-page .smd-page-button:disabled { opacity: .45; cursor: not-allowed; }
+  .station-base-page .smd-page-label { padding: 0 3px; font-weight: 650; color: #555; }
 
-  /* Initially hidden dropdown content */
-  .metadata-dropdown-items {
-      display: none;
-      position: absolute;
-      background-color: #fff;
-      width: 100%;
-      box-shadow: 0 4px 6px 0 rgba(32,33,36,.28);
-      z-index: 99;
-      overflow: hidden;
-      max-height: 0; /* Initially collapsed */
-      opacity: 0;
-      transition: max-height 0.3s ease, opacity 0.3s ease; /* Smooth open/close */
+  @media (max-width: 1100px) {
+    .station-base-page .smd-station-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-
-  /* Show dropdown with animation */
-  .dropdown-open .metadata-dropdown-items {
-      display: block;
-      max-height: 400px; /* Set the max height to 50px */
-      opacity: 1;
-      overflow-y: auto; /* Allow scrolling */
+  @media (max-width: 760px) {
+    .station-base-page .smd-station-list { grid-template-columns: 1fr; column-gap: 0; }
+    .station-base-page .smd-heading { padding: 13px 0 16px; }
+    .station-base-page .smd-directory-head { padding: 15px; }
+    .station-base-page .smd-search { flex: 1 1 100%; min-width: 0; }
+    .station-base-page .smd-browser-controls { padding: 11px 15px; }
+    .station-base-page .smd-station-list { padding: 4px 12px; }
+    .station-base-page .smd-station-grid { padding: 14px 15px; }
+    .station-base-page .smd-footer { padding: 13px 15px; }
   }
-
-  .metadata-dropdown-items div {
-      padding: 10px;
-      cursor: pointer;
-      transition: background-color 0.3s, color 0.3s; /* Smooth color transition */
+  @media (max-width: 570px) {
+    .station-base-page .smd-station-grid { grid-template-columns: 1fr; }
+    .station-base-page .smd-station-row { padding: 11px 6px; gap: 11px; min-height: 70px; }
+    .station-base-page .smd-station-action span { display: none; }
+    .station-base-page .smd-station-monogram { width: 40px; height: 40px; }
+    .station-base-page .smd-page-controls { width: 100%; justify-content: space-between; }
   }
-
-  .metadata-dropdown-items div:hover {
-        background-color: #1976d238 !important;
-        color: #1976d2 !important;
-  }
-
-  /* Class for the selected item */
-  .selected-item {
-      background-color: #1976d238 !important;
-      color: #1976d2 !important;
-  }
-
-  .metadata-dropdown .metadata-dropdown-selected i {
-      transition: color 0.3s, transform 0.3s; /* Smooth transition for icon */
-  }
-
-  /* When the dropdown is active (clicked on) */
-  .metadata-dropdown.active {
-      border-color: #1976d2; /* Change border color */
-  }
-
-  .metadata-dropdown.active .metadata-dropdown-selected i {
-      color: #1976d2; /* Change icon color */
-  }
-
-  /* Override styles for the specific <a> tag inside this section */
-  a.no-style-link {
-      color: inherit;
-      text-decoration: none;
-  }
-
-  /* Optionally, you can style the div inside the link as needed */
-  a.no-style-link div {
-      padding: 10px;
-      background-color: #fff; /* Your styling */
-  }
-
-  
 </style>
 
-  <h4>Station Metadata</h4>
-
-    <div class="metadata-dropdown-container">
-      <h6>Select a station to view metadata</h6>
-      <div class="metadata-dropdown" id="metadata-dropdown">
-          <div class="metadata-dropdown-selected" id="metadata-selected-item">
-            Select Station
-            <i aria-hidden="true" class="v-icon notranslate mdi mdi-menu-down theme--light"></i>
-          </div>
-
-          <div class="metadata-dropdown-items">
-            {% for station in station_name %}
-              <a href="{% url 'station-detail' station.pk %}" class="no-style-link" onclick="mainOverlayLoader()">
-                <div>
-                    {{ station.name }}
-                </div>
-              </a>
-            {% endfor %}
-          </div>            
+<div id="station-metadata-app" class="smd-page" v-cloak>
+  <v-app class="smd-vuetify">
+    <header class="smd-heading">
+      <div class="smd-heading-copy">
+        <h1 class="srf-display-1 text-uppercase">Station Metadata</h1>
+        <p>Select a station to view its metadata, location, and configuration.</p>
       </div>
-    </div>
+      {% if request|has_any_feature_permission:"stations-list:read" %}
+      <a class="smd-back-link" href="{% url 'stations-list' %}">
+        <i class="material-icons-outlined" aria-hidden="true">list</i>
+        Station list
+      </a>
+      {% endif %}
+    </header>
 
-  </div>
+    <section class="smd-directory" aria-labelledby="smd-directory-title">
+      <div class="smd-directory-head">
+        <div class="smd-directory-label">
+          <div>
+            <h2 id="smd-directory-title">Station directory</h2>
+            <p>Find and open a station's metadata record.</p>
+          </div>
+        </div>
+        <div class="smd-search">
+          <v-text-field
+            v-model="search"
+            label="Search stations"
+            placeholder="Name or station code"
+            prepend-inner-icon="mdi-magnify"
+            outlined dense clearable hide-details
+            autocomplete="off"
+            aria-label="Search station directory by name or code"
+          ></v-text-field>
+        </div>
+      </div>
 
+      <div class="smd-browser-controls">
+        <div class="smd-browser-summary" aria-live="polite">
+          <span class="smd-count">[[ filteredStations.length ]] [[ filteredStations.length === 1 ? 'station' : 'stations' ]]</span>
+          <span class="smd-sort-note">[[ search ? 'Matching your search' : 'Sorted alphabetically' ]]</span>
+        </div>
+        <div class="smd-view-switch" role="group" aria-label="Station display style">
+          <button type="button" class="smd-view-button" :class="{ 'is-active': viewMode === 'list' }"
+                  :aria-pressed="viewMode === 'list' ? 'true' : 'false'" @click="viewMode = 'list'">
+            <i class="material-icons-outlined" aria-hidden="true">view_list</i> List
+          </button>
+          <button type="button" class="smd-view-button" :class="{ 'is-active': viewMode === 'grid' }"
+                  :aria-pressed="viewMode === 'grid' ? 'true' : 'false'" @click="viewMode = 'grid'">
+            <i class="material-icons-outlined" aria-hidden="true">grid_view</i> Cards
+          </button>
+        </div>
+      </div>
 
+      <!-- Use real anchors for native browser navigation, open-in-new-tab and back. -->
+      <div v-if="visibleStations.length && viewMode === 'list'" class="smd-station-list">
+        <a v-for="stationItem in visibleStations"
+           :key="'row-' + stationItem.id"
+           :href="stationItem.url"
+           :aria-label="'Open metadata for ' + stationItem.name"
+           class="smd-station-row"
+           @click="onStationOpen($event)">
+          <span class="smd-station-monogram" aria-hidden="true">[[ initials(stationItem.name) ]]</span>
+          <span class="smd-station-main">
+            <strong class="smd-station-name">[[ stationItem.name ]]</strong>
+            <small class="smd-station-detail">[[ stationItem.code ? 'Code: ' + stationItem.code : 'Station metadata record' ]]</small>
+          </span>
+          <span class="smd-station-action">
+            <span>View metadata</span>
+            <span class="smd-arrow-glyph" aria-hidden="true">→</span>
+          </span>
+        </a>
+      </div>
 
-  {% endblock %} {% block localjavascript %}
-<script>
-// metadata dropdown control. Note that the html and css are in station_base.html
-// Metadata dropdown control
-document.getElementById("metadata-dropdown").addEventListener("click", function () {
-    this.classList.toggle("dropdown-open");
-    this.classList.toggle("active");  // Toggle the active class for color change
+      <div v-else-if="visibleStations.length" class="smd-station-grid">
+        <a v-for="stationItem in visibleStations"
+           :key="'card-' + stationItem.id"
+           :href="stationItem.url"
+           :aria-label="'Open metadata for ' + stationItem.name"
+           class="smd-station-card"
+           @click="onStationOpen($event)">
+          <div class="smd-card-top">
+            <span class="smd-station-monogram" aria-hidden="true">[[ initials(stationItem.name) ]]</span>
+            <span class="smd-station-main">
+              <strong class="smd-station-name">[[ stationItem.name ]]</strong>
+              <small class="smd-station-detail">[[ stationItem.code ? 'Code: ' + stationItem.code : 'Station metadata record' ]]</small>
+            </span>
+          </div>
+          <span class="smd-card-footer">
+            View station metadata
+            <span class="smd-arrow-glyph" aria-hidden="true">→</span>
+          </span>
+        </a>
+      </div>
 
-    // Toggle the icon between menu-down and menu-up with rotation
-    var icon = this.querySelector("i");
-    if (this.classList.contains("dropdown-open")) {
-        icon.classList.remove("mdi-menu-down");
-        icon.classList.add("mdi-menu-up");
-        icon.style.transform = "rotate(180deg)"; // Rotate up
-    } else {
-        icon.classList.remove("mdi-menu-up");
-        icon.classList.add("mdi-menu-down");
-        icon.style.transform = "rotate(0deg)"; // Rotate back to down
-    }
-});
+      <div v-else class="smd-empty" role="status">
+        <i class="material-icons-outlined" aria-hidden="true">search_off</i>
+        <strong>[[ stations.length ? 'No matching stations' : 'No stations available' ]]</strong>
+        <p>[[ stations.length ? 'Try searching another station name or code.' : 'There are no stations available to browse.' ]]</p>
+        <button v-if="search" class="smd-clear" type="button" @click="search = ''">Clear search</button>
+      </div>
 
-// Handle item selection
-document.querySelectorAll(".metadata-dropdown-items div").forEach(function (item) {
-    item.addEventListener("click", function () {
-        // Remove the 'selected-item' class from all items
-        document.querySelectorAll('.metadata-dropdown-items div').forEach(function (el) {
-            el.classList.remove('selected-item');
-        });
-
-        // Add the 'selected-item' class to the clicked item
-        this.classList.add('selected-item');
-
-        // Update the selected item text in the dropdown
-        var selectedItem = document.getElementById("metadata-selected-item");
-        selectedItem.firstChild.nodeValue = this.innerText + ' ';  // Update text only
-
-        // Close the dropdown
-        var dropdown = document.getElementById("metadata-dropdown");
-        dropdown.classList.remove("dropdown-open");
-        dropdown.classList.remove("active");  // Remove the active class after selection
-
-        // Ensure the icon changes back to menu-down and resets rotation after selection
-        var icon = dropdown.querySelector("i");
-        icon.classList.remove("mdi-menu-up");
-        icon.classList.add("mdi-menu-down");
-        icon.style.transform = "rotate(0deg)"; // Rotate back to down
-    });
-});
-
-// Close dropdown when clicking outside and reset border and icon color
-window.onclick = function(event) {
-    if (!event.target.closest('#metadata-dropdown')) {
-        var dropdowns = document.getElementsByClassName("metadata-dropdown");
-        for (var i = 0; i < dropdowns.length; i++) {
-            var openDropdown = dropdowns[i];
-            if (openDropdown.classList.contains('dropdown-open')) {
-                openDropdown.classList.remove('dropdown-open');
-                openDropdown.classList.remove('active');  // Remove active class on outside click
-
-                // Reset the icon to menu-down and rotation when closing
-                var icon = openDropdown.querySelector("i");
-                icon.classList.remove("mdi-menu-up");
-                icon.classList.add("mdi-menu-down");
-                icon.style.transform = "rotate(0deg)";
-            }
-        }
-    }
-};
-
-</script>
+      <!-- Pagination remains client-side, and changing filters resets the page. -->
+      <footer v-if="filteredStations.length > pageSize" class="smd-footer">
+        <span>Showing [[ visibleStart ]]–[[ visibleEnd ]] of [[ filteredStations.length ]] stations</span>
+        <div class="smd-page-controls">
+          <button type="button" class="smd-page-button" :disabled="currentPage <= 1" @click="currentPage--">
+            <i class="material-icons-outlined" aria-hidden="true">chevron_left</i> Previous
+          </button>
+          <span class="smd-page-label">[[ currentPage ]] / [[ pageCount ]]</span>
+          <button type="button" class="smd-page-button" :disabled="currentPage >= pageCount" @click="currentPage++">
+            Next <i class="material-icons-outlined" aria-hidden="true">chevron_right</i>
+          </button>
+        </div>
+      </footer>
+    </section>
+  </v-app>
 </div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  (function () {
+    // No API needed: reuse the station_name context and existing station-detail URL.
+    // escapejs prevents a station name containing quotes from breaking JS literals.
+    const stationMetadataItems = [
+      {% for station in station_name %}
+      {% url 'station-detail' station.pk as station_detail_url %}
+      {
+        id: "{{ station.pk|escapejs }}",
+        name: "{{ station.name|escapejs }}",
+        code: "{{ station.code|default_if_none:''|escapejs }}",
+        url: "{{ station_detail_url|escapejs }}"
+      },
+      {% endfor %}
+    ];
+
+    new Vue({
+      el: '#station-metadata-app',
+      vuetify: new Vuetify(),
+      delimiters: ['[[', ']]'],
+      data: function () {
+        return {
+          stations: stationMetadataItems,
+          search: '',
+          viewMode: 'grid',
+          currentPage: 1,
+          pageSize: 18
+        };
+      },
+      computed: {
+        filteredStations: function () {
+          const query = (this.search || '').trim().toLocaleLowerCase();
+          return this.stations
+            .filter(function (station) {
+              return !query ||
+                station.name.toLocaleLowerCase().includes(query) ||
+                (station.code || '').toLocaleLowerCase().includes(query);
+            })
+            .slice()
+            .sort(function (a, b) {
+              // Natural sorting: "Station 2" sorts before "Station 10".
+              return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+            });
+        },
+        pageCount: function () {
+          return Math.max(1, Math.ceil(this.filteredStations.length / this.pageSize));
+        },
+        visibleStations: function () {
+          const start = (this.currentPage - 1) * this.pageSize;
+          return this.filteredStations.slice(start, start + this.pageSize);
+        },
+        visibleStart: function () {
+          return this.filteredStations.length ? (this.currentPage - 1) * this.pageSize + 1 : 0;
+        },
+        visibleEnd: function () {
+          return Math.min(this.currentPage * this.pageSize, this.filteredStations.length);
+        }
+      },
+      watch: {
+        search: function () {
+          this.currentPage = 1;
+        }
+      },
+      methods: {
+        initials: function (name) {
+          // Abbreviation is generated from the name; no fabricated station data.
+          const words = (name || '').trim().split(/\s+/).filter(Boolean);
+          if (!words.length) return '—';
+          return (words.length > 1
+            ? words[0].slice(0, 1) + words[1].slice(0, 1)
+            : words[0].slice(0, 2)).toLocaleUpperCase();
+        },
+        onStationOpen: function (event) {
+          // Do not show a blocking overlay for Ctrl/Cmd+click or other new-tab actions.
+          if (event && (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0)) return;
+          if (typeof window.mainOverlayLoader === 'function') window.mainOverlayLoader();
+        }
+      }
+    });
+  })();
+</script>
 {% endblock %}

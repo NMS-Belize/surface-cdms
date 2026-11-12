@@ -1,30 +1,81 @@
 {% extends "wx/station_base.html" %}
 {% block station_content %}
+<!-- Standalone delete confirmation remains supported for direct/legacy URLs.
+     The main Files list can also POST to this same Django DeleteView inline. -->
+<style>
+  .station-base-page .sf-confirm-page { width: 100%; margin: 0; padding: 0; background: #fff; color: #292929; }
+  .station-base-page .sf-confirm-page .v-application,
+  .station-base-page .sf-confirm-page .v-application--wrap { background: #fff !important; color: #292929; }
+  .station-base-page .sf-confirm-page .v-application--wrap { min-height: auto !important; }
+  .station-base-page .sf-confirm-heading { padding: 2px 0 16px; }
+  .station-base-page .sf-confirm-heading h2 { font-size: 18px; font-weight: 700; margin: 0; color: #292929; }
+  .station-base-page .sf-confirm-heading p { font-size: 12px; color: #777; margin: 5px 0 0; }
+  .station-base-page .sf-confirm-card {
+    max-width: 690px; border: 1px solid #e5e5e5; border-radius: 11px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.025); background: #fff; overflow: hidden;
+  }
+  .station-base-page .sf-confirm-main { display: flex; align-items: flex-start; gap: 15px; padding: 24px; }
+  .station-base-page .sf-confirm-icon {
+    width: 43px; height: 43px; flex: none; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff3f3; border: 1px solid #f7dddd; color: #ba3540;
+  }
+  .station-base-page .sf-confirm-icon .material-icons-outlined { font-size: 23px; }
+  .station-base-page .sf-confirm-copy { min-width: 0; }
+  .station-base-page .sf-confirm-copy h3 { font-size: 16px; font-weight: 700; margin: 1px 0 7px; color: #2b2b2b; }
+  .station-base-page .sf-confirm-copy p { font-size: 13px; color: #666; line-height: 1.65; margin: 0 0 9px; }
+  .station-base-page .sf-confirm-name {
+    font-weight: 700; color: #303030; overflow-wrap: anywhere;
+  }
+  .station-base-page .sf-confirm-actions {
+    border-top: 1px solid #ededed; padding: 17px 23px;
+    display: flex; justify-content: flex-end; align-items: center; gap: 9px; flex-wrap: wrap;
+  }
+  .station-base-page .sf-confirm-actions .v-btn {
+    font-size: 12px; font-weight: 650; text-transform: none; letter-spacing: 0; box-shadow: none;
+  }
+  @media (max-width: 560px) {
+    .station-base-page .sf-confirm-main { padding: 18px 15px; gap: 10px; }
+    .station-base-page .sf-confirm-actions { padding: 15px; }
+  }
+</style>
 
-<div class="srf-container">
-  <div
-    class="srf-flex d-flex flex-row align-items-center justify-content-between srf-padding"
-  >
-    <span class="srf-display-1 text-uppercase">Delete file</span>
-  </div>
-  <div class="srf-layout flex-column srf-padding" style="width:100%;">
-    <p>Are you sure you want to <strong class="bold">delete</strong> the file: <strong class="bold">{{ object }}</strong>?</p>
-    <form method="POST">
-      {% csrf_token %}
-      <button class="btn-outline-default btn-small metadata-btn-danger" type="submit">
-        Yes, delete
-      </button>
-      <a href="{% url 'stationfiles-list' station.id %}">
-        <button
-          class="btn-outline-default btn-small metadata-btn-success"
-          type="button"
-        >
-          Cancel
-        </button>
-      </a>
-    </form>
-  </div>
+<div class="sf-confirm-page" id="sf-confirm-app" v-cloak>
+  <v-app>
+    <header class="sf-confirm-heading">
+      <h2>Delete station file</h2>
+      <p>Review this request before removing the file.</p>
+    </header>
+    <section class="sf-confirm-card" aria-labelledby="sf-confirm-title">
+      <div class="sf-confirm-main">
+        <span class="sf-confirm-icon" aria-hidden="true"><i class="material-icons-outlined">delete_outline</i></span>
+        <div class="sf-confirm-copy">
+          <h3 id="sf-confirm-title">Delete this file?</h3>
+          <p>Are you sure you want to delete <span class="sf-confirm-name">{{ object }}</span> from this station?</p>
+          <p>This action cannot be undone.</p>
+        </div>
+      </div>
+      <!-- Native POST preserves CSRF, the existing Django DeleteView and redirects. -->
+      <form method="POST" @submit="submitting = true">
+        {% csrf_token %}
+        <div class="sf-confirm-actions">
+          <v-btn outlined href="{% url 'stationfiles-list' station.id %}" :disabled="submitting">Cancel</v-btn>
+          <v-btn color="error" depressed type="submit" :loading="submitting" :disabled="submitting">
+            <v-icon left size="18">mdi-delete-outline</v-icon>Delete file
+          </v-btn>
+        </div>
+      </form>
+    </section>
+  </v-app>
 </div>
-
-
+{% endblock %}
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#sf-confirm-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data: function () { return { submitting: false }; }
+  });
+</script>
 {% endblock %}

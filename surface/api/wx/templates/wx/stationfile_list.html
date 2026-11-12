@@ -1,55 +1,328 @@
-{% extends "wx/station_base.html" %} {% block station_content %}
+{% extends "wx/station_base.html" %}
+{% load wx_filters %}
+{% block station_content %}
+<!--
+  Station Files / list
+  The shared station_base.html supplies the outer page gutters and station
+  navigation. Do not nest another .srf-container or a globally styled <nav>.
+  Vue owns only #sf-files-app; station_base.html has its own Vue 2 root.
+-->
+<style>
+  .station-base-page .sf-files { width: 100%; min-width: 0; margin: 0; background: #fff; color: #292929; }
+  .station-base-page .sf-files .v-application,
+  .station-base-page .sf-files .v-application--wrap { background: #fff !important; color: #292929; }
+  .station-base-page .sf-files .v-application--wrap { min-height: auto !important; }
+  .station-base-page .sf-files .sf-page-heading {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px 20px; flex-wrap: wrap; padding: 1px 0 17px;
+  }
+  .station-base-page .sf-files .sf-heading-copy { min-width: 0; flex: 1 1 300px; }
+  .station-base-page .sf-files .sf-heading-copy h2 {
+    margin: 0; color: #292929; font-size: 18px; line-height: 1.4; font-weight: 700;
+  }
+  .station-base-page .sf-files .sf-heading-copy p {
+    margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: #777;
+  }
+  .station-base-page .sf-files .sf-add-button {
+    font-size: 12px; text-transform: none; letter-spacing: 0;
+    border-radius: 7px; font-weight: 650; box-shadow: none;
+  }
+  .station-base-page .sf-files .sf-file-panel {
+    border: 1px solid #e5e5e5; border-radius: 11px;
+    background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.025);
+    overflow: hidden;
+  }
+  .station-base-page .sf-files .sf-file-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px 24px; padding: 17px 20px;
+    border-bottom: 1px solid #ededed;
+  }
+  .station-base-page .sf-files .sf-file-toolbar-heading { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .station-base-page .sf-files .sf-file-toolbar-icon {
+    width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid #e9e9e9; border-radius: 9px; background: #f6f6f6; color: #686868;
+  }
+  .station-base-page .sf-files .sf-file-toolbar-icon .material-icons-outlined { font-size: 21px; }
+  .station-base-page .sf-files .sf-file-toolbar-heading h3 { font-size: 15px; margin: 0; font-weight: 700; line-height: 1.35; }
+  .station-base-page .sf-files .sf-file-toolbar-heading p { font-size: 12px; color: #777; margin: 3px 0 0; }
+  .station-base-page .sf-files .sf-search-field { flex: 0 1 350px; min-width: 230px; }
+  .station-base-page .sf-files .sf-search-field .v-input { font-size: 13px; margin-top: 0; }
+  .station-base-page .sf-files .sf-search-field .v-input__slot { background: #fff !important; }
+  .station-base-page .sf-files .sf-search-field .v-label { font-size: 13px; }
+  .station-base-page .sf-files .sf-results-caption {
+    padding: 12px 20px 7px; font-size: 12px; color: #6e6e6e; line-height: 1.5;
+  }
+  .station-base-page .sf-files .sf-results-caption strong { color: #343434; }
+  .station-base-page .sf-files .sf-table .v-data-table__wrapper { overflow-x: auto; }
+  .station-base-page .sf-files .sf-table table { min-width: 530px; }
+  .station-base-page .sf-files .sf-table th {
+    background: #fafafa; color: #696969 !important; font-size: 11px !important;
+    text-transform: uppercase; font-weight: 700; letter-spacing: .02em;
+    height: 43px; white-space: nowrap;
+  }
+  .station-base-page .sf-files .sf-table td {
+    height: 60px; border-bottom-color: #f0f0f0 !important;
+    font-size: 12px; color: #363636;
+  }
+  .station-base-page .sf-files .sf-table tbody tr:hover { background: #fafafa !important; }
+  .station-base-page .sf-files .sf-document-link {
+    display: flex; align-items: center; gap: 11px; min-width: 0;
+    color: #333 !important; text-decoration: none !important;
+  }
+  .station-base-page .sf-files .sf-document-link:hover .sf-document-name { color: #1976d2; text-decoration: underline; }
+  .station-base-page .sf-files .sf-document-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: none; width: 34px; height: 34px; background: #f5f5f5;
+    color: #636363; border-radius: 8px;
+  }
+  .station-base-page .sf-files .sf-document-icon .v-icon { color: inherit !important; }
+  .station-base-page .sf-files .sf-document-name {
+    font-weight: 650; overflow-wrap: anywhere; line-height: 1.4;
+  }
+  .station-base-page .sf-files .sf-format {
+    display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px;
+    border-radius: 6px; font-size: 10px; font-weight: 700;
+    letter-spacing: .02em; background: #f3f3f3; color: #626262;
+  }
+  .station-base-page .sf-files .sf-format--pdf { background: #fff2f2; color: #af3740; }
+  .station-base-page .sf-files .sf-format--xls { background: #edf8f1; color: #27754a; }
+  .station-base-page .sf-files .sf-format--doc { background: #edf4fe; color: #315f98; }
+  .station-base-page .sf-files .sf-format--image { background: #f4effc; color: #754da0; }
+  .station-base-page .sf-files .sf-file-action { margin-right: 0; }
+  .station-base-page .sf-files .sf-file-action .v-icon { font-size: 20px; }
+  .station-base-page .sf-files .sf-file-empty { padding: 40px 14px; text-align: center; color: #777; }
+  .station-base-page .sf-files .sf-file-empty .v-icon { margin-bottom: 9px; }
+  .station-base-page .sf-files .sf-file-empty strong { display: block; font-size: 13px; color: #555; }
+  .station-base-page .sf-files .sf-file-empty p { margin: 5px 0 0; font-size: 12px; }
+  .sf-delete-dialog .v-card__title { font-size: 17px !important; font-weight: 700 !important; color: #2a2a2a; }
+  .sf-delete-dialog .sf-delete-warning { font-size: 13px; line-height: 1.6; color: #555; }
+  .sf-delete-dialog .sf-delete-name { color: #292929; font-weight: 700; overflow-wrap: anywhere; }
+  .sf-delete-dialog .v-btn { text-transform: none; letter-spacing: 0; font-weight: 650; box-shadow: none; }
+  @media (max-width: 680px) {
+    .station-base-page .sf-files .sf-file-toolbar { padding: 15px; }
+    .station-base-page .sf-files .sf-search-field { min-width: 0; flex: 1 1 100%; }
+    .station-base-page .sf-files .sf-results-caption { padding: 12px 15px 7px; }
+    .station-base-page .sf-files .sf-page-heading { padding-bottom: 14px; }
+  }
+</style>
 
-<div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-  <span class="srf-display-1 text-uppercase">Files</span>
+<div id="sf-files-app" class="sf-files" v-cloak>
+  <v-app>
+    <header class="sf-page-heading">
+      <div class="sf-heading-copy">
+        <h2>Station files</h2>
+        <p>View and manage documents associated with {{ station.name }}.</p>
+      </div>
+      {% if request|has_any_feature_permission:"stations-list:write" %}
+      <v-btn class="sf-add-button" color="primary" depressed href="{% url 'stationfile-create' station.id %}">
+        <v-icon left size="18">mdi-plus</v-icon>Add file
+      </v-btn>
+      {% endif %}
+    </header>
 
-    <div class="srf-flex">
-      <a href="{% url 'stationfile-create' station.id %}">
-        <button class="btn-outline-default btn-small" type="button">
-          Add file
-        </button>
-      </a>
-    </div>
-</div>
+    <section class="sf-file-panel" aria-labelledby="sf-file-list-heading">
+      <div class="sf-file-toolbar">
+        <div class="sf-file-toolbar-heading">
+          <span class="sf-file-toolbar-icon" aria-hidden="true"><i class="material-icons-outlined">folder_open</i></span>
+          <div>
+            <h3 id="sf-file-list-heading">Documents</h3>
+            <p>Uploaded station files and attachments</p>
+          </div>
+        </div>
+        <div class="sf-search-field">
+          <v-text-field v-model="search" label="Search files" placeholder="Search by name or file type"
+                        prepend-inner-icon="mdi-magnify" clearable outlined dense hide-details
+                        autocomplete="off" aria-label="Search station files"></v-text-field>
+        </div>
+      </div>
 
-<div class="srf-layout flex-row" style="width:100%;">
-  <table id="id_station_list" style="width:100%">
-    <thead>
-      <tr>
-        <th>Name</th>
-          <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for object in object_list %}
-      <tr>
-	      <td><a href="{{ object.file.url }}" target="_blank">{{ object.name }}</a></td>
+      <div class="sf-results-caption" aria-live="polite">
+        <strong>[[ filteredFiles.length ]]</strong> [[ filteredFiles.length === 1 ? 'file' : 'files' ]]
+        <span v-if="search"> matching your search</span>
+        <span v-else> available</span>
+      </div>
 
-        <td class="justify-center layout">
-
-          <a href="{% url 'stationfile-delete' station.id object.id %}">
-            <button
-              id="id_delete_station"
-              class="mdl-button mdl-js-button mdl-button--icon"
-            >
-              <i class="material-icons custon-icon-16 icon-danger">delete</i>
-            </button>
-            <div class="mdl-tooltip" data-mdl-for="id_delete_station">
-              Delete
-            </div>
+      <!-- Keep links as real links: the browser can open/download from the existing file URL. -->
+      <v-data-table class="sf-table elevation-0" :headers="headers" :items="filteredFiles"
+                    item-key="id" sort-by="name" :items-per-page="15"
+                    :footer-props="{ 'items-per-page-options': [15, 30, 50, 100] }"
+                    no-data-text="No files available">
+        <template v-slot:item.name="{ item }">
+          <a class="sf-document-link" :href="item.url" target="_blank" rel="noopener"
+             :aria-label="'Open file: ' + item.name">
+            <span class="sf-document-icon" aria-hidden="true"><v-icon size="19">[[ iconFor(item) ]]</v-icon></span>
+            <span class="sf-document-name">[[ item.name ]]</span>
           </a>
-        </td>
+        </template>
 
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        <template v-slot:item.kind="{ item }">
+          <span class="sf-format" :class="formatClass(item)">[[ fileFormat(item) ]]</span>
+        </template>
+
+        <template v-slot:item.actions="{ item }">
+          <div class="d-flex align-center justify-end">
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on }">
+                <v-btn icon small :href="item.url" target="_blank" rel="noopener" v-on="on"
+                       class="sf-file-action" :aria-label="'Open ' + item.name">
+                  <v-icon size="19" color="grey darken-2">mdi-open-in-new</v-icon>
+                </v-btn>
+              </template>
+              <span>Open file</span>
+            </v-tooltip>
+            {% if request|has_any_feature_permission:"stations-list:delete" %}
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on }">
+                <v-btn icon small class="sf-file-action" v-on="on"
+                       :aria-label="'Delete ' + item.name" @click="confirmFileDelete(item)">
+                  <v-icon size="19" color="error">mdi-delete-outline</v-icon>
+                </v-btn>
+              </template>
+              <span>Delete file</span>
+            </v-tooltip>
+            {% endif %}
+          </div>
+        </template>
+
+        <template v-slot:no-data>
+          <div class="sf-file-empty">
+            <v-icon size="36" color="grey lighten-1">mdi-folder-open-outline</v-icon>
+            <strong>[[ files.length ? 'No matching files' : 'No files uploaded' ]]</strong>
+            <p>[[ files.length ? 'Try a different search term.' : 'Files added to this station will appear here.' ]]</p>
+          </div>
+        </template>
+      </v-data-table>
+    </section>
+
+    {% if request|has_any_feature_permission:"stations-list:delete" %}
+    <!-- POST to the existing Django DeleteView. No AJAX endpoint or custom
+         response handling is needed; its normal redirect still applies. -->
+    <v-dialog v-model="deleteDialog" max-width="480" :persistent="deleteSubmitting">
+      <v-card class="sf-delete-dialog">
+        <v-card-title class="pt-5 px-5">Delete station file?</v-card-title>
+        <v-card-text class="px-5 pt-2 pb-1">
+          <p class="sf-delete-warning mb-3">
+            Remove <span class="sf-delete-name">[[ selectedFile ? selectedFile.name : '' ]]</span>
+            from this station? This action cannot be undone.
+          </p>
+          <form :action="selectedFile ? selectedFile.deleteUrl : ''" method="POST"
+                id="sf-inline-delete-form" @submit="onDeleteSubmit">
+            {% csrf_token %}
+          </form>
+        </v-card-text>
+        <v-card-actions class="px-5 pb-5 pt-3">
+          <v-spacer></v-spacer>
+          <v-btn color="success" :disabled="deleteSubmitting" @click="closeDelete">Cancel</v-btn>
+          <v-btn color="error" depressed type="submit" form="sf-inline-delete-form"
+                 :loading="deleteSubmitting" :disabled="!selectedFile || deleteSubmitting">
+            <v-icon left size="17">mdi-delete-outline</v-icon>Delete file
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    {% endif %}
+  </v-app>
 </div>
+{% endblock %}
 
-{% endblock %} {% block localjavascript %}
+{% block localjavascript %}
 <script>
-  $(document).ready(function() {
-    $('#id_station_list').DataTable({});
-  });
+  (function () {
+    // Existing Django queryset and per-file URLs are the only data sources.
+    // escapejs protects filenames/URLs embedded in JavaScript string literals.
+    var stationFiles = [
+      {% for object in object_list %}
+      {% url 'stationfile-delete' station.id object.id as file_delete_url %}
+      {
+        id: "{{ object.pk|escapejs }}",
+        name: "{{ object.name|escapejs }}",
+        url: "{{ object.file.url|escapejs }}",
+        deleteUrl: "{{ file_delete_url|escapejs }}"
+      },
+      {% endfor %}
+    ];
+
+    new Vue({
+      el: '#sf-files-app',
+      vuetify: new Vuetify(),
+      delimiters: ['[[', ']]'],
+      data: function () {
+        return {
+          files: stationFiles,
+          search: '',
+          deleteDialog: false,
+          deleteSubmitting: false,
+          selectedFile: null,
+          headers: [
+            { text: 'File', value: 'name', sortable: true },
+            { text: 'Format', value: 'kind', sortable: false, width: '140px' },
+            { text: 'Actions', value: 'actions', sortable: false, align: 'end', width: '120px' }
+          ]
+        };
+      },
+      computed: {
+        filteredFiles: function () {
+          var query = (this.search || '').trim().toLowerCase();
+          if (!query) return this.files;
+          var vm = this;
+          return this.files.filter(function (item) {
+            return item.name.toLowerCase().includes(query) ||
+                   vm.fileFormat(item).toLowerCase().includes(query);
+          });
+        }
+      },
+      methods: {
+        fileExtension: function (item) {
+          // Prefer the stored path, since a document's display name may not
+          // contain its extension. Ignore signed-URL query parameters.
+          var path = String(item.url || '').split(/[?#]/)[0];
+          var filename = path.split('/').pop() || '';
+          var match = filename.match(/\.([a-zA-Z0-9]{1,8})$/);
+          if (!match) {
+            match = String(item.name || '').match(/\.([a-zA-Z0-9]{1,8})$/);
+          }
+          return match ? match[1].toLowerCase() : '';
+        },
+        fileFormat: function (item) {
+          var ext = this.fileExtension(item);
+          return ext ? ext.toUpperCase() : 'FILE';
+        },
+        formatClass: function (item) {
+          var ext = this.fileExtension(item);
+          if (ext === 'pdf') return 'sf-format--pdf';
+          if (['xls', 'xlsx', 'csv'].includes(ext)) return 'sf-format--xls';
+          if (['doc', 'docx', 'odt'].includes(ext)) return 'sf-format--doc';
+          if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'sf-format--image';
+          return '';
+        },
+        iconFor: function (item) {
+          var ext = this.fileExtension(item);
+          if (ext === 'pdf') return 'mdi-file-pdf-box';
+          if (['xls', 'xlsx', 'csv'].includes(ext)) return 'mdi-file-excel-outline';
+          if (['doc', 'docx', 'odt'].includes(ext)) return 'mdi-file-word-outline';
+          if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) return 'mdi-file-image-outline';
+          return 'mdi-file-outline';
+        },
+        confirmFileDelete: function (item) {
+          this.selectedFile = item;
+          this.deleteDialog = true;
+        },
+        closeDelete: function () {
+          if (this.deleteSubmitting) return;
+          this.deleteDialog = false;
+          this.selectedFile = null;
+        },
+        onDeleteSubmit: function (event) {
+          // Leave the native POST alone: Django's csrf_token, delete view,
+          // permission checks and response redirect remain authoritative.
+          if (this.deleteSubmitting || !this.selectedFile) {
+            event.preventDefault();
+            return;
+          }
+          this.deleteSubmitting = true;
+        }
+      }
+    });
+  })();
 </script>
 {% endblock %}

@@ -1,523 +1,509 @@
-{% extends "base.html" %} {% block content %} {% load wx_filters %}
-<div class="srf-container">
-  <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-    <span class="srf-display-1 text-uppercase">Export Stations to OSCAR</span>
-  </div>
-  
-  <div class="srf-layout" style="width:100%;">
-    <form id="oscar-station-form">
+{% extends "base.html" %}
+{% load static %}
+{% load wx_filters %}
 
-      <div>
-        <div id="min_oscar_error_container" class="hide-msg">
+{% block content %}
+<style>
+  /* Keep the first render hidden until the page's isolated Vue 2 app mounts. */
+  .osx-page [v-cloak] { display: none !important; }
 
-          <h6 style="font-weight: bolder; color: #d32f2f; cursor: pointer;" onclick="openStatusMsg()">
-            <i class="fa fa-exclamation-triangle" aria-hidden="true" style="font-size: larger;"></i>&nbsp&nbsp
-            OSCAR Upload Failed!
-            <i class="fa fa-chevron-circle-down" aria-hidden="true" style="float: right; font-size: larger;"></i>
-          </h6>
+  /* Match SURFACE's established white-page and heading treatment. */
+  .osx-page {
+    width: 100%; max-width: none; padding: 24px 24px 34px;
+    background: #fff; color: #282828;
+  }
+  .osx-page .osx-shell { width: 100%; padding: 0 20px 28px; margin: 0 auto; }
+  .osx-page .v-application, .osx-page .v-application--wrap,
+  .osx-page .osx-app { background: #fff !important; color: #282828; }
+  .osx-page .v-application--wrap { min-height: auto !important; }
+  .osx-page .osx-heading { padding: 20px 0 16px; }
+  .osx-page .osx-heading .srf-display-1 {
+    display: block; margin: 0; color: #252525;
+    font-weight: inherit; letter-spacing: normal;
+  }
+  .osx-page .osx-heading p { margin: 5px 0 0; color: #777; font-size: 13px; line-height: 1.5; }
 
+  /* This is a genuine eligibility note, not a decorative banner. */
+  .osx-page .osx-note {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px 14px; margin-bottom: 17px;
+    border: 1px solid #e2ebe6; border-radius: 8px; background: #f8fbf9;
+    color: #4f685a; font-size: 12px; line-height: 1.6;
+  }
+  .osx-page .osx-note .v-icon { color: #2b8969 !important; margin-top: 1px; flex: none; }
+
+  .osx-page .osx-section {
+    border: 1px solid #e6e6e6; border-radius: 11px; background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .025); overflow: hidden;
+  }
+  .osx-page .osx-section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px 20px; padding: 16px 19px;
+    border-bottom: 1px solid #ececec;
+  }
+  .osx-page .osx-head-title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .osx-page .osx-head-icon {
+    display: flex; align-items: center; justify-content: center;
+    flex: none; width: 38px; height: 38px;
+    background: #edf7f5; border: 1px solid #d9ece6; color: #187e71;
+    border-radius: 9px;
+  }
+  .osx-page .osx-head-icon .v-icon { color: inherit !important; }
+  .osx-page .osx-head-title h2 { font-size: 15px; font-weight: 700; margin: 0; line-height: 1.4; color: #292929; }
+  .osx-page .osx-head-title p { margin: 2px 0 0; color: #808080; font-size: 11px; line-height: 1.5; }
+  .osx-page .osx-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .osx-page .osx-count {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px;
+    border-radius: 20px; border: 1px solid #e4e6e8; background: #f8f8f8;
+    font-size: 11px; font-weight: 600; color: #5f6368; white-space: nowrap;
+  }
+  .osx-page .osx-count--selected { border-color: #d8e6f8; background: #eff5fd; color: #2762a0; }
+  .osx-page .osx-table-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px 18px; padding: 14px 19px;
+  }
+  .osx-page .osx-table-search { width: min(100%, 360px); max-width: 100%; margin: 0; }
+  .osx-page .osx-table-search .v-input__slot { background: #fff !important; }
+  .osx-page .osx-table-hint { font-size: 11px; color: #838383; }
+  .osx-page .osx-table .v-data-table__wrapper { overflow-x: auto; }
+  .osx-page .osx-table .v-data-table-header th {
+    background: #fafafa !important; color: #686868 !important;
+    font-size: 11px; font-weight: 750; letter-spacing: .015em;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .osx-page .osx-table tbody td { padding-top: 11px; padding-bottom: 11px; font-size: 12px; color: #3e3e3e; }
+  .osx-page .osx-table tbody tr:hover { background: #fbfcfc !important; }
+  .osx-page .osx-station-name { color: #2b5f9a !important; text-decoration: none !important; font-weight: 700; font-size: 12px; }
+  .osx-page .osx-station-name:hover { text-decoration: underline !important; }
+  .osx-page .osx-row-result { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 10px; }
+  .osx-page .osx-row-result--ok { color: #21805c; }
+  .osx-page .osx-row-result--fail { color: #b5484b; }
+  .osx-page .osx-wigos { color: #555; font-size: 11px; background: #f5f6f7; border: 1px solid #ebedef; border-radius: 4px; padding: 4px 6px; white-space: nowrap; }
+  .osx-page .osx-status-pill { display: inline-flex; align-items: center; padding: 4px 8px;
+    border-radius: 5px; border: 1px solid #e7e7e7; background: #f7f7f7; color: #656565;
+    font-size: 10px; font-weight: 650; white-space: nowrap; }
+  .osx-page .osx-status-pill--live { background: #edf8f1; border-color: #d5eade; color: #287b56; }
+  .osx-page .osx-status-pill--idle { background: #fff6e8; border-color: #f1e2c6; color: #9a681c; }
+  .osx-page .osx-coord { font-variant-numeric: tabular-nums; color: #5c6266; font-size: 11px; white-space: nowrap; }
+  .osx-page .osx-table .v-data-table__empty-wrapper { color: #858585; }
+
+  /* Export form: token stays in its native password input, not Vue data. */
+  .osx-page .osx-export-bar {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    flex-wrap: wrap; gap: 16px 24px; padding: 19px;
+    border-top: 1px solid #eaeaea; background: #fcfcfc;
+  }
+  .osx-page .osx-token-group { flex: 1 1 295px; max-width: 490px; min-width: 0; }
+  .osx-page .osx-field-label { display: block; margin: 0 0 7px; color: #363636; font-weight: 700; font-size: 12px; }
+  .osx-page .osx-field-label .osx-required { color: #c33d43; }
+  .osx-page .osx-token-control { display: flex; align-items: center; border: 1px solid #c9cdd1;
+    border-radius: 7px; overflow: hidden; background: #fff; min-height: 39px; }
+  .osx-page .osx-token-control:focus-within { border-color: #1976d2; box-shadow: 0 0 0 1px #1976d2; }
+  .osx-page .osx-token-control--error { border-color: #c33d43; }
+  .osx-page .osx-token-input { flex: 1; min-width: 0; height: 38px !important;
+    padding: 8px 12px !important; margin: 0 !important; background: #fff !important;
+    color: #292929; font-size: 13px !important; border: 0 !important; box-shadow: none !important;
+    outline: 0 !important; }
+  .osx-page .osx-token-visibility { display: inline-flex; align-items: center; justify-content: center;
+    width: 39px; height: 37px; border: 0; border-left: 1px solid #ececec; background: #fff;
+    color: #777; cursor: pointer; flex: none; }
+  .osx-page .osx-token-visibility:hover { color: #1976d2; background: #fafafa; }
+  .osx-page .osx-token-help { margin: 6px 0 0; font-size: 11px; color: #858585; }
+  .osx-page .osx-token-error { margin: 5px 0 0; font-size: 11px; color: #bd2e39; }
+  .osx-page .osx-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 9px; }
+  .osx-page .osx-actions .v-btn { text-transform: none; letter-spacing: 0; box-shadow: none;
+    min-height: 39px; border-radius: 7px; font-size: 12px; font-weight: 650; margin: 0 !important; }
+  .osx-page .osx-actions .v-icon { font-size: 17px; }
+  .osx-page .osx-actions .osx-export-all { color: #176e65 !important; border-color: #a6d4ca !important; background: #fff !important; }
+  .osx-page .osx-actions .osx-export-all:hover { background: #f3faf8 !important; }
+
+  /* Result details render as text, never HTML from the OSCAR response. */
+  .osx-page .osx-request-alert { margin: 0 0 14px; font-size: 12px; }
+  .osx-page .osx-results { margin-bottom: 17px; }
+  .osx-page .osx-results-head { display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px 15px; padding: 14px 18px; border-bottom: 1px solid #ededed; }
+  .osx-page .osx-results-head h2 { margin: 0; font-size: 14px; color: #303030; font-weight: 700; }
+  .osx-page .osx-results-summary { font-size: 11px; color: #777; }
+  .osx-page .osx-results-body { padding: 8px 18px 15px; }
+  .osx-page .osx-results-row { border-bottom: 1px solid #efefef; }
+  .osx-page .osx-results-row:last-child { border-bottom: none; }
+  .osx-page .osx-results-toggle { display: flex; align-items: center; gap: 10px; width: 100%;
+    border: 0; background: #fff; color: #383838; cursor: pointer; text-align: left;
+    padding: 12px 0; font-family: inherit; font-size: 12px; }
+  .osx-page .osx-results-toggle:hover { color: #222; }
+  .osx-page .osx-result-mark { display: inline-flex; align-items: center; justify-content: center;
+    width: 25px; height: 25px; border-radius: 7px; flex: none; }
+  .osx-page .osx-result-mark--ok { background: #e9f6ee; color: #257e55; }
+  .osx-page .osx-result-mark--fail { background: #fff0f0; color: #be4248; }
+  .osx-page .osx-result-title { font-weight: 700; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+  .osx-page .osx-result-state { color: #777; font-size: 11px; }
+  .osx-page .osx-results-details { white-space: pre-wrap; overflow-wrap: anywhere;
+    color: #5e6266; font-size: 12px; line-height: 1.55;
+    background: #fafafa; border: 1px solid #eeeeee; border-radius: 7px;
+    padding: 11px 13px; margin: 0 0 12px 35px; }
+  .osx-page .osx-results-intro { padding: 14px 18px; color: #6b6b6b; font-size: 12px; line-height: 1.5; }
+  .osx-page .osx-progress-backdrop { position: fixed; inset: 0; z-index: 2400;
+    background: rgba(255,255,255,.64); display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(2px); }
+  .osx-page .osx-progress-card { display: flex; flex-direction: column; align-items: center;
+    gap: 14px; padding: 28px 34px; border: 1px solid #e5e5e5; border-radius: 11px;
+    background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.08); font-size: 13px;
+    font-weight: 650; color: #4c4c4c; text-align: center; }
+
+  @media (max-width: 760px) {
+    .osx-page { padding: 14px 8px 24px; }
+    .osx-page .osx-shell { padding: 0 11px 20px; }
+    .osx-page .osx-heading { padding: 14px 0 12px; }
+    .osx-page .osx-section-head, .osx-page .osx-table-toolbar { padding: 14px; }
+    .osx-page .osx-export-bar { padding: 15px 14px; }
+    .osx-page .osx-table-search { width: 100%; }
+    .osx-page .osx-actions { width: 100%; justify-content: flex-start; }
+  }
+  @media (max-width: 480px) {
+    .osx-page .osx-actions .v-btn { flex: 1 1 100%; }
+    .osx-page .osx-results-head, .osx-page .osx-results-body { padding-left: 13px; padding-right: 13px; }
+  }
+</style>
+
+<div class="srf-container osx-page">
+  <div class="osx-shell">
+    <div id="oscar-export-app" v-cloak>
+      <v-app class="osx-app">
+        <header class="osx-heading">
+          <h1 class="srf-display-1 text-uppercase">Export Stations to OSCAR</h1>
+          <p>Select eligible stations and publish their metadata to OSCAR Surface.</p>
+        </header>
+
+        <v-alert
+          type="info"
+          text
+          dense 
+        >
+          Only stations meeting OSCAR minimum requirements are displayed. You can select stations across multiple table pages, or export all eligible stations at once.
+        </v-alert>
+
+        <!-- Preserve individual backend station outcomes, including partial failures. -->
+        <div ref="resultsAnchor" aria-live="polite">
+          <v-alert v-if="exportError" type="error" outlined dense class="osx-request-alert">
+            [[ exportError ]]
+          </v-alert>
+          <v-alert v-if="exportNotice" :type="exportNoticeType" outlined dense class="osx-request-alert">
+            [[ exportNotice ]]
+          </v-alert>
+          <section v-if="exportResults.length" class="osx-section osx-results" aria-label="OSCAR export results">
+            <div class="osx-results-head">
+              <h2>Export results</h2>
+              <span class="osx-results-summary">[[ successCount ]] succeeded · [[ failureCount ]] unsuccessful</span>
+            </div>
+            <div class="osx-results-body">
+              <div v-for="(result, index) in exportResults" :key="index" class="osx-results-row">
+                <button type="button" class="osx-results-toggle"
+                        :aria-expanded="String(result.expanded)"
+                        @click="result.expanded = !result.expanded">
+                  <span class="osx-result-mark" :class="result.success ? 'osx-result-mark--ok' : 'osx-result-mark--fail'">
+                    <v-icon size="17" :color="result.success ? 'success' : 'error'">[[ result.success ? 'mdi-check' : 'mdi-alert-circle-outline' ]]</v-icon>
+                  </span>
+                  <span class="osx-result-title">[[ result.name ]]</span>
+                  <span class="osx-result-state">[[ result.success ? 'Exported' : 'Needs attention' ]]</span>
+                  <v-icon size="18">[[ result.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' ]]</v-icon>
+                </button>
+                <p v-if="result.expanded" class="osx-results-details">[[ result.message ]]</p>
+              </div>
+            </div>
+          </section>
         </div>
 
-        <div id="oscar_error_container" class="hide-msg">
-
-          <h4 style="font-weight: bolder; color: #d32f2f;">
-              <i class="fa fa-exclamation-triangle" aria-hidden="true"></i> OSCAR Upload Failed!
-              <i class="fa fa-chevron-circle-up" aria-hidden="true" style="float: right; cursor: pointer;" onclick="closeStatusMsg()"></i>
-          </h4>
-  
-          <div id="status_msg">
+        <section class="osx-section" aria-labelledby="osx-stations-title">
+          <div class="osx-section-head">
+            <div class="osx-head-title">
+              <span class="osx-head-icon"><v-icon size="21">mdi-earth</v-icon></span>
+              <div>
+                <h2 id="osx-stations-title">Eligible stations</h2>
+                <p>Review the station information before exporting.</p>
+              </div>
+            </div>
+            <div class="osx-counts">
+              <span class="osx-count">[[ stations.length ]] eligible</span>
+              <span class="osx-count osx-count--selected">[[ selectedStations.length ]] selected</span>
+            </div>
           </div>
-  
+
+          <form id="oscar-station-form" @submit.prevent="submitExport(false)" autocomplete="off" novalidate>
+            {% csrf_token %}
+            <div class="osx-table-toolbar">
+              <v-text-field v-model="search" class="osx-table-search"
+                            outlined dense clearable hide-details autocomplete="off"
+                            prepend-inner-icon="mdi-magnify" label="Search eligible stations"
+                            placeholder="Name, WIGOS ID or station type"></v-text-field>
+              <span class="osx-table-hint">Selections are retained when searching or changing pages.</span>
+            </div>
+
+            <v-data-table class="osx-table" :headers="headers" :items="filteredStations"
+                          v-model="selectedStations" show-select item-key="id"
+                          :items-per-page="15"
+                          :footer-props="{ 'items-per-page-options': [15, 30, 50, 100] }"
+                          :loading="submitting" loading-text="Exporting station metadata..."
+                          no-data-text="No eligible stations match your search.">
+              <template v-slot:item.name="{ item }">
+                <div>
+                  <a :href="item.url" class="osx-station-name">[[ item.name ]]</a>
+                  <div v-if="lastOutcomeByName[item.name]" class="osx-row-result"
+                       :class="lastOutcomeByName[item.name].success ? 'osx-row-result--ok' : 'osx-row-result--fail'">
+                    <v-icon size="12" :color="lastOutcomeByName[item.name].success ? 'success' : 'error'">
+                      [[ lastOutcomeByName[item.name].success ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline' ]]
+                    </v-icon>
+                    [[ lastOutcomeByName[item.name].success ? 'Last export succeeded' : 'Last export unsuccessful' ]]
+                  </div>
+                </div>
+              </template>
+              <template v-slot:item.wigos="{ item }">
+                <code class="osx-wigos">[[ item.wigos || '—' ]]</code>
+              </template>
+              <template v-slot:item.reporting_status="{ item }">
+                <span class="osx-status-pill" :class="statusClass(item.reporting_status)">
+                  [[ item.reporting_status || '—' ]]
+                </span>
+              </template>
+              <template v-slot:item.station_type="{ item }">[[ item.station_type || '—' ]]</template>
+              <template v-slot:item.latitude="{ item }"><span class="osx-coord">[[ item.latitude || '—' ]]</span></template>
+              <template v-slot:item.longitude="{ item }"><span class="osx-coord">[[ item.longitude || '—' ]]</span></template>
+            </v-data-table>
+
+            <div class="osx-export-bar">
+              <div class="osx-token-group">
+                <label class="osx-field-label" for="api-token">OSCAR API token <span class="osx-required">*</span></label>
+                <div class="osx-token-control" :class="{ 'osx-token-control--error': !!tokenError }">
+                  <input id="api-token" ref="apiTokenInput" class="osx-token-input"
+                         name="api_token" :type="showToken ? 'text' : 'password'"
+                         autocomplete="off" required placeholder="Enter your OSCAR API token"
+                         @input="tokenError = ''" />
+                  <button class="osx-token-visibility" type="button" :aria-label="showToken ? 'Hide API token' : 'Show API token'"
+                          :aria-pressed="String(showToken)" @click="showToken = !showToken">
+                    <v-icon size="18">[[ showToken ? 'mdi-eye-off-outline' : 'mdi-eye-outline' ]]</v-icon>
+                  </button>
+                </div>
+                <p v-if="tokenError" class="osx-token-error" role="alert">[[ tokenError ]]</p>
+                <p v-else class="osx-token-help">The token is sent with the export request; it is not shown in the results.</p>
+              </div>
+              <div class="osx-actions">
+                <v-btn outlined class="osx-export-all" :disabled="submitting || !stations.length"
+                       type="button" @click="submitExport(true)">
+                  <v-icon left>mdi-database-export-outline</v-icon>Export all
+                </v-btn>
+                <v-btn color="primary" depressed :loading="submitting"
+                       :disabled="submitting || !selectedStations.length" type="submit">
+                  <v-icon left>mdi-cloud-upload-outline</v-icon>Export selected ([[ selectedStations.length ]])
+                </v-btn>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <div v-if="submitting" class="osx-progress-backdrop" role="status" aria-live="polite">
+          <div class="osx-progress-card">
+            <v-progress-circular indeterminate color="primary" :size="42" :width="3"></v-progress-circular>
+            <span>Exporting station metadata to OSCAR...</span>
+          </div>
         </div>
-      </div>
-
-      {% csrf_token %} 
-      <table id="id_station_list" class="mdl-data-table" style="width:100%;">
-        <h6 style="color: #9e9e9e;"><span style="color: red;">**</span>Only stations meeting OSCAR minimum requirements are displayed</h6>
-
-        <thead>
-          <tr>
-            <th>Export</th>
-            <th>Wigos ID</th>
-            <th>Name</th>
-            <th>Reporting Status</th>
-            <th>Longitude</th>
-            <th>Latitude</th>
-            <th>Station Type</th> 
-          </tr>
-        </thead>
-        <tbody>
-          {% for station in object_list %}
-            <tr>
-              <td>
-                <label id="{{ station.name }}">
-                  <input type="checkbox" class="filled-in" name="selected_ids[]" value="{{ station.wigos }}"/>
-                  <span></span>
-                </label>
-              </td>
-              <td>{{ station.wigos }}</td>
-              <td>
-                <a href="{{ station.get_absolute_url }}">{{ station.name }}</a>
-              </td>
-              <td>{{ station.reporting_status }}</td>
-              <td>{{ station.longitude }}</td>
-              <td>{{ station.latitude }}</td>
-              <td>{{ station.wmo_station_type }}</td>
-            </tr>
-
-          {% endfor %}
-        </tbody>
-      </table>
-
-      
-        <div style="width: 20%; margin-bottom: 25px;">
-          <label for="api-token" style="margin-bottom: 0px;"><span style="font-size: 20px; color: red; display: inline-block;">* </span>API Token:</label>
-          <input type="text" id="api-token" name="api_token" required>
-        </div> 
-
-        <div class="srf-flex">
-            <button class="btn-outline-default btn-small" type="button" onclick="selectAll()">
-              Export All
-            </button>
-
-            <button id="export-selected-btn" class="btn-outline-default btn-small" type="button" onclick="submitForm()">
-              Export Selected
-            </button>
-
-        </div>
-      
-
-
-    </form>
-
-    <!-- spinner and overlay -->
-    <div id="overlay" class="overlay"></div>
-    <div id="spinner" class="spinner"></div>
-    <div id="spinner-text" class="spinner-text">Exporting Station Metadata to OSCAR....</div>
-    
-
+      </v-app>
+    </div>
   </div>
 </div>
-<style>
-.station_status_msg {
-  padding: 10px;
-  margin-bottom: 10px;
-  position: relative;
-  transition: background-color 0.3s ease; /* Smooth background color transition */
-  border-radius: 20px;
-}
+{% endblock %}
 
-.station_status_msg:hover {
-  background-color: rgb(85, 84, 84); /* Background changes on hover */
-}
-
-.station_status_msg:hover h6{
- color: white;
-}
-
-.clickable-heading {
-  cursor: pointer; /* Make the heading look clickable */
-  color: #b01f1f; /* Default color */
-  transition: color 0.2s ease; /* Smooth color transition */
-}
-
-/* Change the h6 text color on hover */
-.clickable-heading:hover {
-  color: white;
-}
-
-/* Change h6 text color to white when content is visible */
-.station_status_msg.active-background .clickable-heading {
-  color: white;
-}
-
-.hidden-content {
-  display: none; /* Initially hidden */
-}
-
-.visible-content {
-  display: block;
-  color: white; /* Text color when visible */
-  transition: color 0.3s ease; /* Smooth text color transition */
-}
-
-.active-background {
-  background-color: rgb(85, 84, 84); /* Background color when content is visible */
-}
-
-.close-btn-bottom {
-  margin-top: 10px;
-  background-color: #f44336;
-  color: white;
-  border: none;
-  border-radius: 2px;
-  padding: 5px 10px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.close-btn-bottom:hover {
-  background-color: #d32f2f; /* Darker shade on hover */
-}
-
-
-  /* oscar status msg styling start*/
-  #min_oscar_error_container {
-    padding: 5px; 
-    background-color: #f8d7da; 
-    border-left: 5px solid #f44336; 
-    border-radius: 0px 20px 20px 0px; 
-    width: 30%; 
-    padding-right: 10px;
-  }
-
-  #oscar_error_container {
-    padding: 10px; 
-    background-color: #f8d7da; 
-    border-left: 5px solid #f44336; 
-    border-radius: 0px 20px 20px 0px;
-    max-height: 50vh;
-    overflow: auto;
-  }
-
-  #status_msg {
-    color: #d32f2f; 
-    font-size: 1rem; 
-    line-height: 1.5; 
-    white-space: pre-wrap;
-  }
-
-  /* oscar status msg styling end*/
-
-  .show-msg {
-    display: block;
-  }
-
-  .hide-msg {
-    display: none;
-  }
-
-  table.dataTable thead .sorting, 
-  table.dataTable thead .sorting_asc, 
-  table.dataTable thead .sorting_desc {
-    background : none;
-  }
-
-  .spinner {
-      display: none;
-      border: 8px solid #f3f3f3;
-      border-top: 8px solid #3498db;
-      border-radius: 50%;
-      width: 70px;
-      height: 70px;
-      animation: spin 2s linear infinite;
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      margin-left: -35px;
-      margin-top: -50px;
-      z-index: 1001;
-  }
-
-
-  .overlay {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(255, 255, 255, 0.306);
-      z-index: 1000;
-      backdrop-filter: blur(5px);
-  }
-
-
-  .spinner-text {
-      display: none;
-      position: fixed;
-      top: 60%;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #5a5a5a;
-      font-size: 25px;
-      text-align: center;
-      z-index: 1001;
-  }
-
-  @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-  }
-
-  .input-error {
-    border-bottom: 1px solid red !important;
-  }
-
-  .input-error:focus {
-    border-bottom: 1px solid red !important;
-  }
-
-</style>
-<!-- </div> -->
-{% endblock %} {% block localjavascript %}
+{% block localjavascript %}
 <script>
-  
-  $(document).ready(function() {
-    $('#id_station_list').DataTable({
-      scrollX: true,
-      columnDefs: [
-        {
-          targets: [0, 1, 2],
-          className: 'mdl-data-table__cell--non-numeric'
-        }
-      ]
-    });
-  });
+  (function () {
+    'use strict';
 
-  // submit wigos ids for station export to OSCAR
-  function submitForm() {
-    var formData = $('#oscar-station-form').serializeArray();
+    // Preserve the existing object_list source, WIGOS identifiers and station
+    // detail URLs. Do not derive export identifiers from the table display text.
+    const oscarStations = [
+      {% for station in object_list %}
+      {
+        id: "{{ station.pk|escapejs }}",
+        wigos: "{{ station.wigos|default_if_none:''|escapejs }}",
+        name: "{{ station.name|escapejs }}",
+        reporting_status: "{{ station.reporting_status|default_if_none:''|escapejs }}",
+        longitude: "{{ station.longitude|default_if_none:''|escapejs }}",
+        latitude: "{{ station.latitude|default_if_none:''|escapejs }}",
+        station_type: "{{ station.wmo_station_type|default_if_none:''|escapejs }}",
+        url: "{{ station.get_absolute_url|escapejs }}"
+      },
+      {% endfor %}
+    ];
 
-    if (!formData[formData.length - 1]['value']) {
-      document.getElementById('api-token').classList.add('input-error');
-
-      document.getElementById('api-token').addEventListener('click', function() {
-          document.getElementById('api-token').classList.remove('input-error');
-      });
-      return;
-    }
-
-    // Show the spinner, text, and overlay
-    document.getElementById('overlay').style.display = 'block';
-    document.getElementById('spinner').style.display = 'block';
-    document.getElementById('spinner-text').style.display = 'block';
-
-    $.ajax({
-      type: 'POST',
-      url: '',
-      data: formData,
-      success: function(response) {
-            if (response.success) {
-                // hide the spinner, text, and overlay
-                document.getElementById('overlay').style.display = 'none';
-                document.getElementById('spinner').style.display = 'none';
-                document.getElementById('spinner-text').style.display = 'none';
-
-                // console.log(response.status_station_names);
-
-                // unselect options
-                unSelectAll();
-
-                var oscar_status_msg = response.oscar_status_msg;
-
-                var station_names = response.status_station_names;
-
-                // clear the status message container of any existing messages
-                document.getElementById("status_msg").innerHTML = "";
-
-
-                // looping through status messages
-                for (let index = 0; index < oscar_status_msg.length; index++) {
-                  let msg_dict = oscar_status_msg[index];
-
-                  let msg = '';
-
-                  // Check if 'code' exists in msg_dict
-                  if (msg_dict.hasOwnProperty('code')) {
-                      if (msg_dict['code'] === 401) {
-                          msg = "Incorrect API token!\nTo be able to access OSCAR a valid API token is required.\nEnter the correct API token or please contact OSCAR service desk!";
-                      } else if (msg_dict['code'] === 412) {
-                          msg = msg_dict['description'];
-                      } else {
-                          msg = "An error occurred when attempting to add a station to OSCAR during station creation!";
-                      }
-                  }
-
-                  // Check if 'xmlStatus' exists in msg_dict
-                  else if (msg_dict.hasOwnProperty('xmlStatus')) {
-                      if (msg_dict['xmlStatus'] === 'SUCCESS') {
-                          // replace tick box with success icon
-                          clearAndInsertIcon(station_names[index]);
-                          continue;
-                      } else {
-                          msg = msg_dict['logs'];
-                      }
-                  }
-
-                  // display the error messages
-                  document.getElementById('oscar_error_container').classList.remove('hide-msg');
-
-                  // Create a div element
-                  let div = document.createElement('div');
-                  div.className = 'station_status_msg'; // Add class to the div
-
-                  // Create an h6 element and add text from the looped data
-                  let heading = document.createElement('h6');
-                  heading.innerHTML = `<b>${station_names[index]}</b>&nbsp;<i class="fa fa-info-circle" aria-hidden="true"></i>`;
-                  heading.classList.add('clickable-heading'); // Add class for cursor and hover effect
-
-                  // Create a paragraph element and add text from the looped data, initially hidden
-                  let paragraph = document.createElement('p');
-                  paragraph.innerHTML = msg;
-                  paragraph.classList.add('hidden-content'); // Initially hidden content
-
-                  // Create a close button for the bottom, initially hidden
-                  let closeBtnBottom = document.createElement('button');
-                  closeBtnBottom.innerHTML = 'Close';
-                  closeBtnBottom.classList.add('close-btn-bottom', 'hidden-content'); // Initially hidden
-                  closeBtnBottom.type = 'button';
-
-                  // Append the heading, paragraph, and bottom close button to the div
-                  div.appendChild(heading);
-                  div.appendChild(paragraph);
-                  div.appendChild(closeBtnBottom);
-
-                  // Add a click event listener to the heading to toggle visibility of the paragraph and close button
-                  heading.addEventListener('click', function () {
-                    const isVisible = paragraph.classList.contains('visible-content');
-                    paragraph.classList.toggle('visible-content', !isVisible); // Toggle content visibility
-                    closeBtnBottom.classList.toggle('visible-content', !isVisible); // Toggle close button visibility
-                    div.classList.toggle('active-background', !isVisible); // Toggle background color
-                  });
-
-                  // Add a click event listener to the bottom close button
-                  closeBtnBottom.addEventListener('click', function () {
-                    paragraph.classList.remove('visible-content'); // Hide content
-                    closeBtnBottom.classList.remove('visible-content'); // Hide close button
-                    div.classList.remove('active-background'); // Reset background color
-                  });
-
-                  // Finally, append the div to the target element
-                  document.getElementById('status_msg').appendChild(div);
-                }
-
-
-                // Check if the status_msg container has no child elements or no text content then hide oscar_error_container
-                if (!document.getElementById("status_msg").hasChildNodes() || document.getElementById("status_msg").textContent.trim() === "") {
-                    // Add a class to hide the div
-                    document.getElementById("oscar_error_container").classList.add("hide-msg");
-                }
-
-
-                // move to the top of the page
-                window.scrollTo({top:0, behavior: 'smooth',});
-                
-            } 
-            else {
-                // hide the spinner, text, and overlay
-                document.getElementById('overlay').style.display = 'none';
-                document.getElementById('spinner').style.display = 'none';
-                document.getElementById('spinner-text').style.display = 'none';
-
-                // show the error container
-                document.getElementById('oscar_error_container').classList.remove('hide-msg');
-
-                // display the status msg in the error container
-                document.getElementById('status_msg').innerText = "An error occured attempting to export station to OSCAR.";
-
-                // unselect options
-                unSelectAll();
-
-                // move to the top of the page
-                window.scrollTo({top:0, behavior: 'smooth',});
-            }
+    new Vue({
+      el: '#oscar-export-app',
+      vuetify: new Vuetify(),
+      delimiters: ['[[', ']]'],
+      data: function () {
+        return {
+          stations: oscarStations,
+          selectedStations: [],
+          search: '',
+          submitting: false,
+          showToken: false,
+          tokenError: '',
+          exportError: '',
+          exportNotice: '',
+          exportNoticeType: 'info',
+          exportResults: [],
+          headers: [
+            { text: 'Station', value: 'name', width: '22%' },
+            { text: 'WIGOS ID', value: 'wigos' },
+            { text: 'Reporting status', value: 'reporting_status' },
+            { text: 'Station type', value: 'station_type' },
+            { text: 'Latitude', value: 'latitude' },
+            { text: 'Longitude', value: 'longitude' }
+          ]
+        };
+      },
+      computed: {
+        filteredStations: function () {
+          const query = (this.search || '').trim().toLowerCase();
+          if (!query) return this.stations;
+          return this.stations.filter(function (station) {
+            return [station.name, station.wigos, station.reporting_status, station.station_type]
+              .some(function (value) { return String(value || '').toLowerCase().includes(query); });
+          });
         },
-      error: function() {
+        successCount: function () {
+          return this.exportResults.filter(function (row) { return row.success; }).length;
+        },
+        failureCount: function () {
+          return this.exportResults.filter(function (row) { return !row.success; }).length;
+        },
+        lastOutcomeByName: function () {
+          const output = Object.create(null);
+          this.exportResults.forEach(function (result) { output[result.name] = result; });
+          return output;
+        }
+      },
+      methods: {
+        statusClass: function (status) {
+          const text = String(status || '').toLowerCase();
+          if (/\b(inactive|suspended|closed)\b/.test(text)) return 'osx-status-pill--idle';
+          if (/\b(active|operational)\b/.test(text)) return 'osx-status-pill--live';
+          return '';
+        },
+        resultMessage: function (raw) {
+          // Use text interpolation in Vue, never innerHTML. OSCAR may return
+          // arbitrary log messages that must not become executable markup.
+          if (!raw || typeof raw !== 'object') return 'OSCAR returned no status details.';
+          if (Number(raw.code) === 401) {
+            return 'Incorrect API token. Enter a valid OSCAR token or contact the OSCAR service desk.';
+          }
+          if (Number(raw.code) === 412) {
+            return String(raw.description || 'OSCAR rejected this station metadata.');
+          }
+          return String(raw.logs || raw.description || raw.message ||
+            'OSCAR did not confirm a successful export.');
+        },
+        normalizeResults: function (response, submittedStations) {
+          const statuses = Array.isArray(response.oscar_status_msg) ? response.oscar_status_msg : [];
+          const names = Array.isArray(response.status_station_names) ? response.status_station_names : [];
+          return statuses.map((raw, index) => {
+            const success = raw && String(raw.xmlStatus || '').toUpperCase() === 'SUCCESS';
+            return {
+              name: String(names[index] || (submittedStations[index] && submittedStations[index].name) || 'Station ' + (index + 1)),
+              success: Boolean(success),
+              message: success ? 'OSCAR confirmed the station metadata export.' : this.resultMessage(raw),
+              expanded: !success
+            };
+          });
+        },
+        scrollToResults: function () {
+          this.$nextTick(() => {
+            if (this.$refs.resultsAnchor && typeof this.$refs.resultsAnchor.scrollIntoView === 'function') {
+              this.$refs.resultsAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          });
+        },
+        submitExport: async function (exportAll) {
+          if (this.submitting) return;
+          const selected = exportAll ? this.stations.slice() : this.selectedStations.slice();
+          if (!selected.length) {
+            this.exportError = 'Select at least one station before exporting.';
+            this.scrollToResults();
+            return;
+          }
+
+          // Keep the API token in the native input instead of reactive Vue
+          // state. The original Django view receives the same field name.
+          const input = this.$refs.apiTokenInput;
+          const token = input && input.value ? input.value.trim() : '';
+          if (!token) {
+            this.tokenError = 'An OSCAR API token is required.';
+            if (input) input.focus();
+            return;
+          }
+          const csrfInput = this.$el.querySelector('input[name="csrfmiddlewaretoken"]');
+          if (!csrfInput || !csrfInput.value) {
+            this.exportError = 'The page security token is missing. Reload the page and try again.';
+            this.scrollToResults();
+            return;
+          }
+
+          this.submitting = true;
+          this.exportError = '';
+          this.exportNotice = '';
+          this.exportResults = [];
+          this.tokenError = '';
+          try {
+            // Preserve Django's original form-urlencoded POST contract:
+            // csrfmiddlewaretoken, repeated selected_ids[], and api_token.
+            // This also exports stations beyond the currently visible page.
+            const body = new URLSearchParams();
+            body.append('csrfmiddlewaretoken', csrfInput.value);
+            selected.forEach(function (station) { body.append('selected_ids[]', station.wigos); });
+            body.append('api_token', token);
+
+            const response = await fetch(window.location.pathname + window.location.search, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest'
+              },
+              body: body.toString()
+            });
+            let payload = null;
+            try { payload = await response.json(); } catch (_) { /* Unexpected response format. */ }
+            if (!response.ok) {
+              throw new Error(payload && (payload.message || payload.detail) ||
+                'The OSCAR export request failed (HTTP ' + response.status + ').');
+            }
+            if (!payload || !payload.success) {
+              throw new Error(payload && (payload.message || payload.detail) ||
+                'OSCAR could not complete the export request.');
+            }
+
+            this.exportResults = this.normalizeResults(payload, selected);
+            this.selectedStations = []; // Match the old successful-response reset.
+            if (this.exportResults.length) {
+              this.exportNotice = this.failureCount
+                ? 'OSCAR processed the request, but some station exports need attention.'
+                : 'OSCAR confirmed the returned station exports.';
+              this.exportNoticeType = this.failureCount ? 'warning' : 'success';
+            } else {
+              // A success flag alone does not prove every station was published.
+              this.exportNotice = 'The export request completed, but OSCAR returned no station-by-station status details.';
+              this.exportNoticeType = 'info';
+            }
+            this.scrollToResults();
+          } catch (error) {
+            this.exportError = error && error.message ? error.message :
+              'Unable to contact OSCAR. Please try again.';
+            // Do not clear the selected stations or API token after a failure.
+            this.scrollToResults();
+          } finally {
+            // Unlike the old $.ajax error callback, all failures clear loading.
+            this.submitting = false;
+          }
+        }
       }
     });
-  }
-  
-  // Check if the overlay and spinner are displayed when the page is loaded
-  window.onload = function() {
-      var overlay = document.getElementById('overlay');
-      
-      // Check if the overlay display is currently 'block'
-      if (overlay.style.display === 'block') {
-          // Hide the overlay and spinner if display is 'block'
-          overlay.style.display = 'none';
-          document.getElementById('spinner').style.display = 'none';
-          document.getElementById('spinner-text').style.display = 'none';
-      }
-  };
-  // Hide the spinner and overlay when the page is restored from cache (e.g., when pressing back button)
-  window.addEventListener('pageshow', function(event) {
-      var overlay = document.getElementById('overlay');
-      
-      // Check if the event is triggered from cache
-      if (event.persisted) {
-          overlay.style.display = 'none';
-          document.getElementById('spinner').style.display = 'none';
-          document.getElementById('spinner-text').style.display = 'none';
-      }
-  });
-
-
-  // select all options and submit the form
-  function selectAll() {
-    $('input[name="selected_ids[]"]').prop('checked', true);
-    submitForm();
-  }
-
-  // unselect all options
-  function unSelectAll() {
-    $('input[name="selected_ids[]"]').prop('checked', false);
-  }
-
-
-  // disable submit selected button until an option is selected
-  document.addEventListener('DOMContentLoaded', function () {
-      const form = document.getElementById('oscar-station-form');
-      const submitButton = document.getElementById('export-selected-btn');
-      const checkboxes = form.querySelectorAll('input[type="checkbox"]');
-
-      function updateSubmitButtonState() {
-          const isAnyCheckboxChecked = Array.from(checkboxes).some(checkbox => checkbox.checked);
-          submitButton.disabled = !isAnyCheckboxChecked;
-      }
-
-      checkboxes.forEach(checkbox => {
-          checkbox.addEventListener('change', updateSubmitButtonState);
-      });
-
-      updateSubmitButtonState();  // Initial check
-  });
-
-  // js to show oscar error message
-  function openStatusMsg() {
-    document.getElementById('oscar_error_container').classList.add('show-msg');
-    document.getElementById('oscar_error_container').classList.remove('hide-msg');
-
-    document.getElementById('min_oscar_error_container').classList.add('hide-msg');
-    document.getElementById('min_oscar_error_container').classList.remove('show-msg');
-  }
-  // js to hide oscar error message
-  function closeStatusMsg() {
-    document.getElementById('min_oscar_error_container').classList.add('show-msg');
-    document.getElementById('min_oscar_error_container').classList.remove('hide-msg');
-
-    document.getElementById('oscar_error_container').classList.add('hide-msg');
-    document.getElementById('oscar_error_container').classList.remove('show-msg');
-  }
-
-  // clear div and insert a sucess icon
-  function clearAndInsertIcon(divId) {
-    let selectedDiv = document.getElementById(divId);
-
-    // Clear the div content
-    selectedDiv.innerHTML = '';
-
-    // Create the icon element
-    let icon = document.createElement('i');
-    icon.className = 'fa fa-check-square';
-    icon.setAttribute('aria-hidden', 'true');
-
-    // Add style to make the icon green and of decent size
-    icon.style.color = 'green';
-    icon.style.fontSize = '2.5em'; // Adjust size as needed
-
-    // Insert the icon into the div
-    selectedDiv.appendChild(icon);
-  }
+  })();
 </script>
 {% endblock %}

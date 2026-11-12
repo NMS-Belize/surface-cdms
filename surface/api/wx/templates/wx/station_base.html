@@ -1,124 +1,795 @@
-{% extends "base.html" %} {% block content %} {% load wx_filters %}
-<!-- <div class="jumbotron w-100" style="position: fixed; z-index: 99999"> -->
+{% extends "base.html" %}
+{% load wx_filters %}
 
-{% if is_create %}
+{% block content %}
+<!--
+  Shared Station Management shell.
 
-  <div class="srf-container" style="margin-bottom: 0px; padding-bottom: 0px;">
-    <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-      <span class="srf-display-1 text-uppercase">Create Station</span>
-    </div>
+  This template deliberately owns only the heading, station navigation, and
+  layout. Each existing child template continues to render its form/table/map
+  through station_content, so no backend views or request payloads change.
+-->
+<div class="srf-container station-base-page">
+  <div class="station-base-shell">
+    <!-- The shared header/navigation is a separate Vue 2 root. Child pages may
+         mount their own Vue apps inside station_content without conflict. -->
+    <div id="station-base-ui" v-cloak>
 
-    <h6>Station Management Options</h6>
-
-    {% if request|has_any_feature_permission:"stations-list:read" %}
-    <a href="{% url 'station-metadata' %}" class="btn-outline-default btn-small">Metadata</a>
-    {% endif %}
-
-    {% if request|has_any_feature_permission:"stations-list:read" %}
-    <a href="{% url 'stations-list' %}" class="btn-outline-default btn-small metadata-btn-info">Station List</a>
-    {% endif %}
-
-  </div>
-
-{% elif station %}
-    <div class="srf-container">
-      <div style="display: flex; justify-content: space-between; margin-bottom: 16px">
-        <span class="srf-display-1 text-uppercase">{{ station.name }} Metadata</span>
+    {% if is_create %}
+    <!-- Station creation has no selected station yet: offer return links only. -->
+    <header class="station-base-heading">
+      <!-- Reuse SURFACE's standard page title; no custom font-size or banner. -->
+      <div class="station-base-heading-copy">
+        <h1 class="srf-display-1 text-uppercase">Create Station</h1>
+        <p>Add a station and configure its metadata and location.</p>
       </div>
-      <h6>Station Management Options</h6>
 
-      {% if request|has_any_feature_permission:"stations-list:read" %}
-      <a href="{% url 'station-metadata' %}" class="btn-outline-default btn-small">Metadata</a>
-      {% endif %}
+      <div class="station-base-header-actions">
+        {% if request|has_any_feature_permission:"stations-list:read" %}
+        <a class="station-base-action station-base-action--neutral" href="{% url 'station-metadata' %}">
+          <i class="material-icons-outlined" aria-hidden="true">place</i>
+          Browse metadata
+        </a>
+        <a class="station-base-action station-base-action--neutral" href="{% url 'stations-list' %}">
+          <i class="material-icons-outlined" aria-hidden="true">list</i>
+          Station list
+        </a>
+        {% endif %}
+      </div>
+    </header>
 
-      {% url 'station-detail' station.id as metadataView %}
+    {% elif station %}
+    <!-- Resolve routes once; use their actual paths for active navigation. -->
+    {% url 'station-detail' station.id as station_detail_url %}
+    {% url 'station-update' station.id as station_update_url %}
+    {% url 'stationfiles-list' station.id as station_files_url %}
+    {% url 'stationvariable-list' station.id as station_variables_url %}
 
-      {% if request.path == metadataView and request|has_any_feature_permission:"stations-list:write"%}
-        <a href="{% url 'station-update' station.id %}" class="btn-outline-default btn-small">Edit</a>
-      {% endif %}
+    <header class="station-base-heading">
+      <!-- Match the page-heading treatment used on other SURFACE screens. -->
+      <div class="station-base-heading-copy">
+        <h1 class="srf-display-1 text-uppercase">{{ station.name }}</h1>
+        <p>Manage station metadata, assigned variables and documents.{% if station.code %} <span class="station-base-heading-code">· {{ station.code }}</span>{% endif %}</p>
+      </div>
 
-      {% if request|has_any_feature_permission:"stations-list:read" %}
-        <a href="{% url 'stationfiles-list' station.id %}" class="btn-outline-default btn-small">Files</a>
-      {% endif %}
+      <div class="station-base-header-actions">
+        {% if request|has_any_feature_permission:"stations-list:read" %}
+        <a class="station-base-action station-base-action--neutral" href="{% url 'station-metadata' %}">
+          <i class="material-icons-outlined" aria-hidden="true">travel_explore</i>
+          Browse metadata
+        </a>
+        <a class="station-base-action station-base-action--neutral" href="{% url 'stations-list' %}">
+          <i class="material-icons-outlined" aria-hidden="true">list</i>
+          Station list
+        </a>
+        {% endif %}
+        {% if request|has_any_feature_permission:"stations-list:delete" %}
+        <a class="station-base-action station-base-action--danger" href="{% url 'station-delete' station.id %}">
+          <i class="material-icons-outlined" aria-hidden="true">delete_outline</i>
+          Delete station
+        </a>
+        {% endif %}
+      </div>
+    </header>
 
-      {% if request|has_any_feature_permission:"stations-list:read" %}
-      <a href="{% url 'stationvariable-list' station.id %}" class="btn-outline-default btn-small">Variables</a>
-      {% endif %}
-
-      {% if request|has_any_feature_permission:"stations-list:delete" %}
-      <a href="{% url 'station-delete' station.id %}" class="btn-outline-default btn-small metadata-btn-danger">Delete</a>
-      {% endif %}
-
-      {% if request|has_any_feature_permission:"stations-list:read" %}
-        <a href="{% url 'stations-list' %}" class="btn-outline-default btn-small metadata-btn-info">Station List</a>
-      {% endif %}
-    
-      {% if not is_update %}
+    <!--
+      Station sections are separate Django routes, not panels of a single page.
+      Use accessible navigation cards instead of simulated tabs. Standard links
+      retain browser history, open-in-new-tab, and server-side permissions.
+    -->
+    <!--
+      Do NOT use the native <nav> tag here: SURFACE's global Materialize
+      stylesheet styles all nav elements as fixed-height dark header bars.
+      That caused the cards to overflow beneath the bar and collide with the
+      station selector and child page content. role=navigation keeps the
+      landmark semantics without inheriting those unrelated global rules.
+    -->
+    <div class="station-base-sections" role="navigation" aria-label="Station management sections">
+      <div class="station-base-sections-toolbar">
+        <div class="station-base-sections-heading">
+          <span class="station-base-sections-title">Station sections</span>
+          <span class="station-base-sections-hint">Choose an area to manage</span>
+        </div>
+    <!--
+      Vue 2 owns the station selector open/close state. Preserve legacy IDs and
+      markup because station_detail.html still registers DOM listeners on them.
+      Stopping click propagation at the trigger prevents the old root click
+      listener from toggling the selector a second time.
+    -->
+    {% if not is_update %}
       {% if not is_station_var_page %}
-      {% if not is_station_files_page %}
-        <div class="metadata-dropdown-container">
-          <div class="metadata-dropdown" id="metadata-dropdown">
-              <div class="metadata-dropdown-selected" id="metadata-selected-item">
+        {% if not is_station_files_page %}
+        <div class="station-base-switcher">
+          <span class="station-base-switcher-label">
+            <i class="material-icons-outlined" aria-hidden="true">swap_horiz</i>
+            Switch station
+          </span>
+          <div class="metadata-dropdown-container">
+            <div class="metadata-dropdown" id="metadata-dropdown"
+                 :class="{ 'dropdown-open': stationDropdownOpen, 'active': stationDropdownOpen }">
+              <div class="metadata-dropdown-selected" id="metadata-selected-item"
+                   tabindex="0" role="button" aria-label="Select a station"
+                   aria-controls="station-base-station-options"
+                   :aria-expanded="stationDropdownOpen ? 'true' : 'false'"
+                   @click.stop="toggleStationDropdown"
+                   @keydown.enter.prevent.stop="toggleStationDropdown"
+                   @keydown.space.prevent.stop="toggleStationDropdown"
+                   @keydown.esc.prevent.stop="closeStationDropdown">
                 {{ station.name }}
-                <i aria-hidden="true" class="v-icon notranslate mdi mdi-menu-down theme--light"></i>
+                <i aria-hidden="true" class="v-icon notranslate mdi theme--light"
+                   :class="stationDropdownOpen ? 'mdi-menu-up' : 'mdi-menu-down'"></i>
               </div>
-    
-              <div class="metadata-dropdown-items">
-                {% for station in station_name %}
-                  <a href="{% url 'station-detail' station.pk %}" class="no-style-link" onclick="mainOverlayLoader()">
-                    <div>
-                        {{ station.name }}
-                    </div>
-                  </a>
+              <div class="metadata-dropdown-items" id="station-base-station-options"
+                   v-show="stationDropdownOpen" @click.stop>
+                {% for station_option in station_name %}
+                <a href="{% url 'station-detail' station_option.pk %}"
+                   class="no-style-link"
+                   {% if station_option.pk == station.pk %}aria-current="page"{% endif %}
+                   onclick="if (typeof mainOverlayLoader === 'function') mainOverlayLoader()">
+                  <div>{{ station_option.name }}</div>
+                </a>
+                {% empty %}
+                <span class="station-base-switcher-empty">No other stations available</span>
                 {% endfor %}
-              </div>            
+              </div>
+            </div>
           </div>
         </div>
+        {% endif %}
       {% endif %}
-      {% endif %}
-      {% endif %}
-    
-    </div>
-{% endif %}
+    {% endif %}
+      </div>
+      <div class="station-base-sections-grid">
+        {% if request|has_any_feature_permission:"stations-list:read" %}
+        <a href="{{ station_detail_url }}"
+           class="station-base-section-link station-base-section-link--overview {% if request.path == station_detail_url %}station-base-section-link--current{% endif %}"
+           {% if request.path == station_detail_url %}aria-current="page"{% endif %}>
+          <span class="station-base-section-icon" aria-hidden="true"><i class="material-icons-outlined">description</i></span>
+          <span class="station-base-section-text">
+            <strong>Overview</strong>
+            <small>View station details</small>
+          </span>
+          <i class="material-icons-outlined station-base-section-chevron" aria-hidden="true">chevron_right</i>
+        </a>
+        {% endif %}
 
-<!-- <div class="srf-container custom-space-top"> -->
-<div class="srf-container">
-  {% block station_content %}
-  {% endblock %}
+        {% if request|has_any_feature_permission:"stations-list:write" %}
+        <a href="{{ station_update_url }}"
+           class="station-base-section-link station-base-section-link--edit {% if request.path == station_update_url or is_update %}station-base-section-link--current{% endif %}"
+           {% if request.path == station_update_url %}aria-current="page"{% endif %}>
+          <span class="station-base-section-icon" aria-hidden="true"><i class="material-icons-outlined">edit_note</i></span>
+          <span class="station-base-section-text">
+            <strong>Edit metadata</strong>
+            <small>Update station settings</small>
+          </span>
+          <i class="material-icons-outlined station-base-section-chevron" aria-hidden="true">chevron_right</i>
+        </a>
+        {% endif %}
+
+        {% if request|has_any_feature_permission:"stations-list:read" %}
+        <a href="{{ station_variables_url }}"
+           class="station-base-section-link station-base-section-link--variables {% if request.path == station_variables_url or is_station_var_page %}station-base-section-link--current{% endif %}"
+           {% if request.path == station_variables_url %}aria-current="page"{% endif %}>
+          <span class="station-base-section-icon" aria-hidden="true"><i class="material-icons-outlined">tune</i></span>
+          <span class="station-base-section-text">
+            <strong>Variables</strong>
+            <small>Manage assigned sensors</small>
+          </span>
+          <i class="material-icons-outlined station-base-section-chevron" aria-hidden="true">chevron_right</i>
+        </a>
+
+        <a href="{{ station_files_url }}"
+           class="station-base-section-link station-base-section-link--files {% if request.path == station_files_url or is_station_files_page or request.resolver_match.url_name == 'stationfile-create' or request.resolver_match.url_name == 'stationfile-delete' %}station-base-section-link--current{% endif %}"
+           {% if request.path == station_files_url %}aria-current="page"{% endif %}>
+          <span class="station-base-section-icon" aria-hidden="true"><i class="material-icons-outlined">folder_open</i></span>
+          <span class="station-base-section-text">
+            <strong>Files</strong>
+            <small>Station documents</small>
+          </span>
+          <i class="material-icons-outlined station-base-section-chevron" aria-hidden="true">chevron_right</i>
+        </a>
+        {% endif %}
+      </div>
+    </div><!-- /.station-base-sections -->
+
+    {% endif %}
+
+    </div><!-- /#station-base-ui -->
+
+    <!-- This block name is an existing dependency of all station child pages. -->
+    <main class="station-base-content" id="station-content">
+      {% block station_content %}
+      {% endblock %}
+    </main>
+  </div>
 </div>
+
+<!--
+  This initialization lives in the content block rather than localjavascript:
+  many child templates OVERRIDE localjavascript without calling block.super.
+  DOMContentLoaded occurs after base.html loads Vue 2 and after child markup is
+  present. The Vue instance owns ONLY #station-base-ui, not station_content.
+-->
+<script>
+  (function () {
+    function initStationBaseVue() {
+      var root = document.getElementById('station-base-ui');
+      if (!root || root.__vue__) return;
+      if (typeof window.Vue !== 'function') {
+        console.error('Station management requires the Vue 2 runtime loaded by base.html.');
+        return;
+      }
+
+      new Vue({
+        el: '#station-base-ui',
+        delimiters: ['[[', ']]'],
+        data: function () {
+          return { stationDropdownOpen: false };
+        },
+        methods: {
+          toggleStationDropdown: function () {
+            this.stationDropdownOpen = !this.stationDropdownOpen;
+          },
+          closeStationDropdown: function () {
+            this.stationDropdownOpen = false;
+          },
+          onDocumentClick: function (event) {
+            // Only dismiss on clicks outside. All navigation remains Django URLs.
+            var dropdown = this.$el.querySelector('#metadata-dropdown');
+            if (this.stationDropdownOpen && dropdown && !dropdown.contains(event.target)) {
+              this.closeStationDropdown();
+            }
+          },
+          onDocumentKeydown: function (event) {
+            if (event.key === 'Escape') this.closeStationDropdown();
+          }
+        },
+        mounted: function () {
+          document.addEventListener('click', this.onDocumentClick);
+          document.addEventListener('keydown', this.onDocumentKeydown);
+        },
+        beforeDestroy: function () {
+          // Clean up in case the header is unmounted without a full page load.
+          document.removeEventListener('click', this.onDocumentClick);
+          document.removeEventListener('keydown', this.onDocumentKeydown);
+        }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initStationBaseVue);
+    } else {
+      initStationBaseVue();
+    }
+  })();
+</script>
 
 <style>
-/* metadata page styles start */
-.metadata-btn-danger {
-  color: red !important;
-  border-color: red !important;
-}
+  /*
+   * Page-level spacing matches SURFACE's Yearly Average layout. The original
+   * station_base added multiple nested .srf-container elements, causing
+   * inconsistent outer gutters on child pages.
+   *
+   * All new selectors are scoped to .station-base-page to protect other pages.
+   */
+  .station-base-page {
+    width: 100%;
+    max-width: none;
+    padding: 24px 24px 34px;
+    background: #fff;
+    color: #252525;
+  }
 
-.metadata-btn-success {
-  color: #4CAF50 !important;
-  border-color: #4CAF50 !important;
-}
+  .station-base-page .station-base-shell {
+    width: 100%;
+    padding: 0 20px 28px;
+    margin: 0 auto;
+  }
 
-.metadata-btn-info {
-  color: #1976d2 !important;
-  border-color: #1976d2 !important;
-}
-/* metadata page styles end */
+  .station-base-page .station-base-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 22px;
+    padding: 20px 0 16px;
+  }
+
+  .station-base-page .station-base-heading-copy { flex: 1 1 300px; min-width: 0; }
+
+  .station-base-page .station-base-heading h1 {
+    display: block;
+    margin: 0;
+    color: #232323;
+    font-weight: inherit;
+    letter-spacing: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .station-base-page .station-base-heading-copy p {
+    margin: 5px 0 0;
+    color: #737373;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .station-base-page .station-base-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 2px;
+  }
+
+  .station-base-page .station-base-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    padding: 7px 11px;
+    border: 1px solid #e2e2e2;
+    border-radius: 7px;
+    background: #fff;
+    color: #434343;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none !important;
+    transition: background .15s ease, border-color .15s ease;
+  }
+
+  .station-base-page .station-base-action .material-icons-outlined {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .station-base-page .station-base-action--neutral:hover {
+    color: #222;
+    background: #f8f8f8;
+    border-color: #cecece;
+  }
+
+  .station-base-page .station-base-action--danger {
+    border-color: #f0cacc;
+    color: #b32633;
+  }
+
+  .station-base-page .station-base-action--danger:hover {
+    color: #a01827;
+    background: #fff6f6;
+    border-color: #ddaeb3;
+  }
+
+  /*
+   * Separate Django pages should look like workspace destinations, not tabs.
+   * These compact links are normal anchors, with a clear indication of the
+   * current page and no duplicated borders/underlines.
+   */
+  /*
+   * Give the section navigation normal document flow. Using a div with
+   * role=navigation avoids Materialize's globally styled <nav> tag, while
+   * these declarations make the intended sizing explicit and maintainable.
+   */
+  .station-base-page .station-base-sections {
+    display: block;
+    position: relative;
+    float: none;
+    clear: both;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    line-height: normal;
+    padding: 0;
+    margin: 0 0 26px;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+    color: #252525;
+  }
+
+  /* The station selector belongs in the toolbar, not in a separate row
+     that can visually collide with the links when global CSS is applied. */
+  .station-base-page .station-base-sections-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    min-height: 45px;
+    margin-bottom: 12px;
+  }
+
+  .station-base-page .station-base-sections-heading {
+    display: flex;
+    flex: 1 1 200px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .station-base-page .station-base-sections-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .station-base-page .station-base-sections-hint {
+    font-size: 12px;
+    color: #858585;
+  }
+
+  .station-base-page .station-base-sections-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .station-base-page .station-base-section-link {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 11px;
+    min-height: 72px;
+    padding: 12px 13px;
+    border: 1px solid #e7e7e7;
+    border-radius: 9px;
+    background: #fff;
+    color: #343434;
+    text-decoration: none !important;
+    transition: border-color .15s ease, background-color .15s ease;
+  }
+
+  .station-base-page .station-base-section-icon {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 35px;
+    height: 35px;
+    border-radius: 8px;
+    background: #f5f5f5;
+    color: #636363;
+  }
+
+  .station-base-page .station-base-section-icon .material-icons-outlined {
+    font-size: 20px;
+  }
+
+  .station-base-page .station-base-section-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .station-base-page .station-base-section-text strong {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: inherit;
+  }
+
+  .station-base-page .station-base-section-text small {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #7e7e7e;
+  }
+
+  .station-base-page .station-base-section-chevron {
+    flex: none;
+    color: #b3b3b3;
+    font-size: 17px;
+  }
+
+  .station-base-page .station-base-section-link:hover {
+    border-color: #c9c9c9;
+    background: #fafafa;
+    color: #262626;
+  }
+
+  /* Color identifies each management destination, not the global page heading.
+     Keep the cards white when idle; use a stronger, accessible accent for the
+     active route. These are ordinary Django links, not Vue content tabs. */
+  .station-base-page .station-base-section-link--overview {
+    --station-section-accent: #176bc1;
+    --station-section-soft: #e6f1ff;
+    --station-section-active: #f1f7ff;
+    --station-section-border: #78aee9;
+  }
+  .station-base-page .station-base-section-link--edit {
+    --station-section-accent: #a35d08;
+    --station-section-soft: #fff0d4;
+    --station-section-active: #fff8ea;
+    --station-section-border: #e0ab52;
+  }
+  .station-base-page .station-base-section-link--variables {
+    --station-section-accent: #007d72;
+    --station-section-soft: #d8f4ed;
+    --station-section-active: #edfaf7;
+    --station-section-border: #65bdae;
+  }
+  .station-base-page .station-base-section-link--files {
+    --station-section-accent: #7542b2;
+    --station-section-soft: #eee4fb;
+    --station-section-active: #f7f1ff;
+    --station-section-border: #ae87db;
+  }
+
+  /* Distinct icons add some color even before a destination is selected. */
+  .station-base-page .station-base-section-link .station-base-section-icon {
+    color: var(--station-section-accent, #636363);
+    background: var(--station-section-soft, #f5f5f5);
+  }
+
+  .station-base-page .station-base-section-link:hover {
+    border-color: var(--station-section-border, #c9c9c9);
+    background: #fff;
+    color: #262626;
+  }
+
+  .station-base-page .station-base-section-link--current,
+  .station-base-page .station-base-section-link--current:hover {
+    border-color: var(--station-section-border, #9ab9da);
+    background: var(--station-section-active, #f6f9ff);
+    /* A clear selection marker, without a heavy banner or colored title. */
+    color: #303030;
+  }
+
+  .station-base-page .station-base-section-link--current .station-base-section-text strong,
+  .station-base-page .station-base-section-link--current .station-base-section-chevron {
+    color: var(--station-section-accent, #1976d2);
+  }
+
+  .station-base-page .station-base-section-link--current .station-base-section-icon {
+    background: var(--station-section-soft, #edf4fc);
+    color: var(--station-section-accent, #1976d2);
+  }
+
+  .station-base-page .station-base-section-link:focus-visible,
+  .station-base-page .station-base-action:focus-visible,
+  .station-base-page .metadata-dropdown:focus-within {
+    outline: 2px solid #1976d2;
+    outline-offset: 2px;
+  }
+
+  /*
+   * The station selector is controlled by the isolated Vue 2 instance.
+   * Some child templates still include legacy .metadata-dropdown CSS;
+   * the extra page scope makes these shared styles take precedence.
+   */
+  .station-base-page .station-base-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin: 0;
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .station-base-page .station-base-switcher-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #777;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .station-base-page .station-base-switcher-label .material-icons-outlined {
+    font-size: 18px;
+  }
+
+  .station-base-page .metadata-dropdown-container {
+    flex: 0 1 300px;
+    width: 300px !important;
+    max-width: 300px;
+    min-width: 180px;
+    margin: 0;
+  }
+
+  .station-base-page .metadata-dropdown {
+    position: relative;
+    width: 100%;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-selected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 39px;
+    margin: 0;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 7px;
+    background: #fff;
+    color: #2d2d2d;
+    font-size: 13px;
+    font-weight: 550;
+    line-height: 1.5;
+    transition: border-color .15s ease;
+  }
+
+  .station-base-page .metadata-dropdown:hover .metadata-dropdown-selected,
+  .station-base-page .metadata-dropdown.active .metadata-dropdown-selected {
+    border-color: #b6b6b6;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-selected .mdi {
+    color: #757575;
+    font-size: 20px;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-items {
+    display: none;
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    z-index: 100;
+    width: 100%;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e3e3e3;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .10);
+    opacity: 1;
+    transition: none;
+  }
+
+  .station-base-page .metadata-dropdown.dropdown-open .metadata-dropdown-items {
+    display: block;
+    max-height: 300px;
+    opacity: 1;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-items a {
+    display: block;
+    color: #363636;
+    text-decoration: none;
+    background: #fff;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-items a div {
+    padding: 10px 12px;
+    margin: 0;
+    color: inherit;
+    background: transparent;
+    font-size: 12px;
+    transition: background .15s ease;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-items a:hover div {
+    color: #1976d2;
+    background: #f5f8fc;
+  }
+
+  .station-base-page .metadata-dropdown .metadata-dropdown-items a[aria-current="page"] div {
+    color: #1976d2;
+    font-weight: 700;
+  }
+
+  .station-base-page .station-base-switcher-empty {
+    color: #777;
+    padding: 11px 12px;
+    font-size: 12px;
+    cursor: default;
+  }
+
+  .station-base-page .station-base-content {
+    display: block;
+    position: relative;
+    clear: both;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Legacy classes are used by existing station forms; keep them available. */
+  .station-base-page .metadata-btn-danger {
+    color: #b32633 !important;
+    border-color: #b32633 !important;
+  }
+  .station-base-page .metadata-btn-success {
+    color: #388e3c !important;
+    border-color: #388e3c !important;
+  }
+  .station-base-page .metadata-btn-info {
+    color: #1976d2 !important;
+    border-color: #1976d2 !important;
+  }
+
+  /* Keep the heading aligned with SURFACE's other report and settings pages:
+     standard srf-display-1 typography, white background, a quiet divider.
+     No colored panel, oversized icon, gradient or custom title sizing. */
+  .station-base-page .station-base-heading {
+    margin: 0 0 17px;
+    padding: 20px 0 17px;
+    border-bottom: 1px solid #ececec;
+  }
+
+  .station-base-page .station-base-heading-code {
+    color: #777;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 1100px) {
+    .station-base-page .station-base-sections-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .station-base-page { padding: 14px 8px 24px; }
+    .station-base-page .station-base-shell { padding: 0 11px 20px; }
+    .station-base-page .station-base-heading { padding: 14px 0 14px; margin-bottom: 17px; }
+    .station-base-page .station-base-header-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+    .station-base-page .station-base-sections-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .station-base-page .station-base-sections-heading { flex: none; }
+    .station-base-page .station-base-switcher {
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      width: 100%;
+    }
+    .station-base-page .metadata-dropdown-container { flex: 1 1 230px; max-width: none; width: 100% !important; }
+  }
+
+  @media (max-width: 480px) {
+
+    /* In a column-direction switcher, the old 230px flex basis becomes
+       vertical height. Reset it so mobile has no blank space above cards. */
+    .station-base-page .metadata-dropdown-container {
+      flex: 0 0 auto;
+      min-height: 0;
+      max-width: none;
+      width: 100% !important;
+    }
+    .station-base-page .station-base-sections-grid { grid-template-columns: 1fr; }
+    .station-base-page .station-base-section-link { min-height: 60px; }
+    .station-base-page .station-base-switcher { align-items: stretch; flex-direction: column; }
+  }
 </style>
+{% endblock %}
 
-  {% endblock %} {% block localjavascript %}
-  <script>
-    $(document).ready(function() {
-      $('#id_station_list').DataTable({
-        scrollX: true,
-        columnDefs: [
-          {
-            targets: [0, 1, 2],
-            className: 'mdl-data-table__cell--non-numeric'
-          }
-        ]
-      });
+{% block localjavascript %}
+<script>
+  /*
+   * The shared base must not blindly initialize every #id_station_list table:
+   * some child templates initialize it themselves, and some have only two
+   * columns. Guard against duplicate DataTables initialization and do not
+   * reference hard-coded column indexes that may not exist.
+   *
+   * Child templates overriding localjavascript keep their original scripts.
+   */
+  (function () {
+    if (!window.jQuery || !jQuery.fn || !jQuery.fn.DataTable) return;
+
+    jQuery(function () {
+      var table = jQuery('#id_station_list');
+      if (!table.length || jQuery.fn.DataTable.isDataTable(table[0])) return;
+      table.DataTable({ scrollX: true });
     });
-  </script>
-</div>
+  })();
+</script>
 {% endblock %}

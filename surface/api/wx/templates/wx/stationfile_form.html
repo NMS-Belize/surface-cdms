@@ -1,15 +1,186 @@
 {% extends "wx/station_base.html" %}
-{% load material_form %}
 {% block station_content %}
+<!--
+  Keep the generated Django form exactly as the view provides it. We do not
+  assume which fields, widgets, validation rules or upload limits it contains.
+  A scoped Vue 2 instance adds selected-file feedback and a submission guard.
+-->
+<style>
+  .station-base-page .sf-upload-page { width: 100%; margin: 0; padding: 0; color: #292929; }
+  .station-base-page .sf-upload-page .v-application,
+  .station-base-page .sf-upload-page .v-application--wrap { background: #fff !important; color: #292929; }
+  .station-base-page .sf-upload-page .v-application--wrap { min-height: auto !important; }
+  .station-base-page .sf-upload-page .sf-upload-heading {
+    display: flex; flex-wrap: wrap; justify-content: space-between;
+    align-items: flex-start; gap: 12px 20px; margin: 1px 0 18px;
+  }
+  .station-base-page .sf-upload-page .sf-upload-heading h2 { font-size: 18px; line-height: 1.4; font-weight: 700; margin: 0; }
+  .station-base-page .sf-upload-page .sf-upload-heading p { margin: 4px 0 0; color: #777; font-size: 12px; }
+  .station-base-page .sf-upload-page .sf-return-link {
+    display: inline-flex; align-items: center; gap: 6px; color: #4b4b4b;
+    font-size: 12px; font-weight: 650; text-decoration: none; min-height: 37px;
+    padding: 7px 11px; border: 1px solid #e3e3e3; border-radius: 7px;
+  }
+  .station-base-page .sf-upload-page .sf-return-link:hover { background: #fafafa; border-color: #cfcfcf; }
+  .station-base-page .sf-upload-page .sf-return-link .material-icons-outlined { font-size: 18px; }
+  .station-base-page .sf-upload-page .sf-upload-card {
+    border: 1px solid #e5e5e5; border-radius: 11px; background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.025); overflow: hidden;
+  }
+  .station-base-page .sf-upload-page .sf-upload-card-heading {
+    padding: 19px 21px 16px; border-bottom: 1px solid #ededed;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .station-base-page .sf-upload-page .sf-upload-card-heading-icon {
+    display: flex; align-items: center; justify-content: center; flex: none;
+    width: 39px; height: 39px; background: #f5f5f5; border: 1px solid #e8e8e8;
+    border-radius: 8px; color: #666;
+  }
+  .station-base-page .sf-upload-page .sf-upload-card-heading-icon .material-icons-outlined { font-size: 21px; }
+  .station-base-page .sf-upload-page .sf-upload-card-heading h3 { margin: 0; font-size: 15px; font-weight: 700; }
+  .station-base-page .sf-upload-page .sf-upload-card-heading p { margin: 3px 0 0; font-size: 12px; color: #777; }
+  .station-base-page .sf-upload-page .sf-upload-content {
+    display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(240px, .8fr);
+    gap: 26px; align-items: start; padding: 23px 21px 25px;
+  }
+  .station-base-page .sf-upload-page .sf-upload-fields { min-width: 0; max-width: 650px; }
+  .station-base-page .sf-upload-page .sf-upload-fields > p,
+  .station-base-page .sf-upload-page .sf-upload-fields > div { margin: 0 0 20px; }
+  .station-base-page .sf-upload-page .sf-upload-fields label {
+    display: block; color: #444; font-size: 12px; font-weight: 700;
+    line-height: 1.5; margin-bottom: 7px;
+  }
+  .station-base-page .sf-upload-page .sf-upload-fields input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  .station-base-page .sf-upload-page .sf-upload-fields select,
+  .station-base-page .sf-upload-page .sf-upload-fields textarea {
+    display: block; box-sizing: border-box; width: 100%; max-width: 100%;
+    min-width: 0; margin: 0; color: #292929; font-size: 13px;
+    border: 1px solid #d9d9d9; border-radius: 7px; background: #fff;
+    padding: 9px 12px; height: auto; min-height: 42px;
+    box-shadow: none; outline-offset: 2px;
+  }
+  .station-base-page .sf-upload-page .sf-upload-fields input[type="file"] {
+    background: #fafafa; border-style: dashed; padding: 13px;
+    cursor: pointer; line-height: 1.5;
+  }
+  .station-base-page .sf-upload-page .sf-upload-fields input[type="file"]::file-selector-button {
+    padding: 6px 11px; margin-right: 13px; border: 1px solid #dadada;
+    border-radius: 6px; background: #fff; color: #3d3d3d;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .station-base-page .sf-upload-page .sf-upload-fields textarea { min-height: 100px; resize: vertical; }
+  .station-base-page .sf-upload-page .sf-upload-fields input:focus,
+  .station-base-page .sf-upload-page .sf-upload-fields textarea:focus,
+  .station-base-page .sf-upload-page .sf-upload-fields select:focus {
+    border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25, 118, 210, .11);
+  }
+  .station-base-page .sf-upload-page .sf-upload-fields .errorlist { list-style: none; padding: 0; margin: 6px 0 0; color: #b32633; font-size: 12px; }
+  .station-base-page .sf-upload-page .sf-upload-fields .helptext { display: block; color: #777; font-size: 12px; margin-top: 5px; }
+  .station-base-page .sf-upload-page .sf-upload-side {
+    min-width: 0; padding: 17px; background: #fafafa; border: 1px solid #e8e8e8;
+    border-radius: 9px;
+  }
+  .station-base-page .sf-upload-page .sf-upload-side h4 { font-size: 13px; font-weight: 700; margin: 0 0 10px; }
+  .station-base-page .sf-upload-page .sf-upload-side p { color: #757575; font-size: 12px; line-height: 1.65; margin: 0 0 10px; }
+  .station-base-page .sf-upload-page .sf-selected-file {
+    margin-top: 14px; padding: 10px; border: 1px solid #d8e8dc;
+    border-radius: 7px; background: #f2faf4; font-size: 12px; color: #356847;
+    overflow-wrap: anywhere;
+  }
+  .station-base-page .sf-upload-page .sf-selected-file strong { display: block; margin-bottom: 3px; }
+  .station-base-page .sf-upload-page .sf-form-actions {
+    display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap;
+    gap: 10px; border-top: 1px solid #ededed; padding: 16px 21px;
+  }
+  .station-base-page .sf-upload-page .sf-form-actions .v-btn {
+    box-shadow: none; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 650;
+  }
+  @media (max-width: 830px) {
+    .station-base-page .sf-upload-page .sf-upload-content { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .station-base-page .sf-upload-page .sf-upload-fields { max-width: none; }
+  }
+  @media (max-width: 560px) {
+    .station-base-page .sf-upload-page .sf-upload-content { padding: 18px 15px 14px; }
+    .station-base-page .sf-upload-page .sf-upload-card-heading { padding: 16px 15px; }
+    .station-base-page .sf-upload-page .sf-form-actions { padding: 15px; }
+  }
+</style>
 
-<form method="POST" enctype="multipart/form-data">
-    {% csrf_token %}
-    <div style="max-width: 311.50px;">
-        {{ form.as_p }}
-    </div>
-    <button type="submit" class="btn-outline-default btn-small">Submit</button>
-    <a href="{% url 'stationfiles-list' station.id %}">
-        <button type="button" class="btn-outline-default btn-small">Cancel and back</button>
-    </a>
-</form>
+<div id="sf-upload-app" class="sf-upload-page" v-cloak>
+  <v-app>
+    <header class="sf-upload-heading">
+      <div>
+        <h2>Add station file</h2>
+        <p>Upload a document or attachment for {{ station.name }}.</p>
+      </div>
+      <a class="sf-return-link" href="{% url 'stationfiles-list' station.id %}">
+        <i class="material-icons-outlined" aria-hidden="true">arrow_back</i>Back to files
+      </a>
+    </header>
+
+    <!-- Use the original server-rendered form and multipart POST. -->
+    <form method="POST" enctype="multipart/form-data" @submit="onSubmit">
+      {% csrf_token %}
+      <section class="sf-upload-card" aria-labelledby="sf-upload-title">
+        <div class="sf-upload-card-heading">
+          <span class="sf-upload-card-heading-icon" aria-hidden="true"><i class="material-icons-outlined">upload_file</i></span>
+          <div>
+            <h3 id="sf-upload-title">File details</h3>
+            <p>Provide the information required for this station attachment.</p>
+          </div>
+        </div>
+        <div class="sf-upload-content">
+          <div class="sf-upload-fields" @change="onFormChange">
+            {{ form.as_p }}
+          </div>
+          <aside class="sf-upload-side">
+            <h4>About this upload</h4>
+            <p>Choose the file you want to attach to this station, and use a clear name so it is easy to find later.</p>
+            <p>Supported file types and upload limits are determined by the server's form validation.</p>
+            <div v-if="selectedFilename" class="sf-selected-file" role="status">
+              <strong>Selected file</strong>
+              [[ selectedFilename ]] <span v-if="selectedSize">([[ selectedSize ]])</span>
+            </div>
+          </aside>
+        </div>
+        <div class="sf-form-actions">
+          <v-btn color="#FF5252" dark depressed href="{% url 'stationfiles-list' station.id %}" :disabled="submitting">Cancel</v-btn>
+          <v-btn color="primary" depressed type="submit" :loading="submitting" :disabled="submitting">
+            <v-icon left size="18">mdi-upload</v-icon>Upload file
+          </v-btn>
+        </div>
+      </section>
+    </form>
+  </v-app>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#sf-upload-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data: function () {
+      return { submitting: false, selectedFilename: '', selectedSize: '' };
+    },
+    methods: {
+      onFormChange: function (event) {
+        // Django renders the file widget; inspect its actual input instead of
+        // assuming a specific field name or changing the payload structure.
+        if (!event.target || event.target.type !== 'file') return;
+        var file = event.target.files && event.target.files[0];
+        this.selectedFilename = file ? file.name : '';
+        if (!file) { this.selectedSize = ''; return; }
+        var size = file.size / (1024 * 1024);
+        this.selectedSize = size >= 1 ? size.toFixed(2) + ' MB' : (file.size / 1024).toFixed(1) + ' KB';
+      },
+      onSubmit: function () {
+        // The form posts normally. Browser-side required checks run before
+        // submit fires, and Django performs definitive validation on the POST.
+        this.submitting = true;
+      }
+    }
+  });
+</script>
 {% endblock %}
