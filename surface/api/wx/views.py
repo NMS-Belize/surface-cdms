@@ -6057,96 +6057,56 @@ def get_yearly_average(request):
     first_month = date(begin_date.year, 1, 1)
     end_exclusive_month = date(end_date.year + 1, 1, 1)
 
-    # Use the same default timezone SURFACE exposes to its pages.
-    # TIMEZONE_NAME is SURFACE's configured name (e.g. America/Belize);
-    # TIME_ZONE is Django's fallback if the custom setting is absent.
-    timezone_name = settings.TIMEZONE_NAME
-    try:
-        local_timezone = ZoneInfo(timezone_name)
-    except (ZoneInfoNotFoundError, ValueError, TypeError):
-        # Invalid server configuration is not a user input problem.
-        return JsonResponse({"message": "SURFACE default timezone is invalid."}, status=500)
-
-    # Translate full *local* calendar-year boundaries into UTC instants.
-    # For DST-aware zones, these offsets can differ between the two dates.
-    # Filtering on the bare val.datetime column keeps the range index-friendly.
-    local_start = datetime_constructor.combine(first_month, datetime_time.min, tzinfo=local_timezone)
-    local_end = datetime_constructor.combine(end_exclusive_month, datetime_time.min, tzinfo=local_timezone)
-    utc_start = local_start.astimezone(timezone.utc)
-    utc_end = local_end.astimezone(timezone.utc)
-
-    good_qc_flag = 4  # SURFACE: Good. Do not use manual_flag for effective QC.
-    missing_value = -99.9  # Stored numeric placeholder for Missing observations.
 
     sql = """
-        WITH monthly_data AS (
-            SELECT
-                -- Convert UTC instants to SURFACE-local wall clock time before
-                -- grouping. E.g. 2026-06-01 05:30 UTC is still May in Belize.
-                date_trunc('month', val.datetime AT TIME ZONE %s)::date
-                    AS month_start,
-                ROUND(
-                    AVG(
-                        NULLIF(
-                            CASE
-                                -- Validated readings use the human-confirmed value.
-                                WHEN val.is_validated IS TRUE THEN val.consisted
-                                -- Unvalidated readings use the original value.
-                                ELSE val.measured
-                            END,
-                            %s
-                        )
-                    )::numeric,
-                    2
-                ) AS average
-            FROM raw_data AS val
-            WHERE val.station_id = %s
-              AND val.variable_id = %s
-              -- These UTC bounds represent local Jan 1 to next local Jan 1.
-              -- Filter on the original datetime to use the station/variable/time
-              -- B-tree index; truncate the timestamp only after filtering.
-              AND val.datetime >= %s
-              AND val.datetime < %s
-              -- An accepted/validated record must use validated_flag.
-              -- Otherwise, use the automatic quality_flag; manual_flag is
-              -- deliberately excluded from the effective-QC decision.
-              AND CASE
-                    WHEN val.is_validated IS TRUE THEN val.validated_flag
-                    ELSE val.quality_flag
-                  END = %s
-            GROUP BY 1
-        ),
-        months AS (
-            -- Calendar labels are local months; missing months still appear
-            -- even when no QC-Good readings exist.
+        WITH months AS (
+            -- Generate every reporting month, including months without data.
             SELECT generate_series(
                 %s::date,
                 %s::date - INTERVAL '1 month',
                 INTERVAL '1 month'
             )::date AS month_start
+        ),
+        monthly_data AS (
+            SELECT
+                make_date(ms.year::int, ms.month::int, 1) AS month_start,
+
+                -- Use the already validated/QC-Good summary data.
+                -- Weight by record count rather than averaging averages.
+                ROUND(
+                    SUM(ms.sum_value)::numeric /
+                    NULLIF(SUM(ms.num_records), 0),
+                    2
+                ) AS average
+
+            FROM monthly_summary AS ms
+            WHERE ms.station_id = %s
+            AND ms.variable_id = %s
+            AND ms.year BETWEEN %s AND %s
+
+            GROUP BY ms.year, ms.month
         )
         SELECT
             EXTRACT(YEAR FROM months.month_start)::int AS year,
             EXTRACT(MONTH FROM months.month_start)::int AS month,
             monthly_data.average
+
         FROM months
         LEFT JOIN monthly_data USING (month_start)
-        ORDER BY months.month_start
+
+        ORDER BY months.month_start;
     """
 
     with connection.cursor() as cursor:
         cursor.execute(
             sql,
             [
-                timezone_name,
-                missing_value,
-                station_id,
-                variable_id,
-                utc_start,
-                utc_end,
-                good_qc_flag,
                 first_month,
                 end_exclusive_month,
+                station_id,
+                variable_id,
+                begin_date.year,
+                end_date.year,
             ],
         )
         rows = cursor.fetchall()
