@@ -1469,7 +1469,7 @@
       refreshMapSize() {
         const ref = this.$refs.myMap;
         const map = ref && ref.mapObject;
-        if (map) map.invalidateSize({ pan: false, animate: false });
+        if (map) map.invalidateSize({ pan: true, animate: false });
       },
 
       scheduleMapRefresh() {
@@ -1490,17 +1490,17 @@
 
         // Return to the configured location, never a country-specific extent.
         // invalidateSize is important when Vuetify/base-layout changes the viewport.
-        map.invalidateSize({ pan: false, animate: false });
+        map.invalidateSize({ pan: true, animate: false });
         map.setView(this.center, this.zoom, { animate: false });
         this._saMapCentered = true;
       },
 
       onMapReady() {
-        // The map can be ready before its parent has its final dimensions.
-        this.scheduleMapRefresh();
-        this.$nextTick(() => {
-          requestAnimationFrame(() => this.resetMainMapView());
-        });
+          /*
+          * Vue2Leaflet already receives the configured center and zoom.
+          * Recalculate the map dimensions without resetting its position.
+          */
+          this.scheduleMapRefresh();
       },
 
       scrollToObservations() {
@@ -1595,8 +1595,11 @@
     },
     mounted() {
       this.getVariables();
+
       this.selectedBasemap = this.basemaps[0];
+
       this.setBasemap();
+
       // Observing the map container handles late flex/layout size changes,
       // including navigation resizing and browser zoom.
       this.$nextTick(() => {
@@ -1606,12 +1609,11 @@
         }
         window.addEventListener('resize', this.scheduleMapRefresh);
         this.scheduleMapRefresh();
-        // Backup for cases where the Vue2Leaflet ready event fires before
-        // the map's parent receives its height from the Django base layout.
-        setTimeout(() => {
-          if (!this._saMapCentered) this.resetMainMapView();
-          else this.refreshMapSize();
-        }, 600);
+        /*
+        * Refresh the dimensions after the layout settles.
+        * Do not call resetMainMapView() here, as that causes the map to snap.
+        */
+        setTimeout(() => this.refreshMapSize(), 600);
       });
     },
     computed: {

@@ -1,435 +1,533 @@
-{% extends "base.html" %} {% block content %} {% load static %} {% load wx_filters %}
-<div class="srf-container">
-  <div id="app" v-cloak>
+{% extends "base.html" %}
+{% load static %}
+{% load wx_filters %}
+
+{% block content %}
+<div class="srf-container mr-page">
+  <header class="mr-page-heading">
+    <span class="srf-display-1 text-uppercase">Maintenance Reports</span>
+    <p>Search station maintenance visits, review report status, and manage maintenance records.</p>
+  </header>
+
+  <div id="app" class="mr-app" v-cloak>
     <v-app>
-      <v-content fluid fill-height style="background: white">
-        <v-layout column>
-          <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-            <span class="srf-display-1 text-uppercase">Maintenance Reports</span
-            ><br/>
+      <main class="mr-workspace">
+        <div class="mr-timezone-note" role="note">
+          <v-icon size="18" color="grey darken-1">mdi-clock-outline</v-icon>
+          <span>Dates and times in maintenance reports are shown in each <strong>station's local time</strong>.</span>
+        </div>
+
+        <!-- Keep the date-range form independent of the results table, so it is
+             compact even before the first report request has completed. -->
+        <section class="mr-panel" aria-labelledby="mr-filter-heading">
+          <div class="mr-panel-heading">
+            <div>
+              <h2 id="mr-filter-heading">Report search</h2>
+              <p>Choose the visit-date range to retrieve maintenance reports.</p>
+            </div>
+            <v-icon size="21" color="grey">mdi-filter-variant</v-icon>
           </div>
 
-          <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
-          <div style="width: 50%;">
-              <v-alert
-                  type="info"
-                  dense
-                  outlined
-                  text
-                  color="purple"
-              >
-                Note: All dates and times shown are in the <b>station's local time.</b>
-              </v-alert>
-          </div>
-
-          <v-layout column fluid>
-            <h6>Search Form</h6>
-            <v-layout dense justify="start" class="mb-3">
-              <v-flex lg3 ml-3>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="start_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="start_date"
-                    label="Start date"
-                    v-on="on"
-                    required
-                    persistent-hint
-                    prepend-icon="event"
-                    ></v-text-field>
+          <div class="mr-filter-body">
+            <v-row dense align="start">
+              <v-col cols="12" sm="6" md="4" lg="3">
+                <v-menu v-model="start_date_menu" :close-on-content-click="false"
+                        transition="scale-transition" offset-y min-width="290px">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-text-field v-model="start_date" label="Start date"
+                                  prepend-inner-icon="mdi-calendar-month-outline"
+                                  outlined dense readonly hide-details="auto"
+                                  v-bind="attrs" v-on="on"></v-text-field>
                   </template>
-                  <v-date-picker
-                  v-model="start_date"
-                  @input="end_date_menu = false"
-                  ></v-date-picker>
+                  <v-date-picker v-model="start_date" :max="end_date || undefined"
+                                 no-title scrollable
+                                 @input="start_date_menu = false"></v-date-picker>
                 </v-menu>
-              </v-flex>                  
-              <v-flex lg3 ml-3>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="end_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="end_date"
-                    label="End date"
-                    v-on="on"
-                    required
-                    persistent-hint
-                    prepend-icon="event"
-                    ></v-text-field>
+              </v-col>
+
+              <v-col cols="12" sm="6" md="4" lg="3">
+                <v-menu v-model="end_date_menu" :close-on-content-click="false"
+                        transition="scale-transition" offset-y min-width="290px">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-text-field v-model="end_date" label="End date"
+                                  prepend-inner-icon="mdi-calendar-month-outline"
+                                  outlined dense readonly hide-details="auto"
+                                  v-bind="attrs" v-on="on"></v-text-field>
                   </template>
-                  <v-date-picker
-                  v-model="end_date"
-                  @input="end_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>                  
-              </v-flex>
+                  <v-date-picker v-model="end_date" :min="start_date || undefined"
+                                 no-title scrollable
+                                 @input="end_date_menu = false"></v-date-picker>
+                </v-menu>
+              </v-col>
 
-              <v-flex lg3 mt-5 ml-3 class="d-flex justify-between">
-                <v-btn justify-end outlined color="success" @click="getMaintenanceReportList()">
-                  Submit
+              <v-col cols="12" md="4" lg="3" class="mr-search-button-col">
+                <v-btn color="primary" depressed class="mr-primary-button"
+                       :loading="loading" :disabled="!canSearch || actionLoading"
+                       @click="getMaintenanceReportList">
+                  <v-icon left size="18">mdi-magnify</v-icon>
+                  Search reports
                 </v-btn>
-              </v-flex>
-            </v-layout>
-        </v-layout>
-        <v-layout v-if="maintenanceReportList" column>
-          <v-layout mb-5 column>
-            <br/> <h6>Search Results</h6> <hr>
-            Dates: [[start_date]] to [[end_date]]            
-          </v-layout>
+              </v-col>
+            </v-row>
+            <p v-if="dateRangeError" class="mr-form-error" role="alert">
+              <v-icon size="16" color="error">mdi-alert-circle-outline</v-icon>
+              [[ dateRangeError ]]
+            </p>
+          </div>
+        </section>
 
+        <section class="mr-panel mr-results-panel" aria-labelledby="mr-results-heading">
+          <div class="mr-panel-heading mr-results-heading">
+            <div>
+              <h2 id="mr-results-heading">Maintenance report records</h2>
+              <p v-if="appliedRange">
+                Visit dates: [[ appliedRange.start ]] to [[ appliedRange.end ]]
+              </p>
+              <p v-else>View and manage maintenance reports for the selected period.</p>
+            </div>
+            <span v-if="maintenanceReportList !== null" class="mr-result-count">
+              [[ filteredReports.length ]] of [[ maintenanceReportList.length ]] reports
+            </span>
+          </div>
+
+          <div class="mr-table-toolbar">
+            <v-text-field v-model="search" label="Search reports"
+                          placeholder="Station, technician, status..."
+                          prepend-inner-icon="mdi-magnify" clearable
+                          outlined dense hide-details class="mr-general-search"></v-text-field>
+            <v-spacer></v-spacer>
+            <!-- Preserve the original 'new-maintenance-report' Django route. -->
+            <v-btn color="primary" depressed class="mr-primary-button"
+                   href="{% url 'new-maintenance-report' %}">
+              <v-icon left size="18">mdi-plus</v-icon>
+              New report
+            </v-btn>
+          </div>
+
+          <v-alert v-if="request_error" type="error" dense
+                   class="mr-request-error" dismissible
+                   @input="request_error = false">
+            [[ request_error_message ]]
+          </v-alert>
+
+          <!-- fixed-header keeps table headings visible within the scroll area.
+               Horizontal scrolling stays inside the table, not the whole page. -->
           <v-data-table
             :headers="headers"
-            :items="maintenanceReportList"
-            item-key="name"
-            class="elevation-1"
-            :search="search"
-            :custom-filter="filterText"
+            :items="filteredReports"
+            item-key="maintenance_report_id"
+            :loading="loading"
+            loading-text="Loading maintenance reports..."
             :items-per-page="50"
-            :footer-props="{
-              'items-per-page-options': [10, 25, 50, 100]
-            }"
+            :footer-props="{'items-per-page-options': [10, 25, 50, 100]}"
+            fixed-header
+            :height="filteredReports.length > 9 ? 560 : undefined"
+            class="mr-report-table"
           >
-            <template v-slot:item.status="{ item }">
-              <font :color="getStatus(item.status)">  
-                <b> [[item.status]] </b>
-              </font>
+            <template v-slot:item.station_name="{ item }">
+              <span class="mr-station-name">[[ displayValue(item.station_name) ]]</span>
             </template>
+
+            <template v-slot:item.station_offset="{ item }">
+              <span class="mr-muted">[[ displayValue(item.station_offset) ]]</span>
+            </template>
+
             <template v-slot:item.next_visit_date="{ item }">
-              <v-chip
-                label
-                :color="getDate(item.next_visit_date)"
-              >
-                [[item.next_visit_date]]
-              </v-chip>
-            </template>            
-            <template v-slot:item.action="{ item }">
-              <v-tooltip bottom>
-                <template v-slot:activator="{ on }">
-                  <v-btn icon>
-                    <v-icon v-if="item.status==='Published'" v-on="on" small @click="dialog_apv = true; maintenance_report_id=item.maintenance_report_id">
-                      mdi-check-decagram
-                    </v-icon>  
-                  </v-btn>                  
-                </template>
-                <span>Approve Maintenance Report</span>
-              </v-tooltip>
-
-              {% if request|has_any_feature_permission:"maintenance-reports:write" %}     
-              <v-tooltip v-if="item.status!='Approved'" bottom>
-                <template v-slot:activator="{ on }">
-                  <v-btn icon :href="updateMaintenanceReport(item.maintenance_report_id)">
-                    <v-icon v-on="on" small>
-                      edit
-                    </v-icon>                     
-                  </v-btn>
-                </template>
-                <span>Update Maintenance Report</span>
-              </v-tooltip>
-              {% endif %}
-
-              <v-tooltip v-if="item.status=='Approved'" bottom>
-                <template v-slot:activator="{ on }">
-                  <v-btn icon>
-                    <v-icon v-if="item.status!='Approved'" v-on="on" small @click="downloadMaintenanceReport()">
-                      download
-                    </v-icon>                     
-                  </v-btn>
-                </template>
-                <span>Download Maintenance Report</span>
-              </v-tooltip>              
-              <v-tooltip bottom>
-                <template v-slot:activator="{ on }">
-                  <v-btn icon :href="viewMaintenanceReport(item.maintenance_report_id)">
-                    <v-icon v-on="on" small>
-                      mdi-eye
-                    </v-icon>
-                  </v-btn>
-                </template>
-                <span>View Maintenance Report</span>
-              </v-tooltip>
-              {% if request|has_any_feature_permission:"maintenance-reports:delete" %}     
-              <v-tooltip bottom>
-                <template v-slot:activator="{ on }">
-                  <v-btn icon>                        
-                    <v-icon color="error" v-on="on" small @click="dialog_del = true; maintenance_report_id = item.maintenance_report_id">
-                      delete
-                    </v-icon>               
-                  </v-btn>                    
-                </template>
-                <span>Delete Maintenance Report</span>
-              </v-tooltip>
-              {% endif %}
+              <!-- Use the same date thresholds as the previous page; only the
+                   presentation changes from bright-filled chips to soft labels. -->
+              <span class="mr-next-visit" :class="nextVisitClass(item.next_visit_date)">
+                [[ displayValue(item.next_visit_date) ]]
+              </span>
             </template>
-            <template v-slot:top>
-              <v-layout  mr-8 justify-end>
-                <v-flex lg5 mr-5>
-                  <v-text-field
-                    v-model="search"
-                    label="General Search"
-                    append-icon="search">
-                  </v-text-field>
-                </v-flex>
-                <v-flex lg1 mt-5>
-                  <v-btn label color="primary" @click="" href="{% url 'new-maintenance-report' %}">
-                    New Report
-                  </v-btn>
-                </v-flex>
-              </v-layout>     
+
+            <template v-slot:item.status="{ item }">
+              <span class="mr-status-pill" :class="statusClass(item.status)">
+                <span class="mr-status-dot" aria-hidden="true"></span>
+                [[ displayValue(item.status) ]]
+              </span>
+            </template>
+
+            <template v-slot:item.action="{ item }">
+              <div class="mr-row-actions">
+                <!-- Approval is available for Published reports, exactly as in
+                     the original page. The backend must authorize the action. -->
+                <v-tooltip bottom v-if="item.status === 'Published'">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-btn icon small color="success" v-bind="attrs" v-on="on"
+                           :disabled="actionLoading" aria-label="Approve maintenance report"
+                           @click="openApproveDialog(item)">
+                      <v-icon size="19">mdi-check-decagram-outline</v-icon>
+                    </v-btn>
+                  </template>
+                  <span>Approve report</span>
+                </v-tooltip>
+
+                {% if request|has_any_feature_permission:"maintenance-reports:write" %}
+                <v-tooltip bottom v-if="item.status !== 'Approved'">
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-btn icon small color="grey darken-2" v-bind="attrs" v-on="on"
+                           :href="updateMaintenanceReport(item.maintenance_report_id)"
+                           aria-label="Edit maintenance report">
+                      <v-icon size="19">mdi-pencil-outline</v-icon>
+                    </v-btn>
+                  </template>
+                  <span>Edit report</span>
+                </v-tooltip>
+                {% endif %}
+
+                <v-tooltip bottom>
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-btn icon small color="primary" v-bind="attrs" v-on="on"
+                           :href="viewMaintenanceReport(item.maintenance_report_id)"
+                           aria-label="View maintenance report">
+                      <v-icon size="19">mdi-eye-outline</v-icon>
+                    </v-btn>
+                  </template>
+                  <span>View report</span>
+                </v-tooltip>
+
+                {% if request|has_any_feature_permission:"maintenance-reports:delete" %}
+                <v-tooltip bottom>
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-btn icon small color="error" v-bind="attrs" v-on="on"
+                           :disabled="actionLoading" aria-label="Delete maintenance report"
+                           @click="openDeleteDialog(item)">
+                      <v-icon size="19">mdi-delete-outline</v-icon>
+                    </v-btn>
+                  </template>
+                  <span>Delete report</span>
+                </v-tooltip>
+                {% endif %}
+              </div>
+            </template>
+
+            <template v-slot:no-data>
+              <div class="mr-empty-state">
+                <v-icon size="35" color="grey lighten-1">mdi-file-document-outline</v-icon>
+                <strong>[[ maintenanceReportList === null ? 'Loading reports' : (search ? 'No matching reports' : 'No maintenance reports found') ]]</strong>
+                <p v-if="maintenanceReportList !== null">[[ search ? 'Try a different search term.' : 'Try another date range or create a new report.' ]]</p>
+              </div>
             </template>
           </v-data-table>
-          <v-dialog v-model="dialog_del" width="35%">
-            <v-card>
-              <v-card-title class="text-h5">
-                Do you want to delete this report?
-              </v-card-title>              
-              <v-card-actions>
-                <v-btn width="50%" color="error" @click="dialog_del = false; deleteMaintenanceReport(maintenance_report_id)">
-                  Delete Report
-                </v-btn>
-                <v-btn width="50%" @click="dialog_del = false">
-                  Cancel
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>
-          <v-dialog v-model="dialog_apv" width="35%">
-            <v-card>
-              <v-card-title class="text-h5">
-                Do you want to approve this report?
-              </v-card-title>              
-              <v-card-actions>
-                <v-btn width="50%" color="primary" @click="dialog_apv = false; approveMaintenanceReport(maintenance_report_id)">
-                  Approve Report
-                </v-btn>
-                <v-btn width="50%" @click="dialog_apv = false">
-                  Cancel
-                </v-btn>
-              </v-card-actions>
-            </v-card>
-          </v-dialog>                     
-        </v-layout>
-      </v-content>
+
+          <div class="mr-results-note">
+            <v-icon size="15">mdi-information-outline</v-icon>
+            Search filters the reports already retrieved for the selected date range.
+          </div>
+        </section>
+
+        <!-- Reuse original approval and deletion endpoints; do not make destructive
+             requests until the user confirms inside the corresponding dialog. -->
+        <v-dialog v-model="dialog_apv" max-width="440" persistent>
+          <v-card class="mr-dialog">
+            <v-card-title class="mr-dialog-heading">Approve maintenance report</v-card-title>
+            <v-card-text>
+              <p>Approve this published report<span v-if="selectedReport && selectedReport.station_name">
+                for <strong>[[ selectedReport.station_name ]]</strong></span>?</p>
+              <p class="mr-dialog-hint">Once approved, the report cannot be edited from this listing.</p>
+            </v-card-text>
+            <v-card-actions class="mr-dialog-actions">
+              <v-spacer></v-spacer>
+              <v-btn color="error" :disabled="actionLoading" @click="closeActionDialogs">Cancel</v-btn>
+              <v-btn color="success" depressed :loading="actionLoading"
+                     @click="approveMaintenanceReport(maintenance_report_id)">
+                Approve report
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <v-dialog v-model="dialog_del" max-width="440" persistent>
+          <v-card class="mr-dialog">
+            <v-card-title class="mr-dialog-heading">Delete maintenance report</v-card-title>
+            <v-card-text>
+              <p>Delete this maintenance report<span v-if="selectedReport && selectedReport.station_name">
+                for <strong>[[ selectedReport.station_name ]]</strong></span>?</p>
+              <p class="mr-dialog-warning">This action may permanently remove the report.</p>
+            </v-card-text>
+            <v-card-actions class="mr-dialog-actions">
+              <v-spacer></v-spacer>
+              <v-btn color="success" :disabled="actionLoading" @click="closeActionDialogs">Cancel</v-btn>
+              <v-btn color="error" depressed :loading="actionLoading"
+                     @click="deleteMaintenanceReport(maintenance_report_id)">
+                Delete report
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3500">
+          [[ snackbar.message ]]
+          <template v-slot:action="{ attrs }">
+            <v-btn text v-bind="attrs" @click="snackbar.show = false">Close</v-btn>
+          </template>
+        </v-snackbar>
+      </main>
     </v-app>
   </div>
+</div>
+{% endblock %}
 
-  {% endblock %} {% block localjavascript %}
-  <script>
-    Vue.use(window.vuelidate.default);
-    const { required, minLength } = window.validators;
-    new Vue({
-      el: "#app",
-      vuetify: new Vuetify(),
-      delimiters: ["[[", "]]"],
-      data:{
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data() {
+      return {
         search: '',
         dialog_del: false,
         dialog_apv: false,
+        selectedReport: null,
         maintenance_report_id: null,
+        loading: false,
+        actionLoading: false,
+        request_error: false,
+        request_error_message: '',
+        snackbar: { show: false, message: '', color: 'success' },
         today: moment().format('YYYY-MM-DD'),
-        today_lm: moment().add(-1, 'M').format('YYYY-MM-DD'),
+        today_lm: moment().subtract(1, 'month').format('YYYY-MM-DD'),
         start_date_menu: false,
-        start_date: moment().subtract(1, 'years').format('YYYY-MM-DD'),
         end_date_menu: false,
+        start_date: moment().subtract(1, 'year').format('YYYY-MM-DD'),
         end_date: moment().format('YYYY-MM-DD'),
         maintenanceReportList: null,
+        // Keep the dates tied to the successful request instead of displaying
+        // newly edited filters above older results.
+        appliedRange: null,
+        reportRequestId: 0
+      };
+    },
+    computed: {
+      headers() {
+        return [
+          { text: 'Station', value: 'station_name', sortable: true, align: 'start' },
+          { text: 'Station Offset', value: 'station_offset', sortable: true },
+          { text: 'Date', value: 'visit_date', sortable: true },
+          { text: 'Next Visit', value: 'next_visit_date', sortable: true },
+          { text: 'Profile', value: 'station_profile', sortable: true },
+          { text: 'Station Type', value: 'station_type', sortable: true },
+          { text: 'Technician', value: 'technician', sortable: true },
+          { text: 'Type of Visit', value: 'type_of_visit', sortable: true },
+          { text: 'Status', value: 'status', sortable: true },
+          { text: 'Actions', value: 'action', sortable: false, align: 'end' }
+        ];
       },
-      computed: {
-        headers () {
-          return [
-            {
-              text: 'Station',
-              align: 'center',
-              sortable: true,
-              value: 'station_name',
-            },
-            {
-              text: 'Station Offset',
-              align: 'center',
-              sortable: true,
-              value: 'station_offset',
-            },
-            { 
-              text: 'Date',
-              align: 'center',
-              sortable: false,
-              value: 'visit_date',
-            },
-            { 
-              text: 'Next Visit',
-              align: 'center',
-              sortable: false,
-              value: 'next_visit_date',
-            },
-            { 
-              text: 'Profile',
-              align: 'center',
-              sortable: false,
-              value: 'station_profile',
-            },
-            { 
-              text: 'Station Type',
-              align: 'center',
-              sortable: false,
-              value: 'station_type',
-            },
-            { 
-              text: 'Technician',
-              align: 'center',
-              sortable: false,
-              value: 'technician',
-            },
-            { 
-              text: 'Type of Visit',
-              align: 'center',
-              sortable: false,
-              value: 'type_of_visit',
-            },
-            { 
-              text: 'Status',
-              align: 'center',
-              sortable: false,
-              color: 'red',
-              value: 'status',
-            },
-            { 
-              text: 'Actions',
-              align: 'center',
-              sortable: false,
-              value: 'action',
-            },
-          ]
-        },
-      },      
-      methods: {
-        getMaintenanceReportList() {
-          this.loading = true;
-          axios.put(`/wx/maintenance_report/get_reports/`,{
-              "start_date": this.start_date,
-              "end_date": this.end_date,
-            })
-            .then(res => {
-              this.maintenanceReportList = res.data['maintenance_report_list'];            
-            })
-            .catch((error) => {
-              console.log("error", error.response);
-              this.request_error_message = error.response.data.message;
-              this.request_error = true;
-            })
-            .finally(() => {
-              this.loading = false;
-            });
-        },
-        viewMaintenanceReport(id){
-          return `/wx/maintenance_report/${id}/view/${1}/`
-        },
-        updateMaintenanceReport(id){
-          return `/wx/maintenance_report/${id}/update/`
-        },        
-        deleteMaintenanceReport(id){
-          this.loading = true;
-          axios.put(`/wx/maintenance_report/${id}/delete/`)
-            .then(res => {
-              this.getMaintenanceReportList();
-            })
-            .catch((error) => {
-              console.log("error", error.response);
-              this.request_error_message = error.response.data.message;
-              this.request_error = true;
-            })
-            .finally(() => {
-              this.loading = false;
-            });
-        },
-        approveMaintenanceReport(id){
-          this.loading = true;
-          axios.put(`/wx/maintenance_report/${id}/approve/`)
-            .then(res => {
-              this.getMaintenanceReportList();
-            })
-            .catch((error) => {
-              console.log("error", error.response);
-              this.request_error_message = error.response.data.message;
-              this.request_error = true;
-            })
-            .finally(() => {
-              this.loading = false;
-            });
-        },        
-        filterText (value, search, item) {
-          return value != null
-                 && search != null
-                 && typeof value === 'string'
-                 && value.toString().indexOf(search) !== -1
-        },
-        getDate (date) {
-          if (date > this.today) return '#3BD424' // green
-          else if (date >= this.today_lm) return '#E8D43F' //yellow
-          else if (date < this.today_lm) return '#F73E25' //red
-          else return '#FFFFFF'
-        },
-        getStatus (status) {
-          if (status == 'Published') return '#0096FF'//blue
-          else if (status == 'Draft') return '#D27D2D' //cinnamon
-          else return '#8A9A5B' //green
-        },  
-      },  
-      mounted() {
-        axios.defaults.xsrfHeaderName = "X-CSRFToken";
-        axios.defaults.xsrfCookieName = "csrftoken";
-        this.getMaintenanceReportList()
+      dateRangeError() {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(this.start_date || '') ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(this.end_date || '')) {
+          return 'Choose a valid start and end date.';
+        }
+        return this.start_date > this.end_date ?
+          'The start date must be on or before the end date.' : '';
       },
-    });
-  </script>
+      canSearch() {
+        return !this.loading && !this.dateRangeError;
+      },
+      filteredReports() {
+        const list = Array.isArray(this.maintenanceReportList) ? this.maintenanceReportList : [];
+        const term = String(this.search || '').trim().toLowerCase();
+        if (!term) return list;
+        const keys = ['station_name', 'station_offset', 'visit_date', 'next_visit_date',
+                      'station_profile', 'station_type', 'technician', 'type_of_visit', 'status'];
+        // Avoid Vuetify's default field-level search, which was previously
+        // case-sensitive and missed results with non-string field values.
+        return list.filter(item => keys.some(key =>
+          String(item[key] == null ? '' : item[key]).toLowerCase().includes(term)
+        ));
+      }
+    },
+    methods: {
+      displayValue(value) {
+        return value === null || value === undefined || value === '' ? '—' : value;
+      },
+      statusClass(status) {
+        const value = String(status || '').toLowerCase();
+        if (value === 'approved') return 'mr-status-approved';
+        if (value === 'published') return 'mr-status-published';
+        if (value === 'draft') return 'mr-status-draft';
+        return 'mr-status-other';
+      },
+      nextVisitClass(date) {
+        // Preserve legacy highlighting: future dates are green, dates within
+        // the preceding month are amber, and older dates are red. The date
+        // strings themselves remain station-local (no UTC conversion).
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return 'mr-next-neutral';
+        if (date > this.today) return 'mr-next-future';
+        if (date >= this.today_lm) return 'mr-next-recent';
+        return 'mr-next-past';
+      },
+      notify(message, color) {
+        this.snackbar = { show: true, message: message, color: color || 'success' };
+      },
+      async getMaintenanceReportList() {
+        if (!this.canSearch) return;
+        const requestId = ++this.reportRequestId;
+        const requestedRange = { start: this.start_date, end: this.end_date };
+        this.loading = true;
+        this.request_error = false;
+        this.request_error_message = '';
+        try {
+          // Existing endpoint and PUT request body are intentionally unchanged.
+          const response = await axios.put('/wx/maintenance_report/get_reports/', {
+            start_date: requestedRange.start,
+            end_date: requestedRange.end
+          });
+          if (requestId !== this.reportRequestId) return;
+          const records = response.data && response.data.maintenance_report_list;
+          if (!Array.isArray(records)) throw new Error('Unexpected report response format.');
+          this.maintenanceReportList = records;
+          this.appliedRange = requestedRange;
+        } catch (error) {
+          if (requestId !== this.reportRequestId) return;
+          console.error('Maintenance reports list:', error);
+          this.request_error_message = (error.response && error.response.data &&
+            (error.response.data.message || error.response.data.detail)) ||
+            'Unable to load maintenance reports. Please try again.';
+          this.request_error = true;
+        } finally {
+          if (requestId === this.reportRequestId) this.loading = false;
+        }
+      },
+      viewMaintenanceReport(id) {
+        return `/wx/maintenance_report/${encodeURIComponent(id)}/view/1/`;
+      },
+      updateMaintenanceReport(id) {
+        return `/wx/maintenance_report/${encodeURIComponent(id)}/update/`;
+      },
+      openApproveDialog(item) {
+        this.selectedReport = item;
+        this.maintenance_report_id = item.maintenance_report_id;
+        this.dialog_apv = true;
+      },
+      openDeleteDialog(item) {
+        this.selectedReport = item;
+        this.maintenance_report_id = item.maintenance_report_id;
+        this.dialog_del = true;
+      },
+      closeActionDialogs() {
+        if (this.actionLoading) return;
+        this.dialog_apv = false;
+        this.dialog_del = false;
+        this.selectedReport = null;
+        this.maintenance_report_id = null;
+      },
+      async performReportAction(id, action) {
+        if (id === null || id === undefined || this.actionLoading) return;
+        this.actionLoading = true;
+        this.request_error = false;
+        try {
+          // Reuse SURFACE's existing PUT approve/delete endpoints. The server
+          // is responsible for permission checks and lifecycle validation.
+          await axios.put(`/wx/maintenance_report/${encodeURIComponent(id)}/${action}/`);
+          this.actionLoading = false;
+          this.closeActionDialogs();
+          this.notify(action === 'approve' ? 'Maintenance report approved.' : 'Maintenance report deleted.');
+          // Keep the table and result count in sync with the server.
+          await this.getMaintenanceReportList();
+        } catch (error) {
+          console.error('Maintenance report ' + action + ':', error);
+          this.request_error_message = (error.response && error.response.data &&
+            (error.response.data.message || error.response.data.detail)) ||
+            'Unable to ' + action + ' this maintenance report.';
+          this.request_error = true;
+        } finally {
+          this.actionLoading = false;
+        }
+      },
+      deleteMaintenanceReport(id) {
+        return this.performReportAction(id, 'delete');
+      },
+      approveMaintenanceReport(id) {
+        return this.performReportAction(id, 'approve');
+      }
+    },
+    mounted() {
+      // Preserve CSRF headers used by the original template for PUT requests.
+      axios.defaults.xsrfHeaderName = 'X-CSRFToken';
+      axios.defaults.xsrfCookieName = 'csrftoken';
+      this.getMaintenanceReportList();
+    }
+  });
+</script>
 
-  <style>
-    .firstColumn {
-      border-left: 1px solid gray;
-    }
+<style>
+  /* All styling stays scoped to this report page; never use global th/td,
+     .v-dialog, or .v-input rules because base.html is shared by SURFACE. */
+  .mr-page { width: 100%; background: #fff; color: #292929; }
+  .mr-page .v-application, .mr-page .v-application--wrap { background: #fff !important; }
+  .mr-page .v-application--wrap { min-height: auto !important; }
+  .mr-page .mr-page-heading { padding: 20px 20px 12px; }
+  .mr-page .mr-page-heading .srf-display-1 { color: #242424; display: inline-block; }
+  .mr-page .mr-page-heading p { margin: 5px 0 0; color: #777; font-size: 13px; }
+  .mr-page .mr-workspace { padding: 0 20px 30px; }
+  .mr-page .mr-timezone-note { display: flex; align-items: center; gap: 9px; color: #696969; font-size: 12px; line-height: 1.5; margin: 5px 0 17px; }
+  .mr-page .mr-timezone-note strong { color: #454545; font-weight: 700; }
 
-    th,
-    td {
-      padding: 3px;
-      padding-left: 10px;
-    }
+  .mr-page .mr-panel { border: 1px solid #e5e5e5; border-radius: 11px; background: #fff; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.025); overflow: hidden; }
+  .mr-page .mr-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid #ededed; padding: 17px 21px; min-height: 70px; }
+  .mr-page .mr-panel-heading h2 { color: #262626; font-size: 16px; font-weight: 700; line-height: 1.4; margin: 0; }
+  .mr-page .mr-panel-heading p { color: #777; font-size: 12px; margin: 3px 0 0; }
+  .mr-page .mr-filter-body { padding: 20px 21px 18px; }
+  .mr-page .mr-filter-body .v-input { font-size: 13px; }
+  .mr-page .mr-filter-body .v-text-field__slot input { color: #303030; }
+  .mr-page .mr-search-button-col { display: flex; align-items: flex-start; padding-top: 5px; }
+  .mr-page .mr-primary-button { text-transform: none; font-size: 12px; font-weight: 650; letter-spacing: 0; border-radius: 7px; min-height: 39px; box-shadow: none; }
+  .mr-page .mr-form-error { color: #b42332; display: flex; align-items: center; gap: 7px; font-size: 12px; margin: 11px 0 0; }
 
-    .v-input--selection-controls__ripple {
-      border-radius: 50%;
-      cursor: pointer;
-      height: 34px;
-      position: absolute;
-      transition: inherit;
-      width: 34px;
-      left: -12px;
-      top: calc(50% - 24px);
-      margin: 7px;
-      z-index: 10 !important;
-    }
+  .mr-page .mr-results-heading { flex-wrap: wrap; }
+  .mr-page .mr-result-count { font-size: 11px; font-weight: 650; color: #5c5c5c; background: #f6f6f6; border: 1px solid #eaeaea; border-radius: 100px; padding: 6px 11px; white-space: nowrap; }
+  .mr-page .mr-table-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 15px 20px; }
+  .mr-page .mr-general-search { max-width: 340px; flex: 1 1 230px; font-size: 13px; }
+  .mr-page .mr-request-error { margin: 0 20px 14px; }
+  .mr-page .mr-report-table { box-shadow: none !important; border-top: 1px solid #efefef; }
+  .mr-page .mr-report-table .v-data-table__wrapper { overflow: auto !important; }
+  .mr-page .mr-report-table .v-data-table__wrapper table { min-width: 1170px; }
+  .mr-page .mr-report-table .v-data-table__wrapper table thead th { background: #fafafa !important; color: #636363 !important; font-size: 11px; font-weight: 750; white-space: nowrap; border-bottom: 1px solid #e5e5e5; text-transform: uppercase; letter-spacing: .025em; }
+  .mr-page .mr-report-table .v-data-table__wrapper table tbody td { color: #333; font-size: 12px; height: 48px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+  .mr-page .mr-report-table .v-data-table__wrapper table tbody tr:hover { background: #fafafa !important; }
+  .mr-page .mr-report-table .v-data-table__wrapper table th:first-child,
+  .mr-page .mr-report-table .v-data-table__wrapper table td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 #ededed; }
+  .mr-page .mr-report-table .v-data-table__wrapper table thead th:first-child { z-index: 3; background: #fafafa !important; }
+  .mr-page .mr-report-table .v-data-table__wrapper table tbody tr:hover td:first-child { background: #fafafa; }
+  .mr-page .mr-station-name { font-weight: 700; color: #303030; }
+  .mr-page .mr-muted { color: #757575; }
+  .mr-page .mr-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 2px; white-space: nowrap; }
 
-    .v-dialog {
-      box-shadow: none;
-    }
-    .v-dialog__content,
-    .v-dialog__content--active {
-      z-index: 9999 !important;
-    }
-    .btn-close-dialog {
-      position: absolute;
-      top: 116px;
-      left: 336px;
-      border-radius: 0px 20px 20px 0px;
-      z-index: 9999;
-      width: 36px;
-    }
-  </style>
-</div>
+  .mr-page .mr-status-pill, .mr-page .mr-next-visit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; border: 1px solid transparent; }
+  .mr-page .mr-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .mr-page .mr-status-approved { background: #edf8f1; color: #207344; border-color: #d5ebdd; }
+  .mr-page .mr-status-published { background: #edf4fd; color: #326caa; border-color: #dae8f8; }
+  .mr-page .mr-status-draft { background: #fff6e9; color: #986023; border-color: #f5e6ca; }
+  .mr-page .mr-status-other { background: #f4f4f4; color: #696969; border-color: #e8e8e8; }
+  .mr-page .mr-next-future { background: #edf8f1; color: #237447; border-color: #d7ebdd; }
+  .mr-page .mr-next-recent { background: #fff8e9; color: #956820; border-color: #f5e5c3; }
+  .mr-page .mr-next-past { background: #fff0f0; color: #ac4040; border-color: #f6dada; }
+  .mr-page .mr-next-neutral { background: #f8f8f8; color: #787878; border-color: #eee; }
+
+  .mr-page .mr-empty-state { padding: 39px 20px; text-align: center; display: flex; align-items: center; flex-direction: column; gap: 8px; }
+  .mr-page .mr-empty-state strong { color: #505050; font-size: 13px; }
+  .mr-page .mr-empty-state p { color: #888; font-size: 12px; margin: 0; }
+  .mr-page .mr-results-note { display: flex; align-items: center; gap: 6px; padding: 12px 20px; border-top: 1px solid #eee; color: #858585; font-size: 11px; }
+
+  .mr-page .mr-dialog .mr-dialog-heading { font-size: 17px; font-weight: 700; padding: 20px 23px 9px; color: #282828; }
+  .mr-page .mr-dialog .v-card__text { padding: 10px 23px 6px; font-size: 13px; color: #555; line-height: 1.6; }
+  .mr-page .mr-dialog .v-card__text p { margin: 0 0 8px; }
+  .mr-page .mr-dialog .mr-dialog-hint { color: #818181; font-size: 12px; }
+  .mr-page .mr-dialog .mr-dialog-warning { color: #a74343; font-size: 12px; }
+  .mr-page .mr-dialog .mr-dialog-actions { padding: 13px 17px 17px; }
+  .mr-page .mr-dialog .v-btn { text-transform: none; letter-spacing: 0; font-size: 12px; }
+  @media (max-width: 760px) {
+    .mr-page .mr-page-heading { padding: 14px 11px 10px; }
+    .mr-page .mr-workspace { padding: 0 11px 22px; }
+    .mr-page .mr-panel-heading { padding: 15px 14px; }
+    .mr-page .mr-filter-body { padding: 16px 13px; }
+    .mr-page .mr-table-toolbar { padding: 13px; }
+    .mr-page .mr-general-search { max-width: none; }
+    .mr-page .mr-table-toolbar .mr-primary-button { width: 100%; }
+    .mr-page .mr-search-button-col .mr-primary-button { width: 100%; }
+    .mr-page .mr-results-note { padding: 12px 13px; }
+  }
+</style>
 {% endblock %}

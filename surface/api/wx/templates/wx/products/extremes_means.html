@@ -1,467 +1,1042 @@
-{% extends "base.html" %} {% block content %}
-<div class="srf-container">
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
 
-  <!-- Page Title -->
-  <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-    <span class="srf-display-1 text-uppercase">Extremes and Means</span><br><br>
-  </div>
+<!--
+  Extremes & Means follows SURFACE's Data Export page design conventions:
+  white page, standard srf-display-1 title, restrained panels and dense outlined fields.
+  Do not remove srf-container's existing 24px padding; the inner workspace
+  provides the same additional 20px horizontal spacing as Data Export.
+-->
+<div class="srf-container em-page">
+  <div id="app" class="em-app" v-cloak>
+    <header class="em-page-heading">
+      <span class="srf-display-1 text-uppercase">Extremes and Means</span>
+      <p>Compare daily averages, observed extremes, and accumulation totals across reporting years.</p>
+    </header>
 
-  <div id="app" v-cloak>
     <v-app>
-      <v-content fluid fill-height style="background: white">
-        <v-layout column>
-          <v-layout column fluid>
-            <v-layout mt-3>
-              <v-flex lg4>
+      <main class="em-workspace">
+        <!-- Report parameters: keep the same compact card hierarchy as Data Export. -->
+        <section class="em-section" aria-labelledby="em-parameters-heading">
+          <div class="em-section-head">
+            <span class="em-section-step" aria-hidden="true">01</span>
+            <div class="em-section-title">
+              <h2 id="em-parameters-heading">Report parameters</h2>
+              <p>Choose a station, calendar month, variables, and optional year range.</p>
+            </div>
+            <i class="material-icons-outlined em-section-symbol" aria-hidden="true">tune</i>
+          </div>
+
+          <div class="em-section-body">
+            <div class="em-small-label">STATION AND MONTH</div>
+            <v-row dense class="em-input-row">
+              <v-col cols="12" md="7">
+                <!-- Same station lookup as Yearly Average: populated from /api/stations.
+                     A watcher fetches only assigned variables after selection. -->
                 <v-autocomplete
-                  :items="stations"
-                  item-text="label"
-                  item-value="id"
                   v-model="requestObject.stationId"
+                  :items="stations"
+                  :item-text="stationDisplayName"
+                  item-value="id"
                   label="Station"
-                  @change="onChangeStation(requestObject.stationId)"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
+                  placeholder="Select station"
+                  outlined dense
+                  clearable
                   autocomplete="off"
+                  :loading="loadingStations"
+                  :disabled="loadingStations"
+                  :error-messages="stationsError ? [stationsError] : []"
+                  no-data-text="No stations available"
+                  hide-details="auto"
                 ></v-autocomplete>
-              </v-flex>
-              <v-flex pl-5 lg2>
+              </v-col>
+              <v-col cols="12" md="5">
+                <!-- The API expects a month number, but retaining the selected object
+                     keeps compatibility with the original requestObject.month.value. -->
                 <v-autocomplete
+                  v-model="requestObject.month"
                   :items="months"
                   item-text="label"
-                  v-model="requestObject.month"
-                  label="Month"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
                   return-object
+                  label="Month"
+                  outlined dense
+                  clearable
+                  autocomplete="off"
+                  hide-details="auto"
                 ></v-autocomplete>
-              </v-flex>
-              <v-flex pl-5 lg1>
-                <v-checkbox
+              </v-col>
+            </v-row>
+
+            <div class="em-subsection-divider"></div>
+            <div class="em-small-label">REPORTING YEARS</div>
+            <v-row dense align="center" class="em-input-row">
+              <v-col cols="12" md="3">
+                <v-switch
                   v-model="requestObject.filter_interval"
+                  inset
+                  color="primary"
                   label="All years"
-                ></v-checkbox>
-              </v-flex>
-              <v-flex pl-5 lg2 :hidden="requestObject.filter_interval">
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="begin_date_menu"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
+                  hide-details
+                  class="em-all-years-switch"
+                ></v-switch>
+              </v-col>
+
+              <!-- The backend takes inclusive begin_year/end_year values.
+                   Dates are shown as January month pickers to select whole years. -->
+              <template v-if="!requestObject.filter_interval">
+                <v-col cols="12" sm="6" md="4">
+                  <v-menu
+                    v-model="begin_date_menu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        v-model="requestObject.begin_date"
+                        label="Start year"
+                        prepend-inner-icon="mdi-calendar"
+                        outlined dense readonly
+                        hide-details="auto"
+                        v-bind="attrs" v-on="on"
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
                       v-model="requestObject.begin_date"
-                      label="Start date"
-                      prepend-icon="event"
-                      v-on="on"
-                      required
-                      hint="*Required"
-                      persistent-hint
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    name="begin_date"
-                    v-model="requestObject.begin_date"
-                    @input="begin_date_menu = false"
-                    type='month'
-                    :allowed-dates="allowedDates"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-              <v-flex pl-5 lg2 :hidden="requestObject.filter_interval">
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="end_date_menu"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
+                      type="month"
+                      :allowed-dates="allowedDates"
+                      @input="begin_date_menu = false"
+                    ></v-date-picker>
+                  </v-menu>
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-menu
+                    v-model="end_date_menu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        v-model="requestObject.end_date"
+                        label="End year"
+                        prepend-inner-icon="mdi-calendar"
+                        outlined dense readonly
+                        hide-details="auto"
+                        v-bind="attrs" v-on="on"
+                      ></v-text-field>
+                    </template>
+                    <v-date-picker
                       v-model="requestObject.end_date"
-                      label="End date"
-                      prepend-icon="event"
-                      v-on="on"
-                      required
-                      hint="*Required"
-                      persistent-hint
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    name="end_date"
-                    v-model="requestObject.end_date"
-                    @input="end_date_menu = false"
-                    type='month'
-                    :allowed-dates="allowedDates"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-            </v-layout>
-            <v-layout mt-3 mb-5>
-              <v-flex lg7>
+                      type="month"
+                      :allowed-dates="allowedDates"
+                      @input="end_date_menu = false"
+                    ></v-date-picker>
+                  </v-menu>
+                </v-col>
+              </template>
+            </v-row>
+            <div v-if="dateRangeError" class="em-inline-error" role="alert">
+              <v-icon size="15" color="error">mdi-alert-circle-outline</v-icon>
+              <span>[[ dateRangeError ]]</span>
+            </div>
+
+            <div class="em-subsection-divider"></div>
+            <div class="em-small-label">VARIABLE SELECTION</div>
+            <v-row dense>
+              <v-col cols="12">
+                <!-- Show only StationVariable assignments whose station ID matches
+                     the selected station. Never trust an unfiltered API response. -->
                 <v-autocomplete
+                  v-model="requestObject.variableIds"
                   :items="variables"
                   item-text="variable_name"
                   item-value="variable"
-                  v-model="requestObject.variableIds"
                   label="Variables"
-                  required
-                  hint="*Required"
+                  placeholder="Select station variables"
+                  outlined dense multiple chips small-chips deletable-chips
+                  clearable autocomplete="off"
+                  :loading="loadingVariables"
+                  :disabled="!hasSelectedStation || loadingVariables"
+                  :error-messages="variablesError ? [variablesError] : []"
+                  :no-data-text="!hasSelectedStation ? 'Select a station first' : 'No variables assigned to this station'"
+                  :hint="hasSelectedStation ? 'Select one or more station variables.' : 'Select a station first.'"
                   persistent-hint
-                  multiple
-                  clearable
-                  :disabled="!requestObject.stationId"
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
                 ></v-autocomplete>
-              </v-flex>
-              <v-flex mt-5 ml-5 class="d-flex justify-between">
-                <v-btn
-                  justify-end
-                  outlined
-                  color="success"
-                  @click="getDailyMeansData"
-                  :disabled="$v.requestObject.$invalid"
-                  >SUBMIT</v-btn
-                >
-              </v-flex>
-            </v-layout>
-            <v-alert v-model="request_error" dismissible type="error">
-              [[ request_error_message ]]
-            </v-alert>
-            <v-overlay :value="loading">
-              <v-progress-circular
-                indeterminate
-                size="64"
-              ></v-progress-circular>
-            </v-overlay>
-            <v-layout mt-3 v-if="daily_means" column fluid>
-              <v-layout mt-3 mb-3>
-                <span class="srf-display-1"
-                  >Daily Means and Extreme Tabulation</span
-                >
-              </v-layout mt-3 mb-3>
-              <v-layout ml-3 column fluid>
-                <v-layout mt-3>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Station name: [[ daily_means.station.name ]]</span
-                    >
-                  </v-flex>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Month: [[ daily_means.params.month_desc ]]</span
-                    >
-                  </v-flex>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Period: [[ daily_means.params.period ]]</span
-                    >
-                  </v-flex>
-                </v-layout>
-                <v-layout mt-1>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Administrative Region: [[ daily_means.station.admin_region ]]</span
-                    >
-                  </v-flex>
-                </v-layout>
-                <v-layout mt-1>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Latitude: [[ daily_means.station.latitude ]]</span
-                    >
-                  </v-flex>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Longitude: [[ daily_means.station.longitude ]]</span
-                    >
-                  </v-flex>
-                </v-layout>
-                <v-layout mt-1 mb-3>
-                  <v-flex lg4>
-                    <span class="srf-display-2"
-                      >Elevation: [[ daily_means.station.elevation ]]
-                      meters</span
-                    >
-                  </v-flex>
-                </v-layout>
-                <v-layout mt-1 mb-3 column fluid>
-                  <v-flex>
-                    <span class="srf-display-1-1">Variables:</span>
-                  </v-flex>
-                  <v-flex ml-5 v-for="(variableName, symbol) in daily_means.station.variables" :key="symbol">
-                    <span class="srf-display-2-1">[[ symbol ]]: [[ variableName ]]</span>
-                  </v-flex>
-                </v-layout>
-              </v-layout>
-              <v-layout mt-3 column fluid>
-                <table class="w-100">
-                  <tr>
-                    <th>Day</th>
-                    <th
-                      v-for="(variable, index) in daily_means.variables"
-                      :key="index"
-                      :colspan="variable.metadata.colspan"
-                      class="firstColumn"
-                    >
-                      [[variable.metadata.name]]
-                    </th>
-                  </tr>
-                  <tr>
-                    <th></th>
-                    <template v-for="variable in daily_means.variables">
-                      <th
-                        v-for="(headers, index) in variable.metadata.headers"
-                        colspan="1"
-                        v-bind:class="{ firstColumn: index == 0 }"
-                      >
-                        [[headers]]
+              </v-col>
+            </v-row>
+          </div>
+        </section>
+
+        <section class="em-actions-panel" aria-label="Generate report">
+          <div class="em-actions-intro">
+            <h2>Generate tabulation</h2>
+            <p>Compare each calendar day across years, with a monthly summary below.</p>
+          </div>
+          <v-btn
+            class="em-generate-btn"
+            color="primary"
+            :disabled="!canGenerate"
+            :loading="loading"
+            @click="getDailyMeansData"
+          >
+            Generate report
+            <v-icon right size="18">mdi-table</v-icon>
+          </v-btn>
+        </section>
+
+        <v-alert v-if="request_error" type="error" dense dismissible
+                 class="em-request-error" @input="request_error = false">
+          [[ request_error_message ]]
+        </v-alert>
+
+        <!-- Results are a separate section so the table can scroll horizontally
+             without expanding the whole SURFACE page beyond the browser width. -->
+        <section class="em-section em-results-section" aria-labelledby="em-results-heading">
+          <div class="em-section-head">
+            <span class="em-section-step" aria-hidden="true">02</span>
+            <div class="em-section-title">
+              <h2 id="em-results-heading">Daily means and extremes</h2>
+              <p>Highs and lows show their year(s); monthly statistics summarize the selected station-days.</p>
+            </div>
+            <!-- Keep export visible at the result heading, even before generation.
+                 It is enabled only when there is a report to download. -->
+            <v-btn
+              outlined
+              color="success"
+              class="em-export-btn"
+              :disabled="!daily_means || loading"
+              @click="exportCsv"
+              aria-label="Export current Extremes and Means report as CSV"
+            >
+              <v-icon left size="18">mdi-file-delimited-outline</v-icon>
+              Export CSV
+            </v-btn>
+          </div>
+
+          <div class="em-results-body">
+            <div v-if="loading" class="em-results-state" role="status">
+              <v-progress-circular indeterminate color="primary" size="32"></v-progress-circular>
+              <strong>Generating report...</strong>
+              <p>Retrieving daily summaries and historical extremes.</p>
+            </div>
+            <template v-else-if="daily_means">
+              <!-- Preserve the exact station/params/variables fields returned by /api/daily_means/. -->
+              <div class="em-report-metadata">
+                <div class="em-report-main-info">
+                  <div class="em-info-field">
+                    <span>STATION</span>
+                    <strong>[[ daily_means.station.name ]]</strong>
+                  </div>
+                  <div class="em-info-field">
+                    <span>MONTH</span>
+                    <strong>[[ daily_means.params.month_desc ]]</strong>
+                  </div>
+                  <div class="em-info-field">
+                    <span>PERIOD</span>
+                    <strong>[[ daily_means.params.period ]]</strong>
+                  </div>
+                </div>
+                <div class="em-report-secondary-info">
+                  <span><b>Administrative region:</b> [[ daily_means.station.admin_region || '—' ]]</span>
+                  <span><b>Latitude:</b> [[ displayMetadata(daily_means.station.latitude) ]]</span>
+                  <span><b>Longitude:</b> [[ displayMetadata(daily_means.station.longitude) ]]</span>
+                  <span><b>Elevation:</b> [[ displayMetadata(daily_means.station.elevation) ]] m</span>
+                </div>
+                <div v-if="daily_means.station.variables && Object.keys(daily_means.station.variables).length" class="em-report-variables">
+                  <span class="em-small-label">VARIABLE KEY</span>
+                  <div class="em-variable-list">
+                    <span v-for="(variableName, symbol) in daily_means.station.variables"
+                          :key="symbol" class="em-variable-label">
+                      <strong>[[ symbol ]]</strong> [[ variableName ]]
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Small accent colors make the three kinds of statistic easy to scan,
+                   without changing SURFACE's neutral-white report layout. -->
+              <div class="em-stat-legend" aria-label="Statistic color key">
+                <span class="em-stat-pill em-stat-pill-mean"><span class="em-stat-dot"></span> Daily averages</span>
+                <span class="em-stat-pill em-stat-pill-high"><span class="em-stat-dot"></span> Highs</span>
+                <span class="em-stat-pill em-stat-pill-low"><span class="em-stat-dot"></span> Lows</span>
+                <span class="em-stat-help">Hover over Year(s) or Years values to see the actual reporting year(s).</span>
+              </div>
+
+              <!-- Both horizontal and vertical scrolling stay inside this report.
+                   This gives the three header rows a reliable sticky scroll area. -->
+              <div class="em-table-scroll" role="region" tabindex="0"
+                   @scroll="hideYearTooltip"
+                   aria-label="Scrollable daily averages, extremes and accumulation totals table">
+                <table class="em-data-table">
+                  <thead>
+                    <tr>
+                      <th rowspan="3" scope="col" class="em-day-column">Day</th>
+                      <th v-for="(variable, variableIndex) in daily_means.variables"
+                          :key="'variable-' + variableIndex"
+                          :colspan="variable.metadata.colspan"
+                          scope="colgroup"
+                          class="em-variable-group">
+                        [[ variable.metadata.name ]]
+                        <span v-if="variable.metadata.unit_symbol" class="em-variable-unit">([[ variable.metadata.unit_symbol ]])</span>
                       </th>
-                    </template>
-                  </tr>
-                  <tr v-for="(day, indexDay) in days">
-                    <td>[[ day ]]</td>
-                    <template v-for="variable in daily_means.variables">
-                      <td v-for="(column, index) in variable.metadata.columns" v-bind:class="{ firstColumn: index == 0 }">
-                        [[ variable.data[day] != null ?
-                        variable.data[day][column] : '-' ]]
-                      </td>
-                    </template>
-                  </tr>
-                  <tr>
-                    <td>Monthly</td>
-                    <template v-for="variable in daily_means.variables">
-                      <td v-for="(column, index) in variable.metadata.columns" v-bind:class="{ firstColumn: index == 0 }">
-                        [[ variable.summary != null ? variable.summary[column] :
-                        '-' ]]
-                      </td>
-                    </template>
-                  </tr>
+                    </tr>
+                    <!-- The backend provides groups and columns in matching order.
+                         Old backend responses still render through the fallback group. -->
+                    <tr>
+                      <template v-for="(variable, variableIndex) in daily_means.variables">
+                        <th v-for="(group, groupIndex) in (variable.metadata.groups || [{ label: 'Daily statistics', colspan: variable.metadata.colspan, tone: 'mean' }])"
+                            :key="'stat-group-' + variableIndex + '-' + groupIndex"
+                            :colspan="group.colspan"
+                            :class="['em-metric-group', 'em-group-tone-' + group.tone]"
+                            scope="colgroup">
+                          [[ group.label ]]
+                        </th>
+                      </template>
+                    </tr>
+                    <tr>
+                      <template v-for="(variable, variableIndex) in daily_means.variables">
+                        <th v-for="(heading, headingIndex) in variable.metadata.headers"
+                            :key="'heading-' + variableIndex + '-' + headingIndex"
+                            :class="[emColumnClass(variable.metadata.columns[headingIndex]), { 'em-first-column': headingIndex === 0 }]"
+                            scope="col">
+                          [[ heading ]]
+                        </th>
+                      </template>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Only valid dates for the requested month are rendered. Feb 29
+                         appears only when the selected years include a leap year. -->
+                    <tr v-for="day in days" :key="'day-' + day">
+                      <th scope="row" class="em-day-column">[[ day ]]</th>
+                      <template v-for="(variable, variableIndex) in daily_means.variables">
+                        <td v-for="(column, columnIndex) in variable.metadata.columns"
+                            :key="'value-' + day + '-' + variableIndex + '-' + columnIndex"
+                            :class="[emColumnClass(column), { 'em-first-column': columnIndex === 0 }]">
+                          <!-- One shared popup is far lighter than hundreds of v-tooltips.
+                               It also works for the Years COUNT column, which previously
+                               lacked actual year-list data in the API response. -->
+                          <span v-if="cellTitle(variable.data && variable.data[day], column)"
+                                class="em-year-hover-target" tabindex="0"
+                                :aria-label="cellTitle(variable.data && variable.data[day], column)"
+                                @mouseenter="showYearTooltip($event, variable.data && variable.data[day], column)"
+                                @mouseleave="hideYearTooltip"
+                                @focus="showYearTooltip($event, variable.data && variable.data[day], column)"
+                                @blur="hideYearTooltip">
+                            [[ reportCell(variable.data && variable.data[day], column) ]]
+                          </span>
+                          <template v-else>[[ reportCell(variable.data && variable.data[day], column) ]]</template>
+                        </td>
+                      </template>
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row" class="em-day-column">Monthly</th>
+                      <template v-for="(variable, variableIndex) in daily_means.variables">
+                        <td v-for="(column, columnIndex) in variable.metadata.columns"
+                            :key="'summary-' + variableIndex + '-' + columnIndex"
+                            :class="[emColumnClass(column), { 'em-first-column': columnIndex === 0 }]">
+                          <span v-if="cellTitle(variable.summary, column)"
+                                class="em-year-hover-target" tabindex="0"
+                                :aria-label="cellTitle(variable.summary, column)"
+                                @mouseenter="showYearTooltip($event, variable.summary, column)"
+                                @mouseleave="hideYearTooltip"
+                                @focus="showYearTooltip($event, variable.summary, column)"
+                                @blur="hideYearTooltip">
+                            [[ reportCell(variable.summary, column) ]]
+                          </span>
+                          <template v-else>[[ reportCell(variable.summary, column) ]]</template>
+                        </td>
+                      </template>
+                    </tr>
+                  </tfoot>
                 </table>
-              </v-layout>
-            </v-layout>
-          </v-layout>
-        </v-layout>
-      </v-content>
+              </div>
+              <p class="em-table-note">
+                <b>Calculation:</b> Mean = mean of daily avg_value; highest/lowest avg = extremes of daily avg_value.
+                Highest max and lowest min use daily max_value and min_value. Accumulation totals use sum_value.
+                Each valid station-day contributes equally. Years = number of contributing years (daily average, or daily total for accumulations).
+                <b>Monthly</b> summarizes all valid station-days in the requested month; it is not an average of the 28–31 displayed rows.
+                Zero is a valid observation; a dash indicates unavailable data. Only years with valid data in the selected month contribute.
+                Scroll horizontally for more variables, or vertically to browse days while keeping the headings in view.
+              </p>
+            </template>
+            <div v-else class="em-results-state">
+              <v-icon size="34" color="grey lighten-1">mdi-table-large</v-icon>
+              <strong>No report generated yet</strong>
+              <p>Select your parameters and click Generate report to view the tabulation.</p>
+            </div>
+          </div>
+        </section>
+      </main>
     </v-app>
+
+    <!-- One floating tooltip shared by all year cells. It is deliberately
+         outside the scrolling table so it cannot be clipped by its viewport. -->
+    <div v-if="yearTooltip.visible" class="em-floating-year-tooltip"
+         role="tooltip"
+         :class="{ 'em-tooltip-below': yearTooltip.below }"
+         :style="{ left: yearTooltip.x + 'px', top: yearTooltip.y + 'px' }">
+      [[ yearTooltip.text ]]
+    </div>
   </div>
-
-  {% endblock %} {% block localjavascript %}
-
-  <script>
-    Vue.use(window.vuelidate.default);
-    const { required, minLength } = window.validators;
-
-    new Vue({
-      el: "#app",
-      vuetify: new Vuetify(),
-      delimiters: ["[[", "]]"],
-      validations: {
-        requestObject: {
-          stationId: { required },
-          variableIds: { required },
-          month: { required },
-        },
-      },
-      data: {
-        timezone: "{{ TIMEZONE_NAME|escapejs }}",
-        request_error: false,
-        request_error_message: "",
-        variables: [],
-        requestObject: {
-          stationId: null,
-          variableIds: null,
-          month: null,
-          begin_date: moment().add(-30, 'years').format('YYYY-01'),
-          end_date: moment().format('YYYY-01'),
-          filter_interval: true
-        },
-        begin_date_menu: false,
-        end_date_menu: false,
-        loading: false,
-        daily_means: null,
-        days: [  1,  2,  3,  4,  5,  6,  7,  8,  9, 10,
-                11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-                21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
-        stations: [
-          {% for station in station_list %}
-          { id: {{ station.id }}, label: "{{ station.name | safe }} - {{ station.code }}"},
-          {% endfor %}
-        ],
-        months: [
-          {
-            label: "January",
-            value: 1,
-          },
-          {
-            label: "February",
-            value: 2,
-          },
-          {
-            label: "March",
-            value: 3,
-          },
-          {
-            label: "April",
-            value: 4,
-          },
-          {
-            label: "May",
-            value: 5,
-          },
-          {
-            label: "June",
-            value: 6,
-          },
-          {
-            label: "July",
-            value: 7,
-          },
-          {
-            label: "August",
-            value: 8,
-          },
-          {
-            label: "September",
-            value: 9,
-          },
-          {
-            label: "October",
-            value: 10,
-          },
-          {
-            label: "November",
-            value: 11,
-          },
-          {
-            label: "December",
-            value: 12,
-          },
-        ],
-        menu1: false,
-        menu2: false,
-        simpleTextFieldsRules: [
-          (v) => (v !== undefined && v !== "") || "This field is required",
-        ],
-      },
-      computed: {},
-      methods: {
-        getStationVariables(stationId) {
-          this.getAll(`api/stations_variables/?station_id=${stationId}`).then(
-            (data) => (this.variables = data)
-          );
-        },
-        getDailyMeansData() {
-          this.loading = true;
-          let interval_query = ""
-          if(!this.requestObject.filter_interval)
-            interval_query = `&begin_year=${moment(this.requestObject.begin_date).format('YYYY')}&end_year=${moment(this.requestObject.end_date).format('YYYY')}`
-          axios.get(`/api/daily_means/?station_id=${this.requestObject.stationId}&month=${this.requestObject.month.value}&variable_id_list=[${this.requestObject.variableIds}]${interval_query}`).then(
-            res => {
-              this.daily_means = res.data;
-              let month_desc = this.months.find(month => month.value == this.daily_means.params.month).label
-              this.daily_means.params["month_desc"] = month_desc
-              this.loading = false;
-            }
-          );
-        },
-        allowedDates(val){
-          return val.split('-')[1] == '01' // just january
-        },
-        getValueFromVariable(variable, day){
-          if(variable.data[day] != null && variable.data[day].value != null)
-            return variable.data[day].value
-          return '-'
-        },
-        getAggValueFromVariable(variable, day){
-          if(variable.data[day] != null && variable.data[day].agg_value != null)
-            return variable.data[day].agg_value
-          return '-'
-        },
-        getYearFromVariable(variable, day){
-          if(variable.data[day] != null && variable.data[day].year != null)
-            return variable.data[day].year
-          return '-'
-        },
-        getYearsFromVariable(variable, day){
-          if(variable.data[day] != null && variable.data[day].years != null)
-            return variable.data[day].years
-          return '-'
-        },
-        onChangeStation(stationId) {
-          this.getStationVariables(stationId);
-        },
-        getAll(path, url, oldData = []) {
-          return fetch(`/${path}`)
-            .then((res) => {
-              if (!res.ok) return res.json().then((err) => Promise.reject(err));
-
-              if (!res.body) {
-                return { next: null, results: [] };
-              }
-
-              return res.json();
-            })
-            .then(async (data) => {
-              if (data.results != null) {
-                const values = [...oldData, ...data.results];
-                if (!!data.next) {
-                  return await getAll(
-                    context,
-                    path,
-                    `/${path}/${data.next.substr(
-                      data.next.indexOf(`/${path}`)
-                    )}`,
-                    values
-                  );
-                }
-                return values;
-              }
-            });
-        },
-        allowedDates(val) {
-          return val.split("-")[1] == "01"; // just january
-        },
-      },
-      mounted() {
-      },
-    });
-  </script>
-
-  <style>
-    .firstColumn { 
-      border-left: 1px solid gray;
-    }
-
-    th, td {
-      padding: 3px;
-      padding-left: 10px;
-    }
-
-    .v-input--selection-controls__ripple {
-      border-radius: 50%;
-      cursor: pointer;
-      height: 34px;
-      position: absolute;
-      transition: inherit;
-      width: 34px;
-      left: -12px;
-      top: calc(50% - 24px);
-      margin: 7px;
-      z-index: 10 !important;
-    }
-  </style>
 </div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  Vue.use(window.vuelidate.default);
+  const { required } = window.validators;
+
+  // Use the SURFACE-configured timezone for the initial reporting years.
+  // Date-only year pickers do not represent UTC timestamps.
+  const emTimezone = "{{ TIMEZONE_NAME|escapejs }}";
+  const emCurrentYear = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: emTimezone || 'UTC', year: 'numeric'
+  }).format(new Date()));
+
+  new Vue({
+    el: '#app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    validations: {
+      requestObject: {
+        stationId: { required },
+        variableIds: { required },
+        month: { required }
+      }
+    },
+    data: {
+      timezone: emTimezone,
+      // Load accessible stations via the same endpoint as Yearly Average,
+      // rather than depending on a server-side station_list template context.
+      stations: [],
+      months: [
+        { label: 'January', value: 1 },
+        { label: 'February', value: 2 },
+        { label: 'March', value: 3 },
+        { label: 'April', value: 4 },
+        { label: 'May', value: 5 },
+        { label: 'June', value: 6 },
+        { label: 'July', value: 7 },
+        { label: 'August', value: 8 },
+        { label: 'September', value: 9 },
+        { label: 'October', value: 10 },
+        { label: 'November', value: 11 },
+        { label: 'December', value: 12 }
+      ],
+      variables: [],
+      requestObject: {
+        stationId: null,
+        variableIds: [],
+        month: null,
+        begin_date: String(emCurrentYear - 30) + '-01',
+        end_date: String(emCurrentYear) + '-01',
+        filter_interval: true
+      },
+      begin_date_menu: false,
+      end_date_menu: false,
+      loading: false,
+      loadingStations: false,
+      loadingVariables: false,
+      stationsError: '',
+      variablesError: '',
+      request_error: false,
+      request_error_message: '',
+      daily_means: null,
+      yearTooltip: { visible: false, x: 0, y: 0, text: '', below: false },
+      // Each request has a generation so a slower, older response cannot
+      // overwrite the currently selected station or period.
+      variableRequestId: 0,
+      reportRequestId: 0
+    },
+    computed: {
+      hasSelectedStation() {
+        const id = this.requestObject.stationId;
+        return id !== null && id !== undefined && id !== '';
+      },
+      // Show actual calendar days rather than always displaying day 31.
+      // For a year range, only include 29 February if that range contains a
+      // leap year; an all-years report may include historic leap years.
+      days() {
+        const report = this.daily_means;
+        const params = report && report.params;
+        const month = params ? Number(params.month) :
+          (this.requestObject.month ? Number(this.requestObject.month.value) : 1);
+        let dayCount = new Date(Date.UTC(2024, month, 0)).getUTCDate();
+        if (month === 2 && params && params.begin_year && params.end_year) {
+          const start = Number(params.begin_year);
+          const end = Number(params.end_year);
+          let containsLeapYear = false;
+          for (let year = start; year <= end; year++) {
+            if (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) {
+              containsLeapYear = true;
+              break;
+            }
+          }
+          dayCount = containsLeapYear ? 29 : 28;
+        }
+        return Array.from({ length: dayCount }, (_, index) => index + 1);
+      },
+      dateRangeError() {
+        if (this.requestObject.filter_interval) return '';
+        const start = this.requestObject.begin_date;
+        const end = this.requestObject.end_date;
+        if (!/^\d{4}-01$/.test(start || '') || !/^\d{4}-01$/.test(end || '')) {
+          return 'Choose a valid start and end year.';
+        }
+        if (start > end) return 'The start year cannot be after the end year.';
+        return '';
+      },
+      canGenerate() {
+        // A stale or manually modified selection must not submit a variable
+        // that is absent from the verified assignments for this station.
+        const allowed = new Set(this.variables.map(item => String(item.variable)));
+        const selected = this.requestObject.variableIds;
+        return !this.loading && !this.loadingStations && !this.loadingVariables &&
+          this.hasSelectedStation &&
+          this.requestObject.month !== null &&
+          Array.isArray(selected) && selected.length > 0 &&
+          selected.every(id => allowed.has(String(id))) &&
+          !this.dateRangeError;
+      }
+    },
+    watch: {
+      // A watcher (as in Yearly Average) handles selecting, clearing, or
+      // programmatically changing stations. It also avoids a separate @change
+      // handler competing with the model update.
+      'requestObject.stationId'(stationId) {
+        this.onChangeStation(stationId);
+      }
+    },
+    methods: {
+      stationDisplayName(station) {
+        if (!station) return '';
+        return [station.name, station.code ? '(' + station.code + ')' : '']
+          .filter(Boolean).join(' ');
+      },
+      // Values of 0 are valid observations. Only null/undefined/empty cells
+      // should be displayed as missing, never use a truthiness check here.
+      reportCell(record, column) {
+        if (!record || !Object.prototype.hasOwnProperty.call(record, column)) return '-';
+        const value = record[column];
+        return value === null || value === undefined || value === '' ? '-' : value;
+      },
+      displayMetadata(value) {
+        return value === null || value === undefined || value === '' ? '—' : value;
+      },
+      // Match the soft-color legend to the new backend's metadata.columns.
+      // This function also handles legacy columns from older responses.
+      emColumnClass(column) {
+        if (column === 'years') return 'em-col-count';
+        if (column && column.indexOf('high_') === 0) return 'em-col-high';
+        if (column && column.indexOf('low_') === 0) return 'em-col-low';
+        if (column === 'agg_value') return 'em-col-high';
+        return 'em-col-mean';
+      },
+      // Extremes have *_ties lists; the plain Years counter uses years_list.
+      // A sparse test database with only one available year should therefore
+      // show the actual year rather than an empty hover tooltip.
+      cellTitle(record, column) {
+        if (!record || !column) return '';
+        if (column === 'years') {
+          const contributed = record.years_list;
+          return Array.isArray(contributed) && contributed.length ?
+            'Contributing year(s): ' + contributed.join(', ') : '';
+        }
+        if (!column.endsWith('_years')) return '';
+        const tieKey = column.slice(0, -'_years'.length) + '_ties';
+        const tiedYears = record[tieKey];
+        return Array.isArray(tiedYears) && tiedYears.length ?
+          'Extreme recorded in: ' + tiedYears.join(', ') : '';
+      },
+      // Render the year list immediately and in one shared element. Native
+      // title tooltips were slow and did not cover the plain Years column.
+      showYearTooltip(event, record, column) {
+        const label = this.cellTitle(record, column);
+        if (!label || !event || !event.currentTarget) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const halfWidth = Math.min(160, Math.max(24, window.innerWidth / 2 - 12));
+        const x = Math.max(halfWidth, Math.min(rect.left + rect.width / 2, window.innerWidth - halfWidth));
+        const below = rect.top < 72;
+        this.yearTooltip = {
+          visible: true,
+          text: label,
+          x: x,
+          y: below ? rect.bottom + 8 : rect.top - 8,
+          below: below
+        };
+      },
+      hideYearTooltip() {
+        this.yearTooltip.visible = false;
+      },
+      // CSV is generated from the already-loaded report, not by re-querying the
+      // database. Export complete tied-year lists, not the shortened '2024 (+3)'
+      // labels from the dense on-screen table.
+      csvValue(record, column) {
+        if (!record) return '';
+        if (column === 'years_list') {
+          return Array.isArray(record.years_list) ? record.years_list.join('; ') : '';
+        }
+        if (column && column.endsWith('_years')) {
+          const tied = record[column.slice(0, -'_years'.length) + '_ties'];
+          if (Array.isArray(tied) && tied.length) return tied.join('; ');
+        }
+        const value = record[column];
+        return value === null || value === undefined || value === '' ? '' : value;
+      },
+      csvEscape(value) {
+        if (value === null || value === undefined) return '""';
+        let text = String(value);
+        // Guard against CSV formula injection when station/variable metadata is
+        // opened in Excel, without turning genuine negative numbers into text.
+        if (typeof value === 'string' && /^\s*[=+\-@\t\r\n]/.test(text)) {
+          text = "'" + text;
+        }
+        return '"' + text.replace(/"/g, '""') + '"';
+      },
+      exportCsv() {
+        const report = this.daily_means;
+        if (!report || this.loading) return;
+        const station = report.station || {};
+        const params = report.params || {};
+        const rows = [
+          ['Report', 'SURFACE — Extremes and Means'],
+          ['Station', station.name || ''],
+          ['Month', params.month_desc || ''],
+          ['Period', params.period || 'All years'],
+          ['Administrative region', station.admin_region || ''],
+          ['Latitude', this.displayMetadata(station.latitude)],
+          ['Longitude', this.displayMetadata(station.longitude)],
+          ['Elevation (m)', this.displayMetadata(station.elevation)],
+          []
+        ];
+
+        // Use metadata to match the currently displayed variable/group order.
+        // Add one informative CSV-only column after each Years count so that
+        // external analysts can identify exactly which years contributed.
+        const exportColumns = [];
+        Object.values(report.variables || {}).forEach(variable => {
+          const meta = variable.metadata || {};
+          const columns = meta.columns || [];
+          const headers = meta.headers || [];
+          const groups = meta.groups || [{ label: 'Daily statistics', colspan: columns.length }];
+          const name = (meta.name || 'Variable') +
+            (meta.unit_symbol ? ' (' + meta.unit_symbol + ')' : '');
+          let index = 0;
+          groups.forEach(group => {
+            for (let i = 0; i < group.colspan && index < columns.length; i++, index++) {
+              const column = columns[index];
+              const prefix = name + ' / ' + group.label + ' / ';
+              exportColumns.push({ variable, column, heading: prefix + (headers[index] || column) });
+              if (column === 'years') {
+                exportColumns.push({ variable, column: 'years_list', heading: prefix + 'Contributing years' });
+              }
+            }
+          });
+          // Older backends may not send groups; never lose the remaining columns.
+          for (; index < columns.length; index++) {
+            const column = columns[index];
+            const prefix = name + ' / ';
+            exportColumns.push({ variable, column, heading: prefix + (headers[index] || column) });
+            if (column === 'years') {
+              exportColumns.push({ variable, column: 'years_list', heading: prefix + 'Contributing years' });
+            }
+          }
+        });
+        rows.push(['Day', ...exportColumns.map(item => item.heading)]);
+        this.days.forEach(day => {
+          rows.push([day, ...exportColumns.map(item =>
+            this.csvValue(item.variable.data && item.variable.data[day], item.column))]);
+        });
+        rows.push(['Monthly', ...exportColumns.map(item =>
+          this.csvValue(item.variable.summary, item.column))]);
+
+        // BOM and CRLF keep the downloaded CSV readable in Excel and similar
+        // applications, including station/variable names with special symbols.
+        const csv = '\uFEFF' + rows.map(row => row.map(value => this.csvEscape(value)).join(',')).join('\r\n');
+        const filenameToken = value => String(value || 'unknown')
+          .replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'unknown';
+        const periodToken = params.begin_year != null && params.end_year != null ?
+          params.begin_year + '-' + params.end_year : 'all-years';
+        const filename = 'surface-extremes-means-' + filenameToken(station.name) + '-' +
+          filenameToken(params.month_desc) + '-' + periodToken + '.csv';
+        const objectUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      },
+      // Only January is selectable because these month pickers represent years.
+      allowedDates(value) {
+        return String(value).split('-')[1] === '01';
+      },
+      async getStations() {
+        this.loadingStations = true;
+        this.stationsError = '';
+        try {
+          this.stations = await this.getAll('api/stations');
+        } catch (error) {
+          this.stations = [];
+          this.stationsError = 'Unable to load stations. Reload to retry.';
+          console.error('Extremes & Means: unable to load stations:', error);
+        } finally {
+          this.loadingStations = false;
+        }
+      },
+      onChangeStation(stationId) {
+        // Invalidate the in-flight variable request, reset the previous
+        // station's selections, and clear results belonging to that station.
+        // Do this before loading so no stale options are briefly selectable.
+        ++this.variableRequestId;
+        this.requestObject.variableIds = [];
+        this.variables = [];
+        this.variablesError = '';
+        this.loadingVariables = false;
+        this.daily_means = null;
+        this.hideYearTooltip();
+        this.request_error = false;
+        this.request_error_message = '';
+        ++this.reportRequestId;
+        this.loading = false;
+
+        if (stationId !== null && stationId !== undefined && stationId !== '') {
+          this.getStationVariables(stationId);
+        }
+      },
+      stationIdFromAssignment(assignment) {
+        // StationVariable serializers commonly expose station as an ID or as
+        // a nested object. Some expose station_id instead. Keep strict ID
+        // matching so entries from other stations cannot leak into the picker.
+        if (!assignment || typeof assignment !== 'object') return null;
+        let station = assignment.station_id;
+        if (station === null || station === undefined) station = assignment.station;
+        if (station === null || station === undefined) station = assignment.stationId;
+        if (station && typeof station === 'object') {
+          station = station.id !== undefined ? station.id : station.pk;
+        }
+        return station === null || station === undefined || station === '' ? null : station;
+      },
+      async getStationVariables(stationId) {
+        // The station_id query parameter is necessary, but not sufficient:
+        // some API implementations ignore it and return all StationVariable
+        // assignments. Verify each returned row belongs to this station.
+        // Keep the full paginated list so later pages aren't missed.
+        const requestId = ++this.variableRequestId;
+        this.loadingVariables = true;
+        this.variablesError = '';
+        try {
+          const items = await this.getAll(
+            'api/stations_variables/?station_id=' + encodeURIComponent(stationId)
+          );
+          // A quick change from A to B must never show A's late response.
+          if (requestId !== this.variableRequestId ||
+              String(this.requestObject.stationId) !== String(stationId)) return;
+
+          const seenVariableIds = new Set();
+          const matched = [];
+          let missingStationId = 0;
+          for (const item of items) {
+            const assignedStationId = this.stationIdFromAssignment(item);
+            if (assignedStationId === null) {
+              // Never display unverified assignments. If this happens, the
+              // serializer must return station (or station_id).
+              missingStationId += 1;
+              continue;
+            }
+            if (String(assignedStationId) !== String(stationId)) continue;
+            const variableId = item.variable;
+            if (variableId === null || variableId === undefined || variableId === '') continue;
+            if (seenVariableIds.has(String(variableId))) continue;
+            seenVariableIds.add(String(variableId));
+            matched.push(item);
+          }
+
+          this.variables = matched;
+          if (missingStationId) {
+            // Show a visible warning instead of silently claiming a station
+            // has no assigned variables because the API dropped station IDs.
+            this.variablesError = 'Some station-variable records have no station ID. Check the API serializer.';
+            console.warn('Extremes & Means: skipped station-variable records without a station ID:', missingStationId);
+          }
+        } catch (error) {
+          if (requestId !== this.variableRequestId) return;
+          this.variables = [];
+          this.variablesError = 'Unable to load station variables.';
+          console.error('Extremes & Means: unable to load station variables:', error);
+        } finally {
+          if (requestId === this.variableRequestId) this.loadingVariables = false;
+        }
+      },
+      getDailyMeansData() {
+        if (!this.canGenerate) return;
+        const requestId = ++this.reportRequestId;
+        this.loading = true;
+        this.daily_means = null;
+        this.hideYearTooltip();
+        this.request_error = false;
+        this.request_error_message = '';
+
+        // Preserve the existing API contract: variable_id_list is a string
+        // formatted as [id1,id2], and begin_year/end_year are optional.
+        const params = {
+          station_id: this.requestObject.stationId,
+          month: this.requestObject.month.value,
+          variable_id_list: '[' + this.requestObject.variableIds.join(',') + ']'
+        };
+        if (!this.requestObject.filter_interval) {
+          params.begin_year = this.requestObject.begin_date.slice(0, 4);
+          params.end_year = this.requestObject.end_date.slice(0, 4);
+        }
+
+        return axios.get('/api/daily_means/', { params: params })
+          .then(response => {
+            if (requestId !== this.reportRequestId) return;
+            const data = response.data;
+
+            /*
+             * IMPORTANT: /api/daily_means/ can return `variables` as an object
+             * keyed by variable rather than an array. Vue 2's v-for handles
+             * both forms, so do not use Array.isArray() to validate this field.
+             * This keeps the redesigned page compatible with the original API.
+             */
+            if (!data || typeof data !== 'object' ||
+                !data.station || !data.params ||
+                !data.variables || typeof data.variables !== 'object') {
+              // Include the actual payload to distinguish an API error from
+              // an unexpected schema; avoid logging full successful reports.
+              console.error('Extremes & Means: unexpected API payload:', data);
+              throw new Error('Unexpected report response format.');
+            }
+            const month = this.months.find(item => item.value === Number(data.params.month));
+            data.params.month_desc = month ? month.label : String(data.params.month);
+            this.daily_means = data;
+          })
+          .catch(error => {
+            if (requestId !== this.reportRequestId) return;
+            this.request_error = true;
+            const serverMessage = error.response && error.response.data &&
+              (error.response.data.message || error.response.data.detail);
+            this.request_error_message = serverMessage ||
+              'Unable to generate the report. Please review the parameters and try again.';
+            console.error('Extremes & Means report:', error);
+          })
+          .finally(() => {
+            if (requestId === this.reportRequestId) this.loading = false;
+          });
+      },
+      // API list routes may return either an array or DRF paginated results.
+      // Follow every page while rejecting accidental cross-origin URLs and
+      // pagination loops, just as the Yearly Average report does.
+      async getAll(path) {
+        const collected = [];
+        const visited = new Set();
+        let next = new URL('/' + String(path).replace(/^\/+/, ''), window.location.origin).href;
+        let pageCount = 0;
+        while (next) {
+          if (++pageCount > 100) throw new Error('Pagination limit reached.');
+          const url = new URL(next, window.location.origin);
+          if (url.origin !== window.location.origin) throw new Error('Unexpected cross-origin pagination URL.');
+          if (visited.has(url.href)) throw new Error('Repeated pagination URL.');
+          visited.add(url.href);
+          const response = await fetch(url.href, { credentials: 'same-origin' });
+          if (!response.ok) throw new Error('API request failed: HTTP ' + response.status);
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            collected.push(...data);
+            break;
+          }
+          if (!data || !Array.isArray(data.results)) throw new Error('Unexpected paginated API response.');
+          collected.push(...data.results);
+          next = data.next || null;
+        }
+        return collected;
+      }
+    },
+    mounted() {
+      // Populate the station list on page load, matching Yearly Average.
+      this.getStations();
+    }
+  });
+</script>
+
+<style>
+  /* Shared page alignment mirrors Data Export: srf-container (24px)
+     plus page-heading/workspace padding (20px). */
+  .em-page { width: 100%; background: #fff; color: #252525; }
+  .em-page .v-application,
+  .em-page .v-application--wrap { background: #fff !important; }
+  .em-page .v-application--wrap { min-height: auto !important; }
+  .em-page .em-page-heading { padding: 20px 20px 12px; }
+  .em-page .em-page-heading .srf-display-1 { display: inline-block; color: #232323; }
+  .em-page .em-page-heading p { margin: 5px 0 0; font-size: 13px; color: #737373; }
+  .em-page .em-workspace { width: 100%; padding: 0 20px 28px; margin: 0 auto; }
+
+  .em-page .em-section {
+    margin-bottom: 17px; border: 1px solid #e5e5e5; border-radius: 11px;
+    background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.025);
+    overflow: hidden;
+  }
+  .em-page .em-section-head {
+    display: flex; align-items: center; gap: 13px;
+    padding: 17px 20px; border-bottom: 1px solid #eee; min-height: 74px;
+  }
+  .em-page .em-section-step {
+    width: 35px; height: 35px; flex: none; display: flex;
+    align-items: center; justify-content: center;
+    background: #f2f2f2; border: 1px solid #e7e7e7;
+    color: #555; border-radius: 9px; font-size: 12px;
+    font-weight: 750; letter-spacing: .025em;
+  }
+  .em-page .em-section-title { flex: 1; min-width: 0; }
+  .em-page .em-section-title h2 { color: #242424; margin: 0; font-size: 16px; line-height: 1.4; font-weight: 700; }
+  .em-page .em-section-title p { margin: 3px 0 0; color: #777; font-size: 12px; line-height: 1.5; }
+  .em-page .em-section-symbol { color: #9a9a9a; font-size: 23px; }
+  .em-page .em-results-section .em-section-head { flex-wrap: wrap; }
+  .em-page .em-export-btn {
+    flex: none; margin-left: auto; text-transform: none; letter-spacing: 0;
+    border-radius: 7px; font-size: 12px; font-weight: 650; box-shadow: none;
+  }
+  .em-page .em-section-body { padding: 19px 21px 17px; }
+  .em-page .em-small-label {
+    color: #777; text-transform: uppercase; letter-spacing: .065em;
+    font-weight: 700; font-size: 10px; margin-bottom: 8px;
+  }
+  .em-page .em-input-row { margin-bottom: 0 !important; }
+  .em-page .em-subsection-divider { border-top: 1px solid #eee; margin: 14px 0 17px; }
+  .em-page .em-section-body .v-input { font-size: 13px; }
+  .em-page .em-section-body .v-label { color: #626262; }
+  .em-page .em-all-years-switch { margin: 3px 0 14px; padding-top: 4px; }
+  .em-page .em-all-years-switch .v-label { font-size: 13px; }
+  .em-page .em-inline-error { display: flex; align-items: center; gap: 7px; color: #bd2828; font-size: 12px; padding: 3px 0 8px; }
+  .em-page .em-section-body .v-chip { background: #f3f3f3; color: #444; font-size: 12px; }
+
+  .em-page .em-actions-panel {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px;
+    padding: 21px; border: 1px solid #dfdfdf; border-radius: 11px;
+    background: #fff; margin: 2px 0 18px;
+  }
+  .em-page .em-actions-intro { flex: 1 1 260px; }
+  .em-page .em-actions-intro h2 { font-size: 16px; font-weight: 700; margin: 0 0 3px; color: #222; }
+  .em-page .em-actions-intro p { font-size: 12px; color: #777; margin: 0; }
+  .em-page .em-generate-btn {
+    text-transform: none; font-size: 12px; font-weight: 650; letter-spacing: 0;
+    border-radius: 7px; min-height: 39px; box-shadow: none;
+  }
+  .em-page .em-request-error { margin: 8px 0 18px; }
+  .em-page .em-results-body { padding: 19px 21px 17px; min-width: 0; }
+  .em-page .em-results-state {
+    padding: 42px 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; gap: 8px;
+  }
+  .em-page .em-results-state strong { font-size: 13px; color: #4a4a4a; }
+  .em-page .em-results-state p { margin: 0; color: #888; font-size: 12px; }
+
+  .em-page .em-report-metadata { margin-bottom: 19px; padding: 2px 0 17px; border-bottom: 1px solid #eee; }
+  .em-page .em-report-main-info { display: flex; flex-wrap: wrap; gap: 13px 32px; margin-bottom: 15px; }
+  .em-page .em-info-field { display: flex; flex-direction: column; gap: 4px; min-width: 135px; }
+  .em-page .em-info-field > span { font-size: 10px; color: #888; font-weight: 700; letter-spacing: .055em; }
+  .em-page .em-info-field > strong { font-size: 14px; color: #242424; font-weight: 650; }
+  .em-page .em-report-secondary-info { display: flex; flex-wrap: wrap; gap: 8px 21px; font-size: 12px; color: #666; }
+  .em-page .em-report-secondary-info b { color: #444; font-weight: 650; }
+  .em-page .em-report-variables { margin-top: 15px; }
+  .em-page .em-variable-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .em-page .em-variable-label { display: inline-flex; gap: 6px; padding: 5px 9px; border: 1px solid #e9e9e9; border-radius: 6px; background: #fafafa; color: #555; font-size: 11px; }
+  .em-page .em-variable-label strong { color: #333; }
+
+  /* Color is intentionally restrained: muted tinted headers and one-line key;
+     the page remains white, matching the Data Export / Yearly Average style. */
+  .em-page .em-stat-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 9px; margin: -2px 0 13px; }
+  .em-page .em-stat-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid transparent; border-radius: 6px; font-size: 11px; font-weight: 700; }
+  .em-page .em-stat-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .em-page .em-stat-pill-mean { background: #edf8f5; color: #14755f; border-color: #d2ede4; }
+  .em-page .em-stat-pill-high { background: #fff3ec; color: #a4542f; border-color: #f4e1d3; }
+  .em-page .em-stat-pill-low { background: #eef4fd; color: #426caa; border-color: #dce7f7; }
+  .em-page .em-stat-help { font-size: 11px; color: #888; margin-left: auto; }
+  .em-page .em-variable-unit { font-weight: 500; color: #818181; margin-left: 4px; }
+  .em-page .em-data-table thead .em-metric-group { font-weight: 700; font-size: 10px; letter-spacing: .02em; padding: 8px 10px; }
+  .em-page .em-data-table thead .em-group-tone-mean { background: #eaf6f1; color: #206853; }
+  .em-page .em-data-table thead .em-group-tone-extreme { background: #fff1e8; color: #995029; }
+  .em-page .em-data-table thead .em-group-tone-total { background: #f1f1fb; color: #62539b; }
+  .em-page .em-data-table thead tr:last-child th.em-col-mean { background: #f5faf8; color: #326d5d; }
+  .em-page .em-data-table thead tr:last-child th.em-col-high { background: #fff8f4; color: #9d5634; }
+  .em-page .em-data-table thead tr:last-child th.em-col-low { background: #f4f8fd; color: #4c70a7; }
+  .em-page .em-data-table thead tr:last-child th.em-col-count { background: #f8f8f8; color: #676767; }
+  .em-page .em-data-table tbody td.em-col-high { color: #965135; }
+  .em-page .em-data-table tbody td.em-col-low { color: #4c6e9d; }
+  /* The interactive target is keyboard-focusable as well as hoverable. */
+  .em-page .em-year-hover-target {
+    cursor: help; text-decoration: underline dotted rgba(90,90,90,.45);
+    text-underline-offset: 3px; border-radius: 2px;
+  }
+  .em-page .em-year-hover-target:focus-visible { outline: 2px solid #488a70; outline-offset: 3px; }
+  .em-floating-year-tooltip {
+    position: fixed; z-index: 9999; pointer-events: none;
+    transform: translate(-50%, -100%); max-width: min(340px, calc(100vw - 24px));
+    padding: 9px 12px; border-radius: 7px; background: #263238; color: #fff;
+    box-shadow: 0 5px 18px rgba(0,0,0,.22); font: 12px/1.5 sans-serif;
+    text-align: center; overflow-wrap: anywhere;
+  }
+  .em-floating-year-tooltip.em-tooltip-below { transform: translate(-50%, 0); }
+
+  /* Scroll only the report grid. Do not apply global th/td or z-index rules,
+     since this template is inherited from base.html by other pages. */
+  .em-page .em-table-scroll {
+    /* Vertical scrolling is essential: sticky cells follow THIS scrollport,
+       not the document. The table can still scroll horizontally as before. */
+    overflow: auto; max-width: 100%; max-height: clamp(340px, 68vh, 700px);
+    border: 1px solid #e7e7e7; border-radius: 8px;
+  }
+  .em-page .em-data-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: max-content; table-layout: auto; font-size: 12px; }
+  .em-page .em-data-table th,
+  .em-page .em-data-table td { border-right: 1px solid #eee; border-bottom: 1px solid #eee; padding: 9px 11px; text-align: center; white-space: nowrap; color: #343434; }
+  .em-page .em-data-table thead th {
+    background: #fafafa; font-size: 11px; color: #555; font-weight: 700;
+    position: sticky; box-sizing: border-box;
+  }
+  /* Three distinct sticky rows. Keep their heights in sync with these offsets.
+     The Day header spans all three rows and stays pinned at top: 0. */
+  .em-page .em-data-table thead tr:nth-child(1) th { top: 0; height: 42px; z-index: 6; }
+  .em-page .em-data-table thead tr:nth-child(2) th { top: 42px; height: 36px; z-index: 5; }
+  .em-page .em-data-table thead tr:nth-child(3) th { top: 78px; height: 40px; z-index: 4; }
+  .em-page .em-data-table thead tr:first-child th { border-bottom: 1px solid #e5e5e5; }
+  .em-page .em-data-table .em-variable-group { background: #f7f7f7; }
+  .em-page .em-data-table .em-first-column { border-left: 1px solid #dadada; }
+  .em-page .em-data-table tbody tr:hover > * { background: #f9fafb; }
+  .em-page .em-data-table .em-day-column {
+    position: sticky; left: 0; z-index: 1; background: #fff;
+    min-width: 66px; font-weight: 700; text-align: left;
+    box-shadow: 1px 0 0 #e5e5e5;
+  }
+  .em-page .em-data-table thead th.em-day-column {
+    top: 0; z-index: 8; height: 118px; background: #fafafa;
+  }
+  .em-page .em-data-table tfoot > tr > * { background: #f3f4f5; font-weight: 700; border-bottom: 0; }
+  .em-page .em-data-table tfoot .em-day-column { background: #f3f4f5; }
+  .em-page .em-data-table tr > *:last-child { border-right: 0; }
+  /* .em-page .em-table-note { margin: 11px 0 0; font-size: 11px; color: #777; line-height: 1.7; } */
+  /* .em-page .em-table-note b { color: #4a4a4a; } */
+  .em-page .em-table-note { margin: 11px 0 0; font-size: 11px; color: rgb(245, 104, 104); line-height: 1.7; }
+  .em-page .em-table-note b { color: rgb(181, 49, 49); }
+
+  @media (max-width: 760px) {
+    .em-page .em-page-heading { padding: 14px 11px 10px; }
+    .em-page .em-workspace { padding: 0 11px 20px; }
+    .em-page .em-section-head { padding: 14px; gap: 10px; }
+    .em-page .em-section-body,
+    .em-page .em-results-body { padding: 15px 13px; }
+    .em-page .em-section-symbol { display: none; }
+    .em-page .em-actions-panel { padding: 16px; }
+    .em-page .em-generate-btn { width: 100%; }
+    .em-page .em-export-btn { margin-left: 48px; }
+  }
+</style>
 {% endblock %}

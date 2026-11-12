@@ -1,1139 +1,1688 @@
-{% extends "base.html" %} {% block content %} 
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+
+<!-- CKEditor 4.22.1 is end-of-life and insecure. Upgrade to licensed CKEditor 4 LTS
+     or migrate to a supported editor; do not treat hiding its version warning as a security fix. -->
 <script src="https://cdn.ckeditor.com/4.22.1/full/ckeditor.js"></script>
 <script src="/static/js/ckeditor-vue.js"></script>
 
-<style>
-  .cke_notifications_area { display: none; }
-</style>
+<div class="srf-container mrnew-page">
+  <div id="app" v-cloak>
+    <v-app>
+      <v-content class="mrnew-vcontent">
+        <div class="mrnew-shell">
 
-<div class="srf-container">
-  <div id="app" v-cloak> 
-    <v-app>    
-      <v-content fluid fill-height style="background: white">
-        <v-layout column>           
-          <div class="srf-flex flex-row align-items-center justify-content-between srf-padding">
-            <span class="srf-display-1 text-uppercase">Maintenance Reports - New Report</span
-            ><br /><br />
+          <header class="mrnew-page-header">
+            <div>
+              <div class="srf-display-1 text-uppercase">Maintenance Reports - New Report</div>
+              <p class="mrnew-page-subtitle">Record a station visit, document equipment conditions, and prepare a maintenance report.</p>
+            </div>
+            <v-btn text small color="primary" href="{% url 'maintenance-reports' %}" class="mrnew-back-link">
+              <v-icon small left>mdi-arrow-left</v-icon>
+              All maintenance reports
+            </v-btn>
+          </header>
+
+          <div class="mrnew-local-time" role="note">
+            <v-icon size="18" color="#64748b">mdi-clock-outline</v-icon>
+            <span>Enter all visit dates and times in the <strong>station's local time</strong>.</span>
           </div>
 
-          <!-- Notifying user that the data displayed and all dates shown are in THE STATIONS LOCAL TIME -->
-          <div style="width: 50%;">
-              <v-alert
-                  type="info"
-                  dense
-                  outlined
-                  text
-                  color="purple"
-              >
-                Note: All dates and times shown are to be in the <b>station's local time.</b>
+          <section class="mrnew-panel mrnew-details-panel" aria-label="Report details">
+            <div class="mrnew-section-header">
+              <div>
+                <h2>Report details</h2>
+                <p>Select the station, visit type, and responsible technician before recording the visit.</p>
+              </div>
+              <span class="mrnew-section-hint" v-if="disableForm"><v-icon size="15">mdi-lock-outline</v-icon> Details locked after creation</span>
+              <span class="mrnew-section-hint" v-else>Required fields</span>
+            </div>
+
+            <div class="mrnew-details-content">
+              <div class="mrnew-field-group">
+                <label class="mrnew-field-label">Station type</label>
+                <div class="mrnew-mode-switch" role="group" aria-label="Station type">
+                  <button type="button" :class="{ active: filter.isAutomatic }" :aria-pressed="filter.isAutomatic ? 'true' : 'false'"
+                          :disabled="disableForm || loading" @click="setStationMode(true)">Automatic</button>
+                  <button type="button" :class="{ active: !filter.isAutomatic }" :aria-pressed="!filter.isAutomatic ? 'true' : 'false'"
+                          :disabled="disableForm || loading" @click="setStationMode(false)">Manual</button>
+                </div>
+              </div>
+
+              <v-row dense class="mrnew-form-grid">
+                <v-col cols="12" sm="6" md="4">
+                  <v-autocomplete
+                    :items="stationList" item-text="label" item-value="id"
+                    v-model="maintenance_report.station_id" :disabled="disableForm || loading"
+                    label="Station" outlined dense clearable autocomplete="off"
+                    :rules="simpleTextFieldsRules" hide-details="auto"
+                  ></v-autocomplete>
+                </v-col>
+
+                <v-col cols="12" sm="6" md="4">
+                  <v-menu v-model="maintenance_report.visit_date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y min-width="290px">
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="maintenance_report.visit_date" label="Date of visit"
+                                    readonly v-on="on" :disabled="disableForm || loading" outlined dense
+                                    prepend-inner-icon="mdi-calendar-outline" hide-details="auto"></v-text-field>
+                    </template>
+                    <v-date-picker v-model="maintenance_report.visit_date"
+                                   @input="maintenance_report.visit_date_menu = false"></v-date-picker>
+                  </v-menu>
+                </v-col>
+
+                <v-col cols="12" sm="6" md="4">
+                  <v-menu v-model="maintenance_report.initial_time_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y>
+                    <template v-slot:activator="{ on }">
+                      <v-text-field v-model="maintenance_report.initial_time" label="Initial time"
+                                    readonly v-on="on" :disabled="disableForm || loading" outlined dense
+                                    prepend-inner-icon="mdi-clock-outline" hide-details="auto"></v-text-field>
+                    </template>
+                    <v-time-picker v-model="maintenance_report.initial_time" format="24hr"
+                                   @click:minute="maintenance_report.initial_time_menu = false"></v-time-picker>
+                  </v-menu>
+                </v-col>
+
+                <v-col cols="12" sm="6" md="6">
+                  <v-autocomplete :items="visit_typeList" item-text="name" item-value="id"
+                                  v-model="maintenance_report.visit_type_id" :disabled="disableForm || loading"
+                                  label="Type of visit" outlined dense clearable autocomplete="off"
+                                  :rules="simpleTextFieldsRules" hide-details="auto"></v-autocomplete>
+                </v-col>
+                <v-col cols="12" sm="6" md="6">
+                  <v-autocomplete :items="technicianList" item-text="name" item-value="id"
+                                  v-model="maintenance_report.responsible_technician_id" :disabled="disableForm || loading"
+                                  label="Responsible technician" outlined dense clearable autocomplete="off"
+                                  :rules="simpleTextFieldsRules" hide-details="auto"></v-autocomplete>
+                </v-col>
+              </v-row>
+
+              <div class="mrnew-form-footnote">
+                <v-icon size="16">mdi-information-outline</v-icon>
+                Missing a station? Its <strong>Local Profile</strong> may need to be configured under Station Metadata.
+              </div>
+
+              <v-alert v-if="notFutureDate()" type="error" dense outlined class="mt-3 mb-0">
+                The visit date and initial time cannot be in the future.
               </v-alert>
-          </div>
 
-          <v-layout column fluid>
-            <h6>Select the station and add initial data to create a report</h6>
-            <v-layout dense justify="start" class="mb-3">
-              <v-flex lg4 ml-3>
-                <v-switch
-                  v-model="filter.isAutomatic"
-                  inset
-                  @change="invertValue(filter.isAutomatic)"
-                  label="Automatic"
-                  :disabled="disableForm"
-                ></v-switch>
-              </v-flex>                
-              <v-flex lg4 ml-3>
-                <v-autocomplete
-                  :items="stationList"
-                  item-text="label"
-                  item-value="id"
-                  v-model="maintenance_report.station_id"
-                  :disabled="disableForm"
-                  label="Station"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex lg4 ml-3>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="maintenance_report.visit_date_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="maintenance_report.visit_date"
-                    label="Date of visit"
-                    v-on="on"
-                    :disabled="disableForm"
-                    required
-                    persistent-hint
-                    prepend-icon="event"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="maintenance_report.visit_date"
-                    @input="maintenance_report.visit_date_menu = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-            </v-layout>
-
-            <v-layout dense justify="start" class="mb-3">
-               <v-flex lg4 ml-3>
-                <v-autocomplete
-                  :items="visit_typeList"
-                  item-text="name"
-                  item-value="id"
-                  v-model="maintenance_report.visit_type_id"
-                  :disabled="disableForm"
-                  label="Type of the visit"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex lg4 ml-3>
-                <v-autocomplete
-                  :items="technicianList"
-                  item-text="name"
-                  item-value="id"
-                  v-model="maintenance_report.responsible_technician_id"
-                  :disabled="disableForm"
-                  label="Responsible technician"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex lg4 ml-3>
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="maintenance_report.initial_time_menu"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                    v-model="maintenance_report.initial_time"
-                    label="Initial time"
-                    v-on="on"
-                    :disabled="disableForm"
-                    required
-                    persistent-hint
-                    prepend-icon="access_time"
-                    ></v-text-field>
-                  </template>
-                  <v-time-picker
-                  v-model="maintenance_report.initial_time"
-                  ></v-time-picker>
-                </v-menu>
-              </v-flex>                     
-            </v-layout>
-
-            <v-layout column dense justify="end" class="mt-3">      
-              <v-alert
-                type="warning"
-                border="left"
-                dense
-                dismissible
-              >
-                If the station is not listed above, station <b>Local Profile</b> may not be set. 
-                Please set a station <b>Local Profile</b> in <b>Station Metadata</b> page.
-              </v-alert>
-            </v-layout>
-
-            <v-layout column dense justify="end" class="mb-3">      
-              <!-- time alert -->
-              <v-flex>
-                <span class="srf-display-1-2" style="color:red" v-if="notFutureDate()"> Visit date and initial time can not be in the future.</span>
-              </v-flex>   
-              
-              <!-- create report button -->
-              <v-flex lg2 mt-5>
-                <!-- create report btn -->
-                <v-btn
-                  justify-end
-                  outlined
-                  color="error"
-                  href="{% url 'maintenance-reports' %}"
-                >
-                  Back
+              <div class="mrnew-details-actions" v-if="!disableForm">
+                <v-btn color="primary" elevation="0" :loading="loading"
+                       :disabled="$v.maintenance_report.$invalid || !maintenance_report.visit_date || !maintenance_report.initial_time || notFutureDate()"
+                       @click="createMaintenanceReport(maintenance_report)">
+                  <v-icon left small>mdi-plus</v-icon> Create report
                 </v-btn>
+              </div>
+            </div>
+          </section>
 
-                <!-- create report btn -->
-                <v-btn
-                  justify-end
-                  outlined
-                  color="primary"
-                  v-if="!maintenance_report.id"
-                  @click="createMaintenanceReport(maintenance_report)"
-                  :disabled="$v.maintenance_report.$invalid || notFutureDate()"
-                >
-                  CREATE REPORT
-                </v-btn>
+          <v-alert v-if="request_error" type="error" dismissible outlined class="mt-4"
+                   @input="request_error = false">[[ request_error_message ]]</v-alert>
 
-              </v-flex>
+          <!-- The workflow becomes available after the initial report is created. -->
+          <section v-if="disableForm" class="mrnew-workflow" aria-label="Maintenance report workflow">
+            <div class="mrnew-section-header mrnew-workflow-header">
+              <div>
+                <h2>Visit documentation</h2>
+                <p>Work through the sections below to record conditions, equipment changes, contacts, and your summary.</p>
+              </div>
+              <span class="mrnew-report-label">Report # [[ maintenance_report.id ]]</span>
+            </div>
+          <v-stepper v-model="e1" vertical class="mrnew-stepper elevation-0" @change="e2=1">
 
-            </v-layout>
-
-            <v-alert v-model="request_error" dismissible type="error"> [[ request_error_message ]] </v-alert>
-            <v-overlay :value="loading"> <v-progress-circular indeterminate size="64"></v-progress-circular> </v-overlay>
-          </v-layout>
-
-        </v-layout>
-        
-        <template>
-          <v-stepper v-if="disableForm" v-model="e1" vertical class="elevation-0" @change="e2=1">
             <v-stepper-step :complete="e1 > 1" step="1" editable> Describe the station on arrival </v-stepper-step>
 
             <v-stepper-content step="1">
-              <v-card color="white" flat>
-                <ckeditor
-                  style="color: white; background-color:#BBB;"
-                  v-model="maintenance_report.station_on_arrival_conditions"
-                  :config="ckeditor_configs.station_on_arrival_conditions"
-                  class="ml-0 mr-0 mb-8 pa-5"
-                ></ckeditor>
-              </v-card>  
-              <v-btn mt-3 color="primary" @click="nextStep(1); updateMaintenanceReportConditions(maintenance_report)">
-                Save and Continue
-              </v-btn>
-            </v-stepper-content>
-            <v-divider vertical></v-divider>
 
-            <v-stepper-item v-if="maintenance_report.equipment_types" v-for="(equipment_type, n) in maintenance_report.equipment_types">
+              <v-card flat class="mrnew-editor-card">
+
+                <ckeditor
+
+                  v-model="maintenance_report.station_on_arrival_conditions"
+
+                  :config="ckeditor_configs.station_on_arrival_conditions"
+
+                  class="mrnew-editor"
+
+                ></ckeditor>
+
+              </v-card>  
+
+              <v-btn mt-3 color="primary" @click="updateMaintenanceReportConditions(maintenance_report)">
+
+                Save and Continue
+
+              </v-btn>
+
+            </v-stepper-content>
+
+            <template v-for="(equipment_type, n) in (maintenance_report.equipment_types || [])">
+
               <v-stepper-step :key="`${n+2}-step`" :step="n+2" :complete="e1 > n+2" editable>
+
                 [[equipment_type.name]]s
+
               </v-stepper-step>
 
               <v-stepper-content :step="n+2" :key="`${n+2}-content`">
+
                 <template>
-                  <v-stepper v-model="e2" vertical @change="getInitialData(maintenance_report.id)">
+
+                  <v-stepper v-model="e2" vertical>
+
                     <v-stepper-step :complete="e2 > 1" step="1" editable> Primary [[equipment_type.name]] </v-stepper-step>
 
                     <v-stepper-content step="1">
+
                       <template>
+
                         <v-tabs v-model="equipment_type.primary_equipment.active_tab">
+
                           <v-tab v-for="(tab, index) in tabs(equipment_type, 'P')" :key="index"> [[ tab ]] </v-tab>
-                          
-                          <v-tab-item v-for="(tab, index) in tabs(equipment_type, 'P')" :key="index">
-                            <v-card v-if="tab=='Add'">
+
+                          </v-tabs>
+<v-tabs-items v-model="equipment_type.primary_equipment.active_tab">
+<v-tab-item v-for="(tab, index) in tabs(equipment_type, 'P')" :key="index">
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Add'">
+
                               <v-card-text>
+
                                 <v-layout column>
+
                                   <v-flex>
+
                                     <v-autocomplete
+
                                       :items="availableEquipments(equipment_type, 'P')"
+
                                       item-text="name"
+
                                       item-value="id"
+
                                       v-model="equipment_type.primary_equipment.new_equipment_id"
+
                                       :disabled="false"
+
                                       label="Select Current Equipment"
+                                    outlined dense hide-details="auto"
+
                                       :clearable="!equipment_type.secondary_equipment.new_equipment_id"
+
                                       autocomplete="off"
+
                                     ></v-autocomplete>                                   
+
                                   </v-flex>
+
                                 </v-layout>
 
                                 <v-layout v-if="equipment_type.primary_equipment.new_equipment_id" column>
-                                  <v-radio-group v-model="equipment_type.primary_equipment.classification">
+
+                                  <v-radio-group v-model="equipment_type.primary_equipment.classification" row>
+
                                     <v-radio label="Fully Functional" value="F"></v-radio>
+
                                     <v-radio label="Partially Functional" value="P"></v-radio>
+
                                     <v-radio label="Not Functional" value="N"></v-radio>
+
                                   </v-radio-group>
+
                                   <ckeditor
+
                                     v-model="equipment_type.primary_equipment.condition"
-                                    style="color: white; background-color:#BBB;"
+
                                     :config="equipment_type.primary_equipment.ckeditor_config"
-                                    class="ml-0 mr-0 mb-8 pa-5"
+
+                                    class="mrnew-editor"
+
                                   ></ckeditor>                                
+
                                 </v-layout>
+
                               </v-card-text>
+
                               <v-card-actions>
-                                <v-btn color="primary" @click="e2=2; updateEquipmentTypeData(equipment_type, 'P')">
+
+                                <v-btn color="primary" @click="updateEquipmentTypeData(equipment_type, 'P')">
+
                                   Save and Continue
+
                                 </v-btn>
+
                               </v-card-actions>
+
                             </v-card>
-                            <v-card v-if="tab=='Update'">
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Update'">
+
                               <v-card-text>
+
                                 <v-layout column>
-                                <h6>Updating [[equipment_type.primary_equipment.old_equipment_name]]</h6>
+
+                                <h4 class="mrnew-equipment-heading">Updating [[equipment_type.primary_equipment.old_equipment_name]]</h4>
+
                                 <v-layout column>
-                                  <v-radio-group v-model="equipment_type.primary_equipment.classification">
+
+                                  <v-radio-group v-model="equipment_type.primary_equipment.classification" row>
+
                                     <v-radio label="Fully Functional" value="F"></v-radio>
+
                                     <v-radio label="Partially Functional" value="P"></v-radio>
+
                                     <v-radio label="Not Functional" value="N"></v-radio>
+
                                   </v-radio-group>
+
                                   <ckeditor
+
                                     v-model="equipment_type.primary_equipment.condition"
-                                    style="color: white; background-color:#BBB;"
+
                                     :config="equipment_type.primary_equipment.ckeditor_config"
-                                    class="ml-0 mr-0 mb-8 pa-5"
+
+                                    class="mrnew-editor"
+
                                   ></ckeditor>
+
                                 </v-layout>
+
                               </v-card-text>
+
                               <v-card-actions>
-                                <v-layout column>
-                                  <v-alert v-model="disableUpdate(equipment_type, 'P')" type="error">
-                                    [[ disable_message ]]
-                                  </v-alert>
-                                  <v-btn
-                                    class="align-self-start"
-                                    color="primary"
-                                    :disabled="disableUpdate(equipment_type, 'P')"
-                                    @click="e2=2; updateEquipmentTypeData(equipment_type, 'P')"
-                                  >
-                                    Save and Continue
-                                  </v-btn>
-                                </v-layout>
-                              </v-card-actions>
-                            </v-card>
-                            <v-card v-if="tab=='Change'">
-                              <v-card-text>
-                                <v-layout column>
-                                <h6>Old Equipment: [[equipment_type.primary_equipment.old_equipment_name]]</h6>
 
                                 <v-layout column>
-                                  <v-flex>
-                                    <v-autocomplete
-                                      :items="availableEquipments(equipment_type, 'P')"
-                                      item-text="name"
-                                      item-value="id"
-                                      v-model="equipment_type.primary_equipment.new_equipment_id"
-                                      :disabled="false"
-                                      label="Select Current Equipment"
-                                      :clearable="!equipment_type.secondary_equipment.new_equipment_id"
-                                      autocomplete="off"
-                                    ></v-autocomplete>                                   
-                                  </v-flex>
-                                </v-layout>                                
-                                <v-layout v-if="equipment_type.primary_equipment.new_equipment_id" column>
-                                  <v-radio-group v-model="equipment_type.primary_equipment.classification">
-                                    <v-radio label="Fully Functional" value="F"></v-radio>
-                                    <v-radio label="Partially Functional" value="P"></v-radio>
-                                    <v-radio label="Not Functional" value="N"></v-radio>
-                                  </v-radio-group>
-                                  <ckeditor
-                                    v-model="equipment_type.primary_equipment.condition"
-                                    style="color: white; background-color:#BBB;"
-                                    :config="equipment_type.primary_equipment.ckeditor_config"
-                                    class="ml-0 mr-0 mb-8 pa-5"
-                                  ></ckeditor>                                
-                                </v-layout>
-                              </v-card-text>
-                              <v-card-actions>
-                                <v-layout column>
-                                  <v-alert v-model="disableChange(equipment_type, 'P')" type="error">
-                                    [[ disable_message ]]
+
+                                  <v-alert v-if="disableUpdate(equipment_type, 'P')" type="error">
+
+                                    [[ 'Select a valid replacement and ensure it is not assigned to another position.' ]]
+
                                   </v-alert>
+
                                   <v-btn
+
                                     class="align-self-start"
+
                                     color="primary"
-                                    :disabled ="disableChange(equipment_type, 'P')"
-                                    @click="e2=2; updateEquipmentTypeData(equipment_type, 'P')"
+
+                                    :disabled="loading || disableUpdate(equipment_type, 'P')"
+
+                                    @click="updateEquipmentTypeData(equipment_type, 'P')"
+
                                   >
+
                                     Save and Continue
+
                                   </v-btn>
-                                </v-layout>                          
-                              </v-card-actions>
-                            </v-card>
-                            <v-card v-if="tab=='Remove'">
-                              <v-card-text>
-                                <v-layout column>
-                                  <h6>Removing Equipment: [[equipment_type.primary_equipment.old_equipment_name]]</h6>
+
                                 </v-layout>
-                              </v-card-text>
-                              <v-card-actions>
-                                <v-btn 
-                                  color="primary"
-                                  @click="e2=2; updateEquipmentTypeData(equipment_type, 'P')">
-                                  Save and Continue
-                                </v-btn>
+
                               </v-card-actions>
+
                             </v-card>
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Change'">
+
+                              <v-card-text>
+
+                                <v-layout column>
+
+                                <h4 class="mrnew-equipment-heading">Old Equipment: [[equipment_type.primary_equipment.old_equipment_name]]</h4>
+
+                                <v-layout column>
+
+                                  <v-flex>
+
+                                    <v-autocomplete
+
+                                      :items="availableEquipments(equipment_type, 'P')"
+
+                                      item-text="name"
+
+                                      item-value="id"
+
+                                      v-model="equipment_type.primary_equipment.new_equipment_id"
+
+                                      :disabled="false"
+
+                                      label="Select Current Equipment"
+                                    outlined dense hide-details="auto"
+
+                                      :clearable="!equipment_type.secondary_equipment.new_equipment_id"
+
+                                      autocomplete="off"
+
+                                    ></v-autocomplete>                                   
+
+                                  </v-flex>
+
+                                </v-layout>                                
+
+                                <v-layout v-if="equipment_type.primary_equipment.new_equipment_id" column>
+
+                                  <v-radio-group v-model="equipment_type.primary_equipment.classification" row>
+
+                                    <v-radio label="Fully Functional" value="F"></v-radio>
+
+                                    <v-radio label="Partially Functional" value="P"></v-radio>
+
+                                    <v-radio label="Not Functional" value="N"></v-radio>
+
+                                  </v-radio-group>
+
+                                  <ckeditor
+
+                                    v-model="equipment_type.primary_equipment.condition"
+
+                                    :config="equipment_type.primary_equipment.ckeditor_config"
+
+                                    class="mrnew-editor"
+
+                                  ></ckeditor>                                
+
+                                </v-layout>
+
+                              </v-card-text>
+
+                              <v-card-actions>
+
+                                <v-layout column>
+
+                                  <v-alert v-if="disableChange(equipment_type, 'P')" type="error">
+
+                                    [[ 'Select a valid replacement and ensure it is not assigned to another position.' ]]
+
+                                  </v-alert>
+
+                                  <v-btn
+
+                                    class="align-self-start"
+
+                                    color="primary"
+
+                                    :disabled="loading || disableChange(equipment_type, 'P')"
+
+                                    @click="updateEquipmentTypeData(equipment_type, 'P')"
+
+                                  >
+
+                                    Save and Continue
+
+                                  </v-btn>
+
+                                </v-layout>                          
+
+                              </v-card-actions>
+
+                            </v-card>
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Remove'">
+
+                              <v-card-text>
+
+                                <v-layout column>
+
+                                  <h4 class="mrnew-equipment-heading">Removing Equipment: [[equipment_type.primary_equipment.old_equipment_name]]</h4>
+
+                                </v-layout>
+
+                              </v-card-text>
+
+                              <v-card-actions>
+
+                                <v-btn 
+
+                                  color="primary"
+
+                                  @click="updateEquipmentTypeData(equipment_type, 'P')">
+
+                                  Save and Continue
+
+                                </v-btn>
+
+                              </v-card-actions>
+
+                            </v-card>
+
                           </v-tab-item>
-                        </v-tabs>
+
+                        </v-tabs-items>
+
                       </template>
+
                     </v-stepper-content>
 
                     <v-stepper-step :complete="e2 > 2" step="2"> Secondary [[equipment_type.name]] </v-stepper-step>
 
                     <v-stepper-content step="2">
+
                       <span v-if="!tabs(equipment_type, 'S')">
+
                         You can not add a secondary equipment if no primary equipment is asigned
+
                       </span>
+
                       <template>
+
                         <v-tabs v-model="equipment_type.secondary_equipment.active_tab">
+
                           <v-tab v-for="(tab, index) in tabs(equipment_type, 'S')" :key="index"> [[ tab ]] </v-tab>
-                          <v-tab-item v-for="(tab, index) in tabs(equipment_type, 'S')" :key="index">
-                            <v-card v-if="tab=='Add'">
+
+                          </v-tabs>
+<v-tabs-items v-model="equipment_type.secondary_equipment.active_tab">
+<v-tab-item v-for="(tab, index) in tabs(equipment_type, 'S')" :key="index">
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Add'">
+
                               <v-card-text>
+
                                 <v-layout column>
+
                                   <v-flex>
+
                                     <v-autocomplete
+
                                       :items="availableEquipments(equipment_type, 'S')"
+
                                       item-text="name"
+
                                       item-value="id"
+
                                       v-model="equipment_type.secondary_equipment.new_equipment_id"
+
                                       :disabled="false"
+
                                       label="Select Current Equipment"
+                                    outlined dense hide-details="auto"
+
                                       clearable
+
                                       autocomplete="off"
+
                                     ></v-autocomplete>                                   
+
                                   </v-flex>
+
                                 </v-layout>
 
                                 <v-layout v-if="equipment_type.secondary_equipment.new_equipment_id" column>
-                                  <v-radio-group v-model="equipment_type.secondary_equipment.classification">
+
+                                  <v-radio-group v-model="equipment_type.secondary_equipment.classification" row>
+
                                     <v-radio label="Fully Functional" value="F"></v-radio>
+
                                     <v-radio label="Partially Functional" value="P"></v-radio>
+
                                     <v-radio label="Not Functional" value="N"></v-radio>
+
                                   </v-radio-group>
+
                                   <ckeditor
+
                                     v-model="equipment_type.secondary_equipment.condition"
-                                    style="color: white; background-color:#BBB;"
+
                                     :config="equipment_type.secondary_equipment.ckeditor_config"
-                                    class="ml-0 mr-0 mb-8 pa-5"
+
+                                    class="mrnew-editor"
+
                                   ></ckeditor>                                
+
                                 </v-layout>
+
                               </v-card-text>
+
                               <v-card-actions>
-                                <v-btn color="primary" @click="nextStep(n+2); updateEquipmentTypeData(equipment_type, 'S')">
+
+                                <v-btn color="primary" @click="updateEquipmentTypeData(equipment_type, 'S', n+2)">
+
                                   Save and Next Equipment Type
+
                                 </v-btn>
+
                               </v-card-actions>
+
                             </v-card>
-                            <v-card v-if="tab=='Update'">
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Update'">
+
                               <v-card-text>
-                                <v-layout column>
-                                <h6>Updating Equipment: [[equipment_type.secondary_equipment.old_equipment_name]]</h6>
-                                <v-layout column>
-                                  <v-radio-group v-model="equipment_type.secondary_equipment.classification">
-                                    <v-radio label="Fully Functional" value="F"></v-radio>
-                                    <v-radio label="Partially Functional" value="P"></v-radio>
-                                    <v-radio label="Not Functional" value="N"></v-radio>
-                                  </v-radio-group>
-                                  <ckeditor
-                                    v-model="equipment_type.secondary_equipment.condition"
-                                    style="color: white; background-color:#BBB;"
-                                    :config="equipment_type.secondary_equipment.ckeditor_config"
-                                    class="ml-0 mr-0 mb-8 pa-5"
-                                  ></ckeditor>                                
-                                </v-layout>
-                              </v-card-text>
-                              <v-card-actions>
-                                <v-layout column>
-                                  <v-alert v-model="disableUpdate(equipment_type, 'S')" type="error">
-                                    [[ disable_message ]]
-                                  </v-alert>                                
-                                  <v-btn
-                                    class="align-self-start"
-                                    color="primary"
-                                    :disabled="disableUpdate(equipment_type, 'S')"
-                                    @click="nextStep(n+2); updateEquipmentTypeData(equipment_type, 'S')"
-                                  >
-                                    Save and Continue
-                                  </v-btn>
-                                </v-layout>
-                              </v-card-actions>
-                            </v-card>
-                            <v-card v-if="tab=='Change'">
-                              <v-card-text>
-                                <v-layout column>
-                                <h6>Old Equipment: [[equipment_type.secondary_equipment.old_equipment_name]]</h6>
 
                                 <v-layout column>
-                                  <v-flex>
-                                    <v-autocomplete
-                                      :items="availableEquipments(equipment_type, 'S')"
-                                      item-text="name"
-                                      item-value="id"
-                                      v-model="equipment_type.secondary_equipment.new_equipment_id"
-                                      :disabled="false"
-                                      label="Select Current Equipment"
-                                      :clearable="!equipment_type.secondary_equipment.new_equipment_id"
-                                      autocomplete="off"
-                                    ></v-autocomplete>                                   
-                                  </v-flex>
-                                </v-layout>                                
-                                <v-layout v-if="equipment_type.secondary_equipment.new_equipment_id" column>
-                                  <v-radio-group v-model="equipment_type.secondary_equipment.classification">
+
+                                <h4 class="mrnew-equipment-heading">Updating Equipment: [[equipment_type.secondary_equipment.old_equipment_name]]</h4>
+
+                                <v-layout column>
+
+                                  <v-radio-group v-model="equipment_type.secondary_equipment.classification" row>
+
                                     <v-radio label="Fully Functional" value="F"></v-radio>
+
                                     <v-radio label="Partially Functional" value="P"></v-radio>
+
                                     <v-radio label="Not Functional" value="N"></v-radio>
+
                                   </v-radio-group>
+
                                   <ckeditor
+
                                     v-model="equipment_type.secondary_equipment.condition"
-                                    style="color: white; background-color:#BBB;"
+
                                     :config="equipment_type.secondary_equipment.ckeditor_config"
-                                    class="ml-0 mr-0 mb-8 pa-5"
+
+                                    class="mrnew-editor"
+
                                   ></ckeditor>                                
+
                                 </v-layout>
+
                               </v-card-text>
+
                               <v-card-actions>
+
                                 <v-layout column>
-                                  <v-alert v-model="disableChange(equipment_type, 'S')" type="error">
-                                    [[ disable_message ]]
-                                  </v-alert>
+
+                                  <v-alert v-if="disableUpdate(equipment_type, 'S')" type="error">
+
+                                    [[ 'Select a valid replacement and ensure it is not assigned to another position.' ]]
+
+                                  </v-alert>                                
+
                                   <v-btn
+
                                     class="align-self-start"
+
                                     color="primary"
-                                    :disabled ="disableChange(equipment_type, 'S')" 
-                                    @click="nextStep(n+2); updateEquipmentTypeData(equipment_type, 'S')"
+
+                                    :disabled="loading || disableUpdate(equipment_type, 'S')"
+
+                                    @click="updateEquipmentTypeData(equipment_type, 'S', n+2)"
+
                                   >
+
                                     Save and Continue
+
                                   </v-btn>
+
                                 </v-layout>
+
                               </v-card-actions>
+
                             </v-card>
-                            <v-card v-if="tab=='Remove'">
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Change'">
+
                               <v-card-text>
+
                                 <v-layout column>
-                                  <h6>Removing Equipment: [[equipment_type.secondary_equipment.old_equipment_name]]</h6>
+
+                                <h4 class="mrnew-equipment-heading">Old Equipment: [[equipment_type.secondary_equipment.old_equipment_name]]</h4>
+
+                                <v-layout column>
+
+                                  <v-flex>
+
+                                    <v-autocomplete
+
+                                      :items="availableEquipments(equipment_type, 'S')"
+
+                                      item-text="name"
+
+                                      item-value="id"
+
+                                      v-model="equipment_type.secondary_equipment.new_equipment_id"
+
+                                      :disabled="false"
+
+                                      label="Select Current Equipment"
+                                    outlined dense hide-details="auto"
+
+                                      :clearable="!equipment_type.secondary_equipment.new_equipment_id"
+
+                                      autocomplete="off"
+
+                                    ></v-autocomplete>                                   
+
+                                  </v-flex>
+
+                                </v-layout>                                
+
+                                <v-layout v-if="equipment_type.secondary_equipment.new_equipment_id" column>
+
+                                  <v-radio-group v-model="equipment_type.secondary_equipment.classification" row>
+
+                                    <v-radio label="Fully Functional" value="F"></v-radio>
+
+                                    <v-radio label="Partially Functional" value="P"></v-radio>
+
+                                    <v-radio label="Not Functional" value="N"></v-radio>
+
+                                  </v-radio-group>
+
+                                  <ckeditor
+
+                                    v-model="equipment_type.secondary_equipment.condition"
+
+                                    :config="equipment_type.secondary_equipment.ckeditor_config"
+
+                                    class="mrnew-editor"
+
+                                  ></ckeditor>                                
+
                                 </v-layout>
+
                               </v-card-text>
+
                               <v-card-actions>
-                                <v-btn 
-                                  color="primary"
-                                  @click="nextStep(n+2); updateEquipmentTypeData(equipment_type, 'S')">
-                                  Save and Continue
-                                </v-btn>
+
+                                <v-layout column>
+
+                                  <v-alert v-if="disableChange(equipment_type, 'S')" type="error">
+
+                                    [[ 'Select a valid replacement and ensure it is not assigned to another position.' ]]
+
+                                  </v-alert>
+
+                                  <v-btn
+
+                                    class="align-self-start"
+
+                                    color="primary"
+
+                                    :disabled="loading || disableChange(equipment_type, 'S')" 
+
+                                    @click="updateEquipmentTypeData(equipment_type, 'S', n+2)"
+
+                                  >
+
+                                    Save and Continue
+
+                                  </v-btn>
+
+                                </v-layout>
+
                               </v-card-actions>
+
                             </v-card>
+
+                            <v-card flat outlined class="mrnew-equipment-card" v-if="tab=='Remove'">
+
+                              <v-card-text>
+
+                                <v-layout column>
+
+                                  <h4 class="mrnew-equipment-heading">Removing Equipment: [[equipment_type.secondary_equipment.old_equipment_name]]</h4>
+
+                                </v-layout>
+
+                              </v-card-text>
+
+                              <v-card-actions>
+
+                                <v-btn 
+
+                                  color="primary"
+
+                                  @click="updateEquipmentTypeData(equipment_type, 'S', n+2)">
+
+                                  Save and Continue
+
+                                </v-btn>
+
+                              </v-card-actions>
+
+                            </v-card>
+
                           </v-tab-item>
-                        </v-tabs>
+
+                        </v-tabs-items>
+
                       </template>
+
                     </v-stepper-content>
+
                   </v-stepper>
+
                 </template>
-                <v-btn style="margin-top: 20px;" color="primary" @click="nextStep(n+2)"> Next Equipment Type </v-btn>
+
+                <v-btn class="mt-4" elevation="0" color="primary" @click="nextStep(n+2)"> Next Equipment Type </v-btn>
+
               </v-stepper-content>
 
-              <v-divider vertical></v-divider>
-            </v-stepper-item>
+  
+
+            </template>
 
             <v-stepper-step :step="steps+2" :complete="e1 > steps+2" editable> Contacts </v-stepper-step>
 
             <v-stepper-content :step="steps+2">
-              <v-card color="white" flat>
-                <ckeditor
-                  v-model="maintenance_report.contacts"
-                  style="color: white; background-color:#BBB;"
-                  :config="ckeditor_configs.contacts"
-                  class="ml-0 mr-0 mb-8 pa-5"
-                ></ckeditor>              
-              </v-card>  
-              <v-btn
-                mt-3 color="primary"
-                @click="nextStep(steps+2); updateMaintenanceReportContacts(maintenance_report)"
-              >
-                Save and Continue
-              </v-btn>
-            </v-stepper-content>
 
-            <v-divider vertical ></v-divider>
+              <v-card flat class="mrnew-editor-card">
+
+                <ckeditor
+
+                  v-model="maintenance_report.contacts"
+
+                  :config="ckeditor_configs.contacts"
+
+                  class="mrnew-editor"
+
+                ></ckeditor>              
+
+              </v-card>  
+
+              <v-btn
+
+                mt-3 color="primary"
+
+                @click="updateMaintenanceReportContacts(maintenance_report)"
+
+              >
+
+                Save and Continue
+
+              </v-btn>
+
+            </v-stepper-content>
 
             <v-stepper-step :step="steps+3" :complete="e1 > steps+3" editable> Summary of the visit </v-stepper-step>
 
-            <v-stepper-content :step="steps+3">
-              <v-card color="#BBB" flat >
-                <v-layout ml-3 mt-3 mb-3>
-                  <v-flex lg4 mt-3>
-                    <v-autocomplete
-                      :items="cleanTechnicianList(maintenance_report.other_technician_1)"
-                      item-text="name"
-                      item-value="id"
-                      v-model="maintenance_report.other_technician_1"
-                      autocomplete="off"
-                    ></v-autocomplete>
-                    <v-autocomplete
-                      :items="cleanTechnicianList(maintenance_report.other_technician_2)"
-                      item-text="name"
-                      item-value="id"
-                      v-model="maintenance_report.other_technician_2"
-                      autocomplete="off"
-                    ></v-autocomplete>
-                    <v-autocomplete
-                      :items="cleanTechnicianList(maintenance_report.other_technician_3)"
-                      item-text="name"
-                      item-value="id"
-                      v-model="maintenance_report.other_technician_3"
-                      autocomplete="off"
-                    ></v-autocomplete>                           
-                  </v-flex>
+                      <v-stepper-content :step="steps+3">
+            <div class="mrnew-summary-card">
+              <div class="mrnew-summary-heading">
+                <h3>Summary of the visit</h3>
+                <p>Record the work completed, any follow-up required, and the next planned visit.</p>
+              </div>
 
-                  <ckeditor
-                    v-model="maintenance_report.current_visit_summary"
-                    style="color: white; background-color:#BBB;"
-                    :config="ckeditor_configs.current_visit_summary"
-                    class="pa-3"
-                  ></ckeditor>                
-                </v-layout>                     
-                <v-layout ml-3>
-                  <v-flex lg4>
-                    <v-menu
-                      :close-on-content-click="false"
-                      v-model="maintenance_report.next_visit_date_menu"
-                      transition="scale-transition"
-                      offset-y
-                      class="max-50"
-                    >
+              <div class="mrnew-subsection">
+                <div class="mrnew-subheading">Other technicians <span>Optional</span></div>
+                <v-row dense>
+                  <v-col cols="12" sm="4">
+                    <v-autocomplete :items="cleanTechnicianList(maintenance_report.other_technician_1)"
+                                    item-text="name" item-value="id" v-model="maintenance_report.other_technician_1"
+                                    label="Additional technician 1" outlined dense clearable autocomplete="off" hide-details="auto"></v-autocomplete>
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-autocomplete :items="cleanTechnicianList(maintenance_report.other_technician_2)"
+                                    item-text="name" item-value="id" v-model="maintenance_report.other_technician_2"
+                                    label="Additional technician 2" outlined dense clearable autocomplete="off" hide-details="auto"></v-autocomplete>
+                  </v-col>
+                  <v-col cols="12" sm="4">
+                    <v-autocomplete :items="cleanTechnicianList(maintenance_report.other_technician_3)"
+                                    item-text="name" item-value="id" v-model="maintenance_report.other_technician_3"
+                                    label="Additional technician 3" outlined dense clearable autocomplete="off" hide-details="auto"></v-autocomplete>
+                  </v-col>
+                </v-row>
+              </div>
+
+              <div class="mrnew-subsection">
+                <div class="mrnew-subheading">Work completed</div>
+                <ckeditor v-model="maintenance_report.current_visit_summary"
+                          :config="ckeditor_configs.current_visit_summary" class="mrnew-editor"></ckeditor>
+              </div>
+
+              <div class="mrnew-subsection">
+                <div class="mrnew-subheading">Next visit and follow-up</div>
+                <v-row dense>
+                  <v-col cols="12" sm="6">
+                    <v-menu v-model="maintenance_report.next_visit_date_menu" :close-on-content-click="false"
+                            transition="scale-transition" offset-y>
                       <template v-slot:activator="{ on }">
-                        <v-text-field
-                        v-model="maintenance_report.next_visit_date"
-                        label="Date of next visit"
-                        v-on="on"
-                        required
-                        persistent-hint
-                        prepend-icon="event"
-                        ></v-text-field>
+                        <v-text-field v-model="maintenance_report.next_visit_date" label="Date of next visit"
+                                      readonly v-on="on" outlined dense prepend-inner-icon="mdi-calendar-outline"
+                                      hide-details="auto"></v-text-field>
                       </template>
-                      <v-date-picker
-                        v-model="maintenance_report.next_visit_date"
-                        @input="maintenance_report.next_visit_date_menu = false"
-                      ></v-date-picker>
+                      <v-date-picker v-model="maintenance_report.next_visit_date"
+                                     @input="maintenance_report.next_visit_date_menu = false"></v-date-picker>
                     </v-menu>
-                    <v-menu
-                      :close-on-content-click="false"
-                      v-model="maintenance_report.end_time_menu"
-                      transition="scale-transition"
-                      offset-y
-                      class="max-50"
-                    >
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-menu v-model="maintenance_report.end_time_menu" :close-on-content-click="false"
+                            transition="scale-transition" offset-y>
                       <template v-slot:activator="{ on }">
-                        <v-text-field
-                        v-model="maintenance_report.end_time"
-                        label="End time"
-                        v-on="on"
-                        required
-                        persistent-hint
-                        prepend-icon="access_time"
-                        ></v-text-field>
+                        <v-text-field v-model="maintenance_report.end_time" label="End time"
+                                      readonly v-on="on" outlined dense prepend-inner-icon="mdi-clock-outline"
+                                      hide-details="auto"></v-text-field>
                       </template>
-                      <v-time-picker v-model="maintenance_report.end_time"></v-time-picker>
+                      <v-time-picker v-model="maintenance_report.end_time" format="24hr"
+                                     @click:minute="maintenance_report.end_time_menu = false"></v-time-picker>
                     </v-menu>
-                  </v-flex>
-                  <ckeditor
-                      v-model="maintenance_report.next_visit_summary"
-                      style="color: white; background-color:#BBB;"
-                      :config="ckeditor_configs.next_visit_summary"
-                      class="pa-3"
-                  ></ckeditor>                  
-                </v-layout>
-                <v-layout ml-3 mr-3>
-                  <v-flex ml-1>
-                    Data Logger File
-                    <v-file-input
-                      show-size
-                      v-model="maintenance_report.data_logger_file"
-                      :label="maintenance_report.data_logger_file_name"
-                    ></v-file-input>
-                  </v-flex>
-                </v-layout>
-              </v-card>
+                  </v-col>
+                </v-row>
+                <div class="mrnew-editor-label">Work planned for next visit</div>
+                <ckeditor v-model="maintenance_report.next_visit_summary"
+                          :config="ckeditor_configs.next_visit_summary" class="mrnew-editor"></ckeditor>
+              </div>
 
-              <v-layout column>
-                <v-alert v-model="futureTime()" type="error">
-                  End time must be after initial time.
-                </v-alert>
-                <v-alert v-model="futureDate()" type="error">
-                  Next Visit must be in the future.
-                </v-alert>          
-              </v-layout>
+              <div class="mrnew-subsection mrnew-upload-section">
+                <div class="mrnew-subheading">Data logger program <span>Optional attachment</span></div>
+                <v-file-input v-model="maintenance_report.data_logger_file" outlined dense show-size
+                              prepend-inner-icon="mdi-paperclip" prepend-icon=""
+                              :label="maintenance_report.data_logger_file_name || 'Choose a file'"
+                              hide-details="auto"></v-file-input>
+                <p class="mrnew-field-help">A selected file is uploaded when you save the report.</p>
+              </div>
+            </div>
 
-              <v-flex mt-8 mb-8>
-                <v-btn color="primary"
-                  :disabled="futureTime() || futureDate()"
-                  @click="updateMaintenanceReportSummary(maintenance_report, 'D')"
-                  :href="viewMaintenanceReport(maintenance_report.id)"
-                > 
-                  Preview 
-                </v-btn>
+            <v-alert v-if="futureTime()" type="error" outlined dense class="mt-3">
+              End time must be after initial time.
+            </v-alert>
+            <v-alert v-if="futureDate()" type="error" outlined dense class="mt-3">
+              Next visit must be in the future.
+            </v-alert>
 
-                <v-btn
-                  color="warning"
-                  :disabled="futureTime() || futureDate()"
-                  @click="updateMaintenanceReportSummary(maintenance_report, 'D')"
-                  href="{% url 'maintenance-reports' %}"
-                > 
-                  Save Draft 
-                </v-btn>
-
-                <v-btn
-                  color="success"
-                  :disabled="futureTime() || futureDate()"
-                  @click="updateMaintenanceReportSummary(maintenance_report, 'P')"
-                  href="{% url 'maintenance-reports' %}"
-                > 
-                  Publish 
-                </v-btn>
-
-              </v-flex>
-            </v-stepper-content> 
+            <div class="mrnew-summary-actions">
+              <v-btn outlined color="primary" :disabled="futureTime() || futureDate() || loading"
+                     @click="saveSummaryAndGo('D', 'preview')">
+                <v-icon left small>mdi-eye-outline</v-icon> Save &amp; preview
+              </v-btn>
+              <v-btn outlined color="secondary" :disabled="futureTime() || futureDate() || loading"
+                     @click="saveSummaryAndGo('D', 'list')">
+                <v-icon left small>mdi-content-save-outline</v-icon> Save draft
+              </v-btn>
+              <v-btn color="success" elevation="0" :loading="loading"
+                     :disabled="futureTime() || futureDate()"
+                     @click="saveSummaryAndGo('P', 'list')">
+                <v-icon left small>mdi-check-circle-outline</v-icon> Publish
+              </v-btn>
+            </div>
+          </v-stepper-content> 
 
           </v-stepper>
-        </template>
-
+          </section>
+          <v-overlay :value="loading" opacity="0.18" z-index="25">
+            <div class="mrnew-overlay-content">
+              <v-progress-circular indeterminate size="42" color="primary"></v-progress-circular>
+              <span>Saving or loading report...</span>
+            </div>
+          </v-overlay>
+        </div>
       </v-content>
     </v-app>
   </div>
-
-  {% endblock %} {% block localjavascript %}
+</div>
+{% endblock %}
+{% block localjavascript %}
   <script>
+
+    // TEMPORARY ONLY: hides CKEditor 4.22.1's security notification.
+    // This does NOT patch known vulnerabilities. Move to a supported editor ASAP.
+    CKEDITOR.config.versionCheck = false;
+
     Vue.use( CKEditor );
+
     Vue.use(window.vuelidate.default);
+
     const { required, minLength } = window.validators;
+
     new Vue({
+
       el: "#app",
+
       vuetify: new Vuetify(),
+
       delimiters: ["[[", "]]"],
 
       validations: {
+
         maintenance_report: {
+
           station_id: { required },
+
           visit_type_id: { required },
+
           responsible_technician_id: { required },
+
         },
+
       },      
+
       data (){
+
         let ckeditor_toolbar = [
+
             ['Bold', 'Italic', 'Font'],
+
             ['Format', 'Styles', 'TextColor', 'BGColor', 'RemoveFormat'],
+
             ['JustifyLeft','JustifyCenter','JustifyRight','JustifyBlock', 'Indent', 'Outdent'],
+
             ['HorizontalRule', 'BulletedList'],
+
             ['Blockquote', 'Source', 'Link', 'Unlink', 'Image', 'Table', 'Print']
+
         ];        
+
         return {
+
           ckeditor_configs: {
+
             station_on_arrival_conditions: {
+
               toolbar: ckeditor_toolbar,
+
               removeButtons: 'Image',
+
               extraAllowedContent : 'img(*){*}[*]',              
-              editorplaceholder: 'Description of station upon arribal:',
+
+              editorplaceholder: 'Description of the station upon arrival:',
+
               language: 'en',
+
             },
+
             current_visit_summary: {
+
               toolbar: ckeditor_toolbar,
+
               removeButtons: 'Image',
+
               extraAllowedContent : 'img(*){*}[*]',              
+
               height: '75%',
+
               editorplaceholder: 'Summary of work done:',
+
               language: 'en',
+
             },                  
+
             next_visit_summary: {
+
               toolbar: ckeditor_toolbar,
+
               removeButtons: 'Image',
+
               extraAllowedContent : 'img(*){*}[*]',              
+
               height: '75%',
+
               editorplaceholder: 'Work to be done on next visit:',
+
               language: 'en',
+
             },
+
             contacts: {
+
               toolbar: ckeditor_toolbar,
+
               removeButtons: 'Image',
+
               extraAllowedContent : 'img(*){*}[*]',              
+
               language: 'en',
+
             },               
+
             default: {
+
               toolbar: ckeditor_toolbar,
+
               removeButtons: 'Image',
+
               extraAllowedContent : 'img(*){*}[*]',              
+
               language: 'en',
+
             },
+
           },
+
           e1: 1,
+
           e2: 1,
+
           steps: 1,
+
           radioGroup: null,
+
           request_error: false,
+
           request_error_message: "",     
+
           loading: false,
+
           current_equipment_type: {
+
             id: null,
+
             available_equipments: [],
+
             primary_equipment: {
+
               new_equipment_id: null,
+
               old_equipment_id: null,
+
               condition: "",
+
               classification: null,
+
               ckeditor_config: null
+
             },
+
             secondary_equipment: {
+
               new_equipment_id: null,
+
               old_equipment_id: null,
+
               condition: "",
+
               classification: null,
+
               ckeditor_config: null
+
             },
+
           },
+
           maintenance_report: {
+
             station_information: null,
+
             id:
+
             {% if maintenance_report_id %}
+
               "{{maintenance_report_id}}",
+
             {% else %}
+
               null,
+
             {%  endif %}          
+
             station_id: null,
+
             visit_type_id: null,
+
             responsible_technician: null,
+
             responsible_technician_id: null,
+
             station_on_arrival_conditions: null,
+
             visit_date: moment().format('YYYY-MM-DD'),
+
             visit_date_menu: false,
+
             initial_time: moment().format('HH:mm'),
+
             initial_time_menu: false,
+
             equipment_types: null,
+
             contacts: null,
+
             other_technician_1: null,
+
             other_technician_2: null,
+
             other_technician_3: null,
+
             next_visit_date: null,
+
             next_visit_date_menu: false,
+
             end_time: null,
+
             end_time_menu:false,
+
             current_visit_summary: null,
+
             next_visit_summary: null,
+
             data_logger_file: null,
+
             data_logger_file_name: "Upload latest data logger program",
+
           },
+
           simpleTextFieldsRules: [ (v) => (v != null && v !== "") || "This field is required" ],
+
           filter: { isAutomatic: true },
+
           stations: [
+
             {% for station in station_list %}
+
               { id: {{ station.id }},
+
                 label: "{{ station.name | safe }} - {{ station.code }}",
+
                 is_automatic: {{ station.is_automatic | lower }},
+
             },
+
             {% endfor %}
+
           ],
+
           visit_typeList: [
+
             {% for visit_type in visit_type_list %}
+
               {id: {{ visit_type.id }},
+
                name: "{{ visit_type.name }}" },
+
             {% endfor %}
+
           ],
+
           technicianList: [
+
             {% for technician in technician_list %}
+
               { id: {{ technician.id }},
+
                 name: "{{ technician.name }}"},
+
             {% endfor %}
+
           ],          
+
         }
+
       },
+
       computed: {
+
         disableForm () {
+
           return this.maintenance_report.id?true:false
+
         },
+
         stationList () {
+
           let filteredStations = this.stations;
-          filteredStations = filteredStations.filter(station => this.filter.isAutomatic == station.is_automatic);
-          this.maintenance_report.station_id = null;
-          return filteredStations;
+
+          return filteredStations.filter(station => this.filter.isAutomatic === station.is_automatic);
+
         }
+
       },
+
       watch: {
-        steps (val) {
-          if (this.e1 > val) {
-            this.e1 = val
+        steps(val) {
+          if (this.e1 > val + 3) this.e1 = val + 3;
+        },
+        'filter.isAutomatic'(newValue, oldValue) {
+          // Never mutate the selected station from a computed getter. Only reset it
+          // when the user changes type before the report is created.
+          if (!this.disableForm && newValue !== oldValue) {
+            this.maintenance_report.station_id = null;
           }
         },
-      },      
+      },
       methods: {
-        disableUpdate(equipment_type, equipment_order){
-          if (equipment_order=='P'){
-            equipment = equipment_type.primary_equipment
-            other_equipment = equipment_type.secondary_equipment
-            this.disable_message = "Old primary equipment has been assigned as the current secondary equipment."
-          }
-          else if (equipment_order=='S'){
-            equipment = equipment_type.secondary_equipment
-            other_equipment = equipment_type.primary_equipment
-            this.disable_message = "Old secondary equipment has been assigned as the current primary equipment."
-          }
-          return equipment.old_equipment_id == other_equipment.new_equipment_id
-        },
-        disableChange(equipment_type, equipment_order){
-          if (equipment_order == 'P'){
-            equipment = equipment_type.primary_equipment
-          }
-          else if (equipment_order == 'S'){
-            equipment = equipment_type.secondary_equipment 
-          }
 
-          this.disable_message = "Current equipment can not be null"
-
-          if (!equipment.new_equipment_id){
-            return true
-          }
-          return equipment.new_equipment_id == equipment.old_equipment_id
+        // Validation for a current device that is assigned in both slots.
+        disableUpdate(equipment_type, equipment_order) {
+          const equipment = equipment_order === 'P'
+            ? equipment_type.primary_equipment : equipment_type.secondary_equipment;
+          const otherEquipment = equipment_order === 'P'
+            ? equipment_type.secondary_equipment : equipment_type.primary_equipment;
+          return equipment.old_equipment_id != null &&
+                 equipment.old_equipment_id == otherEquipment.new_equipment_id;
         },
+
+        disableChange(equipment_type, equipment_order) {
+          const equipment = equipment_order === 'P'
+            ? equipment_type.primary_equipment : equipment_type.secondary_equipment;
+          return !equipment.new_equipment_id ||
+                 equipment.new_equipment_id == equipment.old_equipment_id;
+        },
+
+        // The old page used this undefined method in the station type switch.
+        setStationMode(isAutomatic) {
+          if (this.disableForm || this.loading) return;
+          this.filter.isAutomatic = isAutomatic;
+        },
+
         nextStep(n) {
+
           if (n === this.steps+3) {
+
             this.e1 = 1
+
           } else {
+
             this.e1 = n + 1
+
           }
+
           this.e2 = 1;
+
         },
+
         viewMaintenanceReport(id){
+
           return `/wx/maintenance_report/${id}/view/${0}/`
+
         },
+
         notFutureDate(){
-          var today = moment().format('YYYY-MM-DD');
-          var now = moment().format('HH:mm');
+
+          // The server remains authoritative for the station's local timezone.
+          // This browser-side guard mirrors the original UI validation only.
+          const today = moment().format('YYYY-MM-DD');
+          const now = moment().format('HH:mm');
 
           if (this.maintenance_report.visit_date === today){
+
             return this.maintenance_report.initial_time > now;
+
           }
+
           return this.maintenance_report.visit_date > today;
+
         },
+
         futureDate(){
+
           var today = moment().format('YYYY-MM-DD');
 
           return this.maintenance_report.next_visit_date <= today;
+
         },
+
         futureTime(){
+
           return this.maintenance_report.end_time <= this.maintenance_report.initial_time;
-        },
-        notFutureDate(){
-          var today = moment().format('YYYY-MM-DD');
-          var now = moment().format('HH:mm');
 
-          if (this.maintenance_report.visit_date === today){
-            return this.maintenance_report.initial_time > now;
-          }
-          return this.maintenance_report.visit_date > today;
         },
+
         tabs (equipment_type, equipment_order) {
+
           if (equipment_order=='P'){
+
             if (equipment_type.primary_equipment.old_equipment_id==null){
+
               return ['Add']
+
             }
+
             else if (equipment_type.secondary_equipment.new_equipment_id==null){
+
               return ['Update', 'Change', 'Remove']
+
             }
+
             else{
+
               return ['Update', 'Change']
+
             }            
+
           }
+
           else if(equipment_order=='S'){
+
             if (equipment_type.primary_equipment.new_equipment_id==null){
+
               return false
+
             }
+
             else if (equipment_type.secondary_equipment.old_equipment_id==null){
+
               return ['Add']
+
             }
+
             else{
+
               return ['Update', 'Change', 'Remove'] 
+
             }          
-          }
-        },
-        availableEquipments(equipment_type, equipment_order){
-          if (equipment_order == 'P'){
-            equipment = equipment_type.primary_equipment
-          }
-          else if (equipment_order == 'S'){
-            equipment = equipment_type.secondary_equipment 
+
           }
 
-          const available_equipments = [...equipment_type.available_equipments];
-
-          if (equipment.new_equipment_id){
-            const equipment_data = {
-              id: equipment.new_equipment_id,
-              name: equipment.new_equipment_name
-            }
-            available_equipments.push(equipment_data);
-          }
-          return available_equipments.filter(item => item.id !== equipment.old_equipment_id)
         },
+
+        availableEquipments(equipment_type, equipment_order) {
+          const equipment = equipment_order === 'P'
+            ? equipment_type.primary_equipment : equipment_type.secondary_equipment;
+          const available = [...(equipment_type.available_equipments || [])];
+          if (equipment.new_equipment_id != null &&
+              !available.some(item => String(item.id) === String(equipment.new_equipment_id))) {
+            available.push({ id: equipment.new_equipment_id, name: equipment.new_equipment_name });
+          }
+          return available.filter(item => String(item.id) !== String(equipment.old_equipment_id));
+        },
+
         cleanTechnicianList(technician_id){
+
           var arr = [this.maintenance_report.responsible_technician_id,
+
                      this.maintenance_report.other_technician_1,
+
                      this.maintenance_report.other_technician_2,
+
                      this.maintenance_report.other_technician_3]
 
           arr = arr.filter(item => item !== technician_id)
 
           return this.technicianList.filter((item) => !arr.includes(item.id))
-          
+
         },               
-        getInitialData(id) {
-          this.loading = true;
-          axios.get(`/wx/maintenance_report/${id}/get/`).then(
-            res => {
-              this.maintenance_report.station_information = res.data['station_information'];
-              this.maintenance_report.station_id = res.data['station_id'];
-              this.maintenance_report.responsible_technician = res.data['responsible_technician'];
-              this.maintenance_report.responsible_technician_id = res.data['responsible_technician_id'];
-              this.maintenance_report.visit_date = res.data['visit_date'];
-              this.maintenance_report.next_visit_date = res.data['next_visit_date'];
-              this.maintenance_report.initial_time = res.data['initial_time'];
-              this.maintenance_report.end_time = res.data['end_time'];
-              this.maintenance_report.visit_type_id = res.data['visit_type_id']
-              this.maintenance_report.station_on_arrival_conditions = res.data['station_on_arrival_conditions'];
-              this.maintenance_report.current_visit_summary = res.data['current_visit_summary'];
-              this.maintenance_report.next_visit_summary = res.data['next_visit_summary'];
-              this.maintenance_report.other_technician_1 = res.data['other_technician_1'];
-              this.maintenance_report.other_technician_2 = res.data['other_technician_2'];
-              this.maintenance_report.other_technician_3 = res.data['other_technician_3'];
-              this.maintenance_report.contacts = res.data['contacts'];
-              this.maintenance_report.equipment_types =  res.data['equipment_types'];
-              this.maintenance_report.data_logger_file_name =  res.data['data_logger_file_name'];
-              this.steps = res.data['steps'];
-              this.loading = false;
-            }
-          );
+
+        // Centralized error display ensures a failed save leaves the user in the same step.
+        showRequestError(error, fallback) {
+          console.error(fallback, error);
+          const details = error && error.response && error.response.data;
+          this.request_error_message = (details && (details.message || details.detail)) || fallback;
+          this.request_error = true;
         },
-        createMaintenanceReport(item) {
+
+        async getInitialData(id) {
           this.loading = true;
-          axios.post(`/wx/maintenance_report/create/`,{
-              "station_id": item.station_id,
-              "visit_type_id": item.visit_type_id,
-              "responsible_technician_id": item.responsible_technician_id,
-              "visit_date": item.visit_date,
-              "initial_time": item.initial_time,
-            })
-            .then(res => {
-              this.maintenance_report.id = res.data['maintenance_report_id'];
-              this.getInitialData(res.data['maintenance_report_id']);
-            })
-            .catch((error) => {
-              console.log("error", error.response);
-              this.request_error_message = error.response.data.message;
-              this.request_error = true;
-            })
-            .finally(() => {
-              this.loading = false;
-            });
-        },        
-        updateMaintenanceReportConditions(item){
-          this.loading = true;
-          axios.put(`/wx/maintenance_report/${item.id}/update/condition/`,{
-            'conditions': item.station_on_arrival_conditions,
-          })
-          .then(
-            res => {}
-          );
-          this.loading = false;
-        },
-        updateEquipmentTypeData(equipment_type, equipment_order){
-          this.loading = true;
-          if (equipment_order === "P"){
-            equipment = equipment_type.primary_equipment
-          }
-          else if (equipment_order === "S"){
-            equipment = equipment_type.secondary_equipment
-          }
+          try {
+            const res = await axios.get(`/wx/maintenance_report/${id}/get/`);
+            const data = res.data;
+            const report = this.maintenance_report;
 
+            // For existing reports, show the proper station mode before the station
+            // selector is rendered. The station selection is locked after creation.
+            const selectedStation = this.stations.find(s => String(s.id) === String(data.station_id));
+            if (selectedStation) this.filter.isAutomatic = selectedStation.is_automatic;
 
-          if ((equipment.old_equipment_id) && (equipment.active_tab == 0)){
-            equipment.new_equipment_id = equipment.old_equipment_id
-            equipment.new_equipment_name = equipment.old_equipment_name
-          }
-
-          if (equipment.active_tab == 2){
-            equipment.new_equipment_id = null
-            equipment.new_equipment_name = null
-          }
-
-          axios({
-            method: 'post',
-            url: '/wx/maintenance_report/equipmenttype_data/update/',
-            data: {
-              'maintenance_report_id': this.maintenance_report.id,
-              'equipment_order': equipment_order,
-              'equipment_type_id': equipment_type.id,
-              'new_equipment_id': equipment.new_equipment_id,
-              'old_equipment_id': equipment.old_equipment_id,
-              'condition': equipment.condition,
-              'classification': equipment.classification,
-            },
-          })
-          .then(res => {
-            this.getInitialData(this.maintenance_report.id)
-          })
-          .catch((error) => {
-            console.log("error", error.response);
-            this.request_error_message = error.response.data.message;
-            this.request_error = true;
-          })
-          .finally(() => {
+            report.station_information = data.station_information;
+            report.station_id = data.station_id;
+            report.responsible_technician = data.responsible_technician;
+            report.responsible_technician_id = data.responsible_technician_id;
+            report.visit_date = data.visit_date;
+            report.next_visit_date = data.next_visit_date;
+            report.initial_time = data.initial_time;
+            report.end_time = data.end_time;
+            report.visit_type_id = data.visit_type_id;
+            report.station_on_arrival_conditions = data.station_on_arrival_conditions;
+            report.current_visit_summary = data.current_visit_summary;
+            report.next_visit_summary = data.next_visit_summary;
+            report.other_technician_1 = data.other_technician_1;
+            report.other_technician_2 = data.other_technician_2;
+            report.other_technician_3 = data.other_technician_3;
+            report.contacts = data.contacts;
+            report.equipment_types = data.equipment_types;
+            report.data_logger_file_name = data.data_logger_file_name;
+            this.steps = data.steps;
+            return true;
+          } catch (error) {
+            this.showRequestError(error, 'Could not load maintenance report.');
+            return false;
+          } finally {
             this.loading = false;
-          });
+          }
         },
-        updateMaintenanceReportContacts(item){
+
+        async createMaintenanceReport(item) {
+          if (this.loading || this.$v.maintenance_report.$invalid || this.notFutureDate()) return;
           this.loading = true;
-          axios.put(`/wx/maintenance_report/${item.id}/update/contacts/`,{
-            "contacts": item.contacts,
-          })
-          .then(
-            res => {}
-          );
-          this.loading = false;
+          this.request_error = false;
+          try {
+            const response = await axios.post('/wx/maintenance_report/create/', {
+              station_id: item.station_id,
+              visit_type_id: item.visit_type_id,
+              responsible_technician_id: item.responsible_technician_id,
+              visit_date: item.visit_date,
+              initial_time: item.initial_time,
+            });
+            item.id = response.data.maintenance_report_id;
+            await this.getInitialData(item.id);
+          } catch (error) {
+            this.showRequestError(error, 'Could not create maintenance report.');
+          } finally {
+            this.loading = false;
+          }
         },
-        updateMaintenanceReportDataLogger(item){
+
+        async updateMaintenanceReportConditions(item) {
+          if (this.loading) return;
           this.loading = true;
-          var formData = new FormData();
-          formData.append("data_logger_file", item.data_logger_file);
-          axios({
-            method: 'post',
-            url: `/wx/maintenance_report/${item.id}/update/datalogger/`,
-            data: formData,
-            headers: {'Content-Type': 'multipart/form-data'}
-          })
-          .then(
-            res => {
-              this.maintenance_report.data_logger_file_name = res.data['data_logger_file_name']
+          this.request_error = false;
+          try {
+            await axios.put(`/wx/maintenance_report/${item.id}/update/condition/`, {
+              conditions: item.station_on_arrival_conditions,
+            });
+            this.nextStep(1); // Advance only after confirmation from the server.
+          } catch (error) {
+            this.showRequestError(error, 'Could not save arrival conditions.');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async updateEquipmentTypeData(equipment_type, equipment_order, completedStep) {
+          if (this.loading) return;
+          const equipment = equipment_order === 'P'
+            ? equipment_type.primary_equipment : equipment_type.secondary_equipment;
+          const activeTab = equipment.active_tab;
+
+          // On Update, retain the existing equipment. On Remove, send null.
+          // The backend payload remains identical to the previous implementation.
+          let newEquipmentId = equipment.new_equipment_id;
+          if (equipment.old_equipment_id && Number(activeTab) === 0) {
+            newEquipmentId = equipment.old_equipment_id;
+          } else if (Number(activeTab) === 2) {
+            newEquipmentId = null;
+          }
+
+          this.loading = true;
+          this.request_error = false;
+          try {
+            await axios.post('/wx/maintenance_report/equipmenttype_data/update/', {
+              maintenance_report_id: this.maintenance_report.id,
+              equipment_order: equipment_order,
+              equipment_type_id: equipment_type.id,
+              new_equipment_id: newEquipmentId,
+              old_equipment_id: equipment.old_equipment_id,
+              condition: equipment.condition,
+              classification: equipment.classification,
+            });
+            equipment.new_equipment_id = newEquipmentId;
+            const loaded = await this.getInitialData(this.maintenance_report.id);
+            if (loaded) {
+              if (equipment_order === 'P') this.e2 = 2;
+              else this.nextStep(completedStep);
             }
-          ).catch((error) => {
-            console.log("error", error.response);
-            this.request_error_message = error.response.data.message;
-            this.request_error = true;
-          });
-          this.loading = false;
-        },        
-        updateMaintenanceReportSummary(item, status){ 
+          } catch (error) {
+            this.showRequestError(error, 'Could not save equipment changes.');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        async updateMaintenanceReportContacts(item) {
+          if (this.loading) return;
           this.loading = true;
-          axios.put(`/wx/maintenance_report/${item.id}/update/summary/`,{
-            "other_technician_1": item.other_technician_1,
-            "other_technician_2": item.other_technician_2,
-            "other_technician_3": item.other_technician_3,
-            "next_visit_date": item.next_visit_date,
-            "end_time": item.end_time,
-            "current_visit_summary": item.current_visit_summary,
-            "next_visit_summary": item.next_visit_summary,
-            "status": status,
-          })
-          .then(res => {
-            this.updateMaintenanceReportDataLogger(this.maintenance_report)
-          });
-          this.loading = false;
-        },      
+          this.request_error = false;
+          try {
+            await axios.put(`/wx/maintenance_report/${item.id}/update/contacts/`, {
+              contacts: item.contacts,
+            });
+            this.nextStep(this.steps + 2);
+          } catch (error) {
+            this.showRequestError(error, 'Could not save report contacts.');
+          } finally {
+            this.loading = false;
+          }
+        },
+
+        // A report may have no new logger file; uploading a null value should be skipped.
+        async updateMaintenanceReportDataLogger(item) {
+          if (!item.data_logger_file) return;
+          const formData = new FormData();
+          formData.append('data_logger_file', item.data_logger_file);
+          const response = await axios.post(
+            `/wx/maintenance_report/${item.id}/update/datalogger/`, formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+          );
+          item.data_logger_file_name = response.data.data_logger_file_name;
+          item.data_logger_file = null;
+        },
+
+        // Save and optional attachment upload must finish BEFORE navigating away.
+        async saveSummaryAndGo(status, destination) {
+          if (this.loading || this.futureTime() || this.futureDate()) return;
+          const item = this.maintenance_report;
+          this.loading = true;
+          this.request_error = false;
+          try {
+            await axios.put(`/wx/maintenance_report/${item.id}/update/summary/`, {
+              other_technician_1: item.other_technician_1,
+              other_technician_2: item.other_technician_2,
+              other_technician_3: item.other_technician_3,
+              next_visit_date: item.next_visit_date,
+              end_time: item.end_time,
+              current_visit_summary: item.current_visit_summary,
+              next_visit_summary: item.next_visit_summary,
+              status: status,
+            });
+            await this.updateMaintenanceReportDataLogger(item);
+            if (destination === 'preview') {
+              window.location.assign(this.viewMaintenanceReport(item.id));
+            } else {
+              window.location.assign("{% url 'maintenance-reports' %}");
+            }
+          } catch (error) {
+            this.showRequestError(error, 'Could not save maintenance report summary.');
+          } finally {
+            this.loading = false;
+          }
+        },
+
       },
+
       mounted() {
+
+        axios.defaults.xsrfHeaderName = "X-CSRFToken";
+
+        axios.defaults.xsrfCookieName = "csrftoken";
+
         {% if maintenance_report_id %}
           this.getInitialData(this.maintenance_report.id);
-        {%  endif %}
-        axios.defaults.xsrfHeaderName = "X-CSRFToken";
-        axios.defaults.xsrfCookieName = "csrftoken";
+        {% endif %}
+
       },      
+
     });
 
   </script>
 
-  <style>
-  </style>
-</div>
+<style>
+/* Scoped styles: do not change Vuetify, report tables, or CKEditor on other pages. */
+/* Match Yearly Average: put the page gutter on the srf-container itself.
+   Do not impose a centered max-width or let the shell add another large margin. */
+.mrnew-page {
+  width: 100%;
+  max-width: none;
+  padding: 24px 24px 34px;
+  background: #fff;
+  color: #242c36;
+}
+.mrnew-page .v-application--wrap { min-height: auto !important; }
+.mrnew-page .v-application,
+.mrnew-page .mrnew-vcontent { background: #fff !important; color: #242c36; }
+/* Same shell geometry as Yearly Average's .ya-shell. */
+.mrnew-page .mrnew-shell {
+  width: 100%;
+  padding: 0 20px 28px;
+  margin: 0 auto;
+}
+/* Align the heading vertically with the Yearly Average page heading. */
+.mrnew-page .mrnew-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 20px 0 12px;
+  margin: 0;
+}
+.mrnew-page .mrnew-page-header .srf-display-1 { color: #212b36; }
+.mrnew-page .mrnew-page-subtitle { font-size: 13px; margin: 6px 0 0; color: #697586; line-height: 1.5; }
+.mrnew-page .mrnew-back-link { text-transform: none; letter-spacing: 0; margin: 0; }
+.mrnew-page .mrnew-local-time { display: flex; align-items: center; gap: 9px; font-size: 13px; color: #526070; padding: 11px 14px; border: 1px solid #e4e9ef; border-radius: 8px; margin: 0 0 20px; background: #fff; }
+.mrnew-page .mrnew-local-time strong { color: #2d3744; }
+.mrnew-page .mrnew-panel { border: 1px solid #e4e8ec; border-radius: 10px; background: #fff; box-shadow: 0 2px 8px rgba(20, 29, 43, .025); }
+.mrnew-page .mrnew-section-header { padding: 18px 21px 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; border-bottom: 1px solid #edf0f2; }
+.mrnew-page .mrnew-section-header h2 { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.4; color: #26313d; }
+.mrnew-page .mrnew-section-header p { margin: 4px 0 0; font-size: 12.5px; color: #738091; line-height: 1.5; }
+.mrnew-page .mrnew-section-hint { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: #86909b; font-size: 11px; margin-top: 3px; }
+.mrnew-page .mrnew-section-hint .v-icon { color: #86909b; }
+.mrnew-page .mrnew-details-content { padding: 20px 21px 18px; }
+.mrnew-page .mrnew-field-group { display: inline-flex; flex-direction: column; gap: 8px; margin-bottom: 21px; }
+.mrnew-page .mrnew-field-label { color: #485564; font-size: 12px; font-weight: 600; }
+.mrnew-page .mrnew-mode-switch { display: inline-flex; align-items: center; gap: 0; border: 1px solid #dce3ea; border-radius: 7px; padding: 3px; background: #fff; }
+.mrnew-page .mrnew-mode-switch button { appearance: none; padding: 7px 17px; border: 0; border-radius: 5px; background: transparent; font-size: 12px; font-weight: 600; color: #687585; cursor: pointer; transition: background .12s, color .12s; }
+.mrnew-page .mrnew-mode-switch button.active { background: #eaf2ff; color: #1f60a7; }
+.mrnew-page .mrnew-mode-switch button:disabled { cursor: not-allowed; opacity: .78; }
+.mrnew-page .mrnew-form-grid { margin-top: 0; margin-bottom: 5px; }
+.mrnew-page .mrnew-form-grid .col { padding: 7px; }
+.mrnew-page .mrnew-form-footnote { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #647181; margin-top: 8px; line-height: 1.5; }
+.mrnew-page .mrnew-form-footnote strong { color: #455466; }
+.mrnew-page .mrnew-form-footnote .v-icon { color: #758397; flex-shrink: 0; margin-top: 1px; }
+.mrnew-page .mrnew-details-actions { margin-top: 18px; display: flex; justify-content: flex-end; }
+.mrnew-page .mrnew-details-actions .v-btn { text-transform: none; letter-spacing: 0; }
+.mrnew-page .mrnew-workflow { margin-top: 28px; border: 1px solid #e4e8ec; border-radius: 10px; background: #fff; }
+.mrnew-page .mrnew-workflow-header { border-bottom: 1px solid #ebeff2; }
+.mrnew-page .mrnew-report-label { font-size: 11px; padding: 6px 9px; border-radius: 6px; color: #536376; background: #f4f6f8; white-space: nowrap; }
+.mrnew-page .mrnew-stepper { background: #fff !important; padding: 15px 18px 22px; box-shadow: none !important; }
+.mrnew-page .mrnew-stepper .v-stepper__step { min-height: 61px; padding: 12px 16px; }
+.mrnew-page .mrnew-stepper .v-stepper__step .v-stepper__label { font-size: 13px; font-weight: 600; color: #394657; text-shadow: none; }
+.mrnew-page .mrnew-stepper .v-stepper__content { padding: 0 14px 20px 40px; margin: -6px 0 8px 29px; border-left-color: #e8edf2 !important; }
+.mrnew-page .mrnew-stepper .v-stepper__step--active .v-stepper__step__step { background: #1976d2 !important; }
+.mrnew-page .mrnew-stepper .v-card { box-shadow: none !important; }
+.mrnew-page .mrnew-stepper .v-btn { text-transform: none; font-size: 12px; letter-spacing: .1px; }
+.mrnew-page .mrnew-stepper .v-btn:not(.v-btn--icon) { border-radius: 6px; }
+.mrnew-page .mrnew-editor-card { padding: 14px 16px 4px; border: 1px solid #e8ecf0; border-radius: 8px; background: #fff !important; }
+.mrnew-page .mrnew-editor { display: block; width: 100%; max-width: 100%; margin: 0 0 14px !important; padding: 0 !important; background: #fff !important; color: #232f3b !important; }
+.mrnew-page .mrnew-editor .cke_chrome { border: 1px solid #dce2e8 !important; border-radius: 6px; overflow: hidden; }
+.mrnew-page .mrnew-editor .cke_top,
+.mrnew-page .mrnew-editor .cke_bottom { background: #f8f9fb !important; border-color: #e8edf1 !important; }
+.mrnew-page .mrnew-equipment-card { border: 1px solid #e8edf1 !important; border-radius: 8px !important; margin-top: 12px; padding: 6px 4px 8px; }
+.mrnew-page .mrnew-equipment-card .v-card__text { padding: 14px 16px; }
+.mrnew-page .mrnew-equipment-card .v-card__actions { padding: 0 16px 14px; }
+.mrnew-page .mrnew-equipment-heading { font-size: 13px; color: #354254; font-weight: 600; margin: 0 0 12px; }
+.mrnew-page .mrnew-stepper .v-tabs,
+.mrnew-page .mrnew-stepper .v-tabs .v-tabs-bar,
+.mrnew-page .mrnew-stepper .v-tabs-items { background: #fff !important; }
+.mrnew-page .mrnew-stepper .v-tabs .v-tab { min-width: 68px; font-size: 11px; font-weight: 600; letter-spacing: .1px; text-transform: none; }
+.mrnew-page .mrnew-stepper .v-tabs .v-tab--active { color: #1976d2 !important; }
+.mrnew-page .mrnew-stepper .v-tabs .v-tab::before { background: transparent !important; }
+.mrnew-page .mrnew-stepper .v-stepper__content .v-stepper { background: #fff !important; box-shadow: none !important; }
+.mrnew-page .mrnew-stepper .v-input--radio-group { margin-top: 12px; }
+.mrnew-page .mrnew-stepper .v-radio { margin-bottom: 4px; }
+.mrnew-page .mrnew-summary-card { background: #fff; border: 1px solid #e6eaee; border-radius: 9px; padding: 20px 20px 2px; }
+.mrnew-page .mrnew-summary-heading h3 { font-size: 15px; font-weight: 650; margin: 0; color: #26313d; }
+.mrnew-page .mrnew-summary-heading p { font-size: 12px; margin: 4px 0 0; color: #778395; }
+.mrnew-page .mrnew-subsection { border-top: 1px solid #edf0f2; margin-top: 20px; padding-top: 18px; }
+.mrnew-page .mrnew-subheading { color: #364458; font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+.mrnew-page .mrnew-subheading span { color: #87919e; font-size: 11px; font-weight: 400; margin-left: 6px; }
+.mrnew-page .mrnew-editor-label { font-size: 12px; color: #556374; font-weight: 600; margin: 14px 0 9px; }
+.mrnew-page .mrnew-upload-section { padding-bottom: 16px; }
+.mrnew-page .mrnew-field-help { margin: 8px 0 0; font-size: 11px; color: #8591a0; }
+.mrnew-page .mrnew-summary-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; padding: 20px 0 6px; }
+.mrnew-page .mrnew-overlay-content { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #fff; font-size: 13px; font-weight: 600; }
+.mrnew-page .v-text-field--outlined fieldset { border-color: #dce3e9; }
+.mrnew-page .v-input__slot { background-color: #fff !important; }
+@media (max-width: 760px) {
+  /* Same mobile shell gutter as the Yearly Average page. */
+  .mrnew-page .mrnew-shell { padding: 0 11px 20px; }
+  .mrnew-page .mrnew-section-header { padding: 15px 14px; flex-wrap: wrap; }
+  .mrnew-page .mrnew-details-content { padding: 15px 13px; }
+  .mrnew-page .mrnew-stepper { padding: 10px 4px; }
+  .mrnew-page .mrnew-stepper .v-stepper__content { padding-left: 14px; padding-right: 4px; margin-left: 20px; }
+  .mrnew-page .mrnew-summary-card { padding: 14px 12px 2px; }
+  .mrnew-page .mrnew-summary-actions .v-btn { flex: 1 1 auto; }
+}
+</style>
+
 {% endblock %}

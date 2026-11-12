@@ -46,7 +46,6 @@ urlpatterns = [
     path('api/variable-report/', views.variable_report_data, name='variable-report-data'), # Variable Report
     path('api/raw_data_last_24h/<station_id>/', views.raw_data_last_24h),
     path('api/latest_data/<variable_id>/', views.latest_data),
-    path('api/daily_means/', views.daily_means_data_view), # Extremes and Means
     path("api/publishing_offsets/", views.publishingOffsetViewSet.as_view({'get': 'list'}), name='api-publishing-offsets'),
     path('api/agromet/aquacrop/run/', views.AquacropModelRunView.as_view()),
     path('api/agromet/aquacrop/available/', views.AquacropAvailableDataView.as_view()),
@@ -273,6 +272,7 @@ urlpatterns = [
 
     # Extremes and Means Page
     path('wx/product/extremes_means/', views.ExtremesMeansView.as_view(), name='extremes-means'),
+    path('api/daily_means/', views.daily_means_data_view),
 
 
     # Wave Data Analysis Page

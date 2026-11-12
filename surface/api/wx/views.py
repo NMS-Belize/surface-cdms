@@ -9,15 +9,19 @@ import shutil
 import random
 import pyoscar
 import calendar
+from collections import defaultdict
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import wx.export_surface_oscar as exso
 from datetime import datetime as datetime_constructor
-from datetime import timezone, timedelta, date
+from datetime import timezone, timedelta, date, time as datetime_time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dateutil.relativedelta import relativedelta
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 from itertools import islice
 
 from functools import wraps
+import time
 from time import perf_counter
 
 import matplotlib
@@ -98,7 +102,6 @@ from django.utils.decorators import method_decorator
 from base64 import b64encode
 
 from wx.models import QualityFlag, WxPermissionPages, WxGroupPageAccess
-import time
 from wx.models import HighFrequencyData, MeasurementVariable
 from wx.tasks import fft_decompose, export_station_to_oscar, export_station_to_oscar_wigos, data_inventory_month_view, save_monthly_form, save_synop_form
 import math
@@ -1250,7 +1253,7 @@ class StationMetadataViewSet(viewsets.ModelViewSet):
 
 class StationViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
-    queryset = Station.objects.all()
+    queryset = Station.objects.exclude(is_reference=True)
 
     # queryset = Station.objects.all().select_related("country").order_by("name")
     # def put(self, request, *args, **kwargs):
@@ -6017,45 +6020,148 @@ class QualityControlView(WxPermissionRequiredMixin, LoginRequiredMixin, Template
 
 
 
-@csrf_exempt
-@wx_mapped_permission_required 
+"""
+SURFACE Yearly Average: monthly averages of EFFECTIVE QC-Good observations.
+"""
+@wx_mapped_permission_required
 def get_yearly_average(request):
-    begin_date = request.GET.get('begin_date', None)
-    end_date = request.GET.get('end_date', None)
-    station_id = request.GET.get('station_id', None)
-    variable_id = request.GET.get('variable_id', None)
+    """Return per-month averages of effectively QC-Good observations."""
+    if request.method != "GET":
+        return JsonResponse({"message": "Method not allowed."}, status=405)
 
-    sql_string = """
-        select avg(val.measured) as average, extract ('year' from month)::varchar as year, extract ('month' from month)::varchar as month, round(avg(val.measured)::decimal, 2)
-        from generate_series(date_trunc('year', date %s),date_trunc('year', date %s) + interval '1 year' - interval '1 day', interval '1 month')  month
-        left outer join raw_data as val on date_trunc('month', val.datetime) = date_trunc('month', month) and val.station_id = %s and val.variable_id = %s
-        group by month
-        order by month
+    begin_text = request.GET.get("begin_date")
+    end_text = request.GET.get("end_date")
+    station_text = request.GET.get("station_id")
+    variable_text = request.GET.get("variable_id")
+
+    if not all((begin_text, end_text, station_text, variable_text)):
+        return JsonResponse({"message": "Missing required parameters."}, status=400)
+
+    try:
+        begin_date = date.fromisoformat(begin_text)
+        end_date = date.fromisoformat(end_text)
+        station_id = int(station_text)
+        variable_id = int(variable_text)
+    except (TypeError, ValueError):
+        return JsonResponse({"message": "Invalid date, station or variable."}, status=400)
+
+    if station_id <= 0 or variable_id <= 0:
+        return JsonResponse({"message": "Station and variable must be positive IDs."}, status=400)
+    if begin_date > end_date:
+        return JsonResponse({"message": "Start date must not exceed end date."}, status=400)
+    if end_date.year >= 9999:
+        return JsonResponse({"message": "End year is out of range."}, status=400)
+
+    # Maintain the original report behavior: dates select inclusive *years*,
+    # not partial first or last calendar years.
+    first_month = date(begin_date.year, 1, 1)
+    end_exclusive_month = date(end_date.year + 1, 1, 1)
+
+    # Use the same default timezone SURFACE exposes to its pages.
+    # TIMEZONE_NAME is SURFACE's configured name (e.g. America/Belize);
+    # TIME_ZONE is Django's fallback if the custom setting is absent.
+    timezone_name = settings.TIMEZONE_NAME
+    try:
+        local_timezone = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        # Invalid server configuration is not a user input problem.
+        return JsonResponse({"message": "SURFACE default timezone is invalid."}, status=500)
+
+    # Translate full *local* calendar-year boundaries into UTC instants.
+    # For DST-aware zones, these offsets can differ between the two dates.
+    # Filtering on the bare val.datetime column keeps the range index-friendly.
+    local_start = datetime_constructor.combine(first_month, datetime_time.min, tzinfo=local_timezone)
+    local_end = datetime_constructor.combine(end_exclusive_month, datetime_time.min, tzinfo=local_timezone)
+    utc_start = local_start.astimezone(timezone.utc)
+    utc_end = local_end.astimezone(timezone.utc)
+
+    good_qc_flag = 4  # SURFACE: Good. Do not use manual_flag for effective QC.
+    missing_value = -99.9  # Stored numeric placeholder for Missing observations.
+
+    sql = """
+        WITH monthly_data AS (
+            SELECT
+                -- Convert UTC instants to SURFACE-local wall clock time before
+                -- grouping. E.g. 2026-06-01 05:30 UTC is still May in Belize.
+                date_trunc('month', val.datetime AT TIME ZONE %s)::date
+                    AS month_start,
+                ROUND(
+                    AVG(
+                        NULLIF(
+                            CASE
+                                -- Validated readings use the human-confirmed value.
+                                WHEN val.is_validated IS TRUE THEN val.consisted
+                                -- Unvalidated readings use the original value.
+                                ELSE val.measured
+                            END,
+                            %s
+                        )
+                    )::numeric,
+                    2
+                ) AS average
+            FROM raw_data AS val
+            WHERE val.station_id = %s
+              AND val.variable_id = %s
+              -- These UTC bounds represent local Jan 1 to next local Jan 1.
+              -- Filter on the original datetime to use the station/variable/time
+              -- B-tree index; truncate the timestamp only after filtering.
+              AND val.datetime >= %s
+              AND val.datetime < %s
+              -- An accepted/validated record must use validated_flag.
+              -- Otherwise, use the automatic quality_flag; manual_flag is
+              -- deliberately excluded from the effective-QC decision.
+              AND CASE
+                    WHEN val.is_validated IS TRUE THEN val.validated_flag
+                    ELSE val.quality_flag
+                  END = %s
+            GROUP BY 1
+        ),
+        months AS (
+            -- Calendar labels are local months; missing months still appear
+            -- even when no QC-Good readings exist.
+            SELECT generate_series(
+                %s::date,
+                %s::date - INTERVAL '1 month',
+                INTERVAL '1 month'
+            )::date AS month_start
+        )
+        SELECT
+            EXTRACT(YEAR FROM months.month_start)::int AS year,
+            EXTRACT(MONTH FROM months.month_start)::int AS month,
+            monthly_data.average
+        FROM months
+        LEFT JOIN monthly_data USING (month_start)
+        ORDER BY months.month_start
     """
-    where_parameters = [begin_date, end_date, station_id, variable_id]
 
     with connection.cursor() as cursor:
-        cursor.execute(sql_string, where_parameters)
+        cursor.execute(
+            sql,
+            [
+                timezone_name,
+                missing_value,
+                station_id,
+                variable_id,
+                utc_start,
+                utc_end,
+                good_qc_flag,
+                first_month,
+                end_exclusive_month,
+            ],
+        )
         rows = cursor.fetchall()
 
-        years = {}
-        for row in rows:
-            if row[1] not in years.keys():
-                years[row[1]] = {}
+    years = {}
+    for year, month, average in rows:
+        # Preserve string keys / string decimals as expected by the frontend.
+        # A null average means there were no eligible QC-Good readings.
+        years.setdefault(str(year), {})[str(month)] = (
+            str(average) if average is not None else None
+        )
 
-            if row[2] not in years[row[1]].keys():
-                years[row[1]][row[2]] = row[3]
+    return JsonResponse({"next": None, "results": years}, status=200)
 
-            years[row[1]][row[2]] = row[3]
-
-        if not years:
-            return JsonResponse({'message': 'No data found.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        return JsonResponse({'next': None, 'results': years}, safe=False, status=status.HTTP_200_OK)
-
-    return JsonResponse({'message': 'Missing parameters.'}, status=status.HTTP_400_BAD_REQUEST)
-
-
+    
 
 class YearlyAverageReport(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):
     template_name = 'wx/reports/yearly_average.html'
@@ -10230,239 +10336,346 @@ def delete_persist_threshold(request):
     response = {}
     return JsonResponse(response, status=status.HTTP_200_OK)
 
+# ##################################################################################
+# EXTREMES AND MEANS
+_TWO_DECIMALS = Decimal('0.01')
+
+
+def _em_decimal(value):
+    """Convert stored daily-summary numerics without losing valid zero values."""
+    if value is None:
+        return None
+    try:
+        result = Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation):
+        return None
+    return result if result.is_finite() else None
+
+
+def _em_new_metric():
+    return {'total': Decimal(0), 'count': 0, 'high': None, 'low': None,
+            'high_years': set(), 'low_years': set()}
+
+
+def _em_new_bucket():
+    # All four stored daily statistics are aggregated independently. For
+    # example, missing avg_value does not invalidate a real min_value.
+    return {'metrics': {name: _em_new_metric()
+                        for name in ('avg_value', 'max_value', 'min_value', 'sum_value')},
+            'mean_years': set(), 'total_years': set()}
+
+
+def _em_add(bucket, year, row):
+    """Accumulate one calendar day's stored daily_summary measurements.
+
+    Compare unrounded values: rounding before comparing could falsely declare
+    two different extremes a tie. Preserve all tied years, not just one row.
+    """
+    for name, value in row.items():
+        metric_value = _em_decimal(value)
+        if metric_value is None:
+            continue
+        metric = bucket['metrics'][name]
+        metric['total'] += metric_value
+        metric['count'] += 1
+        if metric['high'] is None or metric_value > metric['high']:
+            metric['high'] = metric_value
+            metric['high_years'] = {year}
+        elif metric_value == metric['high']:
+            metric['high_years'].add(year)
+        if metric['low'] is None or metric_value < metric['low']:
+            metric['low'] = metric_value
+            metric['low_years'] = {year}
+        elif metric_value == metric['low']:
+            metric['low_years'].add(year)
+        if name == 'avg_value':
+            bucket['mean_years'].add(year)
+        if name == 'sum_value':
+            bucket['total_years'].add(year)
+
+
+def _em_display_number(value):
+    """Return numeric JSON values rounded to two decimals, without altering ties."""
+    if value is None:
+        return None
+    return float(value.quantize(_TWO_DECIMALS, rounding=ROUND_HALF_UP))
+
+
+def _em_year_label(years):
+    """Show earliest tied year + count; the response also includes all ties.
+
+    Dry days can have 20+ years sharing a zero minimum total. Rendering every
+    tied year in a table cell would make a multi-variable report unreadable.
+    """
+    ordered = sorted(years)
+    if not ordered:
+        return None, []
+    label = str(ordered[0])
+    if len(ordered) > 1:
+        label += ' (+%d)' % (len(ordered) - 1)
+    return label, ordered
+
+
+def _em_bucket_result(bucket, is_accumulation, aggregation_type):
+    """Serialize one day-of-month bucket (or the entire selected month).
+
+    'mean_value' is the mean of *daily avg_value* records, NOT AVG(raw_data).
+    This gives each valid station/day one vote, not each sensor observation.
+    'mean_total' is separately the mean daily sum_value for accumulations.
+    """
+    metrics = bucket['metrics']
+    daily_mean = metrics['avg_value']
+    daily_max = metrics['max_value']
+    daily_min = metrics['min_value']
+    daily_total = metrics['sum_value']
+    result = {}
+
+    for key, metric in (
+        ('mean', daily_mean), ('max', daily_max), ('min', daily_min),
+        ('total', daily_total),
+    ):
+        if key in ('mean', 'total'):
+            result['mean_value' if key == 'mean' else 'mean_total'] = (
+                _em_display_number(metric['total'] / metric['count'])
+                if metric['count'] else None
+            )
+        result['high_' + key] = _em_display_number(metric['high'])
+        result['low_' + key] = _em_display_number(metric['low'])
+        high_label, high_ties = _em_year_label(metric['high_years'])
+        low_label, low_ties = _em_year_label(metric['low_years'])
+        result['high_' + key + '_years'] = high_label
+        result['high_' + key + '_ties'] = high_ties
+        result['low_' + key + '_years'] = low_label
+        result['low_' + key + '_ties'] = low_ties
+
+    # Explicit field names for the observed absolute extremes. These aliases
+    # let the UI say 'Highest max' / 'Lowest min' instead of an ambiguous 'high'.
+    result['high_max'] = _em_display_number(daily_max['high'])
+    result['low_min'] = _em_display_number(daily_min['low'])
+    result['high_max_years'], result['high_max_ties'] = _em_year_label(daily_max['high_years'])
+    result['low_min_years'], result['low_min_ties'] = _em_year_label(daily_min['low_years'])
+
+    # 'Years' counts the independent years contributing the operation's
+    # primary daily statistic. Some other statistic may have more/fewer years.
+    contributing_years = sorted(bucket['total_years'] if is_accumulation
+                                else bucket['mean_years'])
+    result['years'] = len(contributing_years)
+    # The plain Years column displays only a count. The frontend now uses this
+    # explicit list for hover details and CSV export. A test instance with only
+    # one populated year should correctly say which year it was; no missing
+    # months or placeholder rows are added to the list.
+    result['years_list'] = contributing_years
+
+    # Preserve old field aliases for any other consumers of the endpoint;
+    # the NEW frontend uses the explicit names in metadata.columns instead.
+    result['value'] = result['mean_total'] if is_accumulation else result['mean_value']
+    if aggregation_type == 'Minimum':
+        alias_key = 'low_min'
+    elif is_accumulation:
+        alias_key = 'high_total'
+    else:
+        alias_key = 'high_max'
+    result['agg_value'] = result[alias_key]
+    alias_years = result.get(alias_key + '_ties') or []
+    result['year'] = alias_years[0] if alias_years else None
+    return result
+
+
+def _em_metadata(variable):
+    """Describe columns once so the Vue table remains metadata-driven."""
+    aggregation_type = (variable.sampling_operation.name
+                        if variable.sampling_operation is not None else None)
+    is_accumulation = aggregation_type == 'Accumulation'
+
+    # Every variable gets a comparable six-column daily-mean section.
+    columns = ['mean_value', 'high_mean', 'high_mean_years',
+               'low_mean', 'low_mean_years', 'years']
+    headers = ['Mean', 'Highest avg', 'Year(s)', 'Lowest avg', 'Year(s)', 'Years']
+    groups = [{'label': 'Daily averages', 'colspan': 6, 'tone': 'mean'}]
+
+    if is_accumulation:
+        # Daily precipitation/other accumulations: compare totals from
+        # sum_value. Do not substitute the mean of individual samples.
+        columns += ['mean_total', 'high_total', 'high_total_years',
+                    'low_total', 'low_total_years']
+        headers += ['Mean total', 'Greatest total', 'Year(s)', 'Lowest total', 'Year(s)']
+        groups += [{'label': 'Daily totals', 'colspan': 5, 'tone': 'total'}]
+    else:
+        columns += ['high_max', 'high_max_years', 'low_min', 'low_min_years']
+        headers += ['Highest max', 'Year(s)', 'Lowest min', 'Year(s)']
+        groups += [{'label': 'Observed extremes', 'colspan': 4, 'tone': 'extreme'}]
+
+    return {
+        'name': variable.symbol,
+        'id': variable.id,
+        'unit': variable.unit.name if variable.unit is not None else '',
+        'unit_symbol': variable.unit.symbol if variable.unit is not None else '',
+        'aggregation': aggregation_type,
+        'colspan': len(columns),
+        'headers': headers,
+        'columns': columns,
+        'groups': groups,
+        'method': 'daily_summary; unweighted valid station-days',
+    }, is_accumulation, aggregation_type
+
 
 @api_view(['GET'])
 def daily_means_data_view(request):
-    station_id = request.GET.get('station_id', None)
-    month = request.GET.get('month', None)
-    variable_id_list = request.GET.get('variable_id_list', None)
-    begin_year = request.GET.get('begin_year', None)
-    end_year = request.GET.get('end_year', None)
-    filter_year_query = ""
-    filter_year_query_avg = ""
-    period = "All years"
+    """Extremes and Means grouped by day-of-month over selected years.
 
-    if station_id is None:
-        JsonResponse(data={"message": "'station_id' parameter cannot be null."}, status=status.HTTP_400_BAD_REQUEST)
+    Response contract stays station / params / variables. Metadata describes
+    columns dynamically, so existing Vue rendering can adapt per variable.
+    """
+    try:
+        station_id = int(request.GET.get('station_id', ''))
+        month = int(request.GET.get('month', ''))
+        raw_variable_ids = json.loads(request.GET.get('variable_id_list', ''))
+        if month < 1 or month > 12 or station_id <= 0:
+            raise ValueError('Invalid station or month.')
+        if not isinstance(raw_variable_ids, list) or not raw_variable_ids:
+            raise ValueError('Select at least one variable.')
+        # Reject booleans, floats, strings and duplicates without silently
+        # broadening the query; use a deterministic user-selected order.
+        if any(type(value) is not int or value <= 0 for value in raw_variable_ids):
+            raise ValueError('Variable IDs must be positive integers.')
+        variable_ids = list(dict.fromkeys(raw_variable_ids))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return JsonResponse(
+            {'message': 'A valid station, month and variable_id_list are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    if month is None:
-        JsonResponse(data={"message": "'month' parameter cannot be null."}, status=status.HTTP_400_BAD_REQUEST)
+    raw_begin = request.GET.get('begin_year')
+    raw_end = request.GET.get('end_year')
+    if bool(raw_begin) != bool(raw_end):
+        return JsonResponse(
+            {'message': 'Provide both begin_year and end_year, or neither.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    if variable_id_list is not None:
-        variable_id_list = json.loads(variable_id_list)
-    else:
-        JsonResponse(data={"message": "'variable_id_list' parameter cannot be null."},
-                     status=status.HTTP_400_BAD_REQUEST)
-
-    if begin_year is not None and end_year is not None:
+    begin_year = end_year = None
+    if raw_begin is not None and raw_end is not None:
         try:
-            filter_year_query = "AND EXTRACT(YEAR from day) >= %(begin_year)s AND EXTRACT(YEAR from day) <= %(end_year)s"
-            period = f"{begin_year} - {end_year}"
-
-            begin_year = int(begin_year)
-            end_year = int(end_year)
+            begin_year = int(raw_begin)
+            end_year = int(raw_end)
+            if begin_year < 1 or end_year > 9998 or begin_year > end_year:
+                raise ValueError('Invalid year range.')
         except ValueError:
-            JsonResponse(data={"message": "Invalid 'begin_year' or 'end_year' parameters."},
-                         status=status.HTTP_400_BAD_REQUEST)
+            return JsonResponse(
+                {'message': 'Invalid reporting years: start must be no later than end.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    period = '%d - %d' % (begin_year, end_year) if begin_year is not None else 'All years'
 
-    month = int(month)
-    res = {}
+    # Avoid N+1 model lookups for sampling operation/unit, especially when
+    # users select a large group of station variables.
+    station = Station.objects.select_related('region').filter(pk=station_id).first()
+    if station is None:
+        return JsonResponse({'message': 'Station not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    variable_lookup = {
+        variable.id: variable
+        for variable in Variable.objects.filter(pk__in=variable_ids)
+                                      .select_related('sampling_operation', 'unit')
+    }
+    missing_ids = [identifier for identifier in variable_ids if identifier not in variable_lookup]
+    if missing_ids:
+        return JsonResponse(
+            {'message': 'Unknown variable ID(s): ' + ', '.join(map(str, missing_ids))},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     variable_dict = {}
     variable_symbol_dict = {}
-    for variable_id in variable_id_list:
-        query_params_dict = {"station_id": station_id, "month": month, "variable_id": variable_id,
-                             "begin_year": begin_year, "end_year": end_year}
-        variable = Variable.objects.get(pk=variable_id)
-
+    variable_config = {}
+    for variable_id in variable_ids:
+        variable = variable_lookup[variable_id]
+        metadata, is_accumulation, aggregation_type = _em_metadata(variable)
+        variable_dict[variable_id] = {'metadata': metadata, 'data': {}, 'summary': {}}
         variable_symbol_dict[variable.symbol] = variable.name
-        aggregation_type = variable.sampling_operation.name if variable.sampling_operation is not None else None
-        data_dict = {}
-        summary_dict = {}
-        colspan = 1
-        headers = ['Average']
-        columns = ['value']
+        variable_config[variable_id] = (is_accumulation, aggregation_type)
 
-        if aggregation_type == 'Accumulation':
-            colspan = 3
-            headers = ['Greatest', 'Year', 'Years']
-            columns = ['agg_value', 'year', 'years']
+    params = {'station_id': station_id, 'variable_ids': variable_ids, 'month': month}
+    year_where = ''
+    if begin_year is not None:
+        # day is a reporting DATE/local-calendar day, not an observation time.
+        # Use an index-friendly half-open year range for bounded reports.
+        year_where = 'AND day >= %(first_day)s AND day < %(end_day_exclusive)s'
+        params['first_day'] = date(begin_year, 1, 1)
+        params['end_day_exclusive'] = date(end_year + 1, 1, 1)
 
-            with connection.cursor() as cursor:
-                cursor.execute(f"""
-                    SELECT data.day
-                          ,data.sum_value
-                          ,data.year
-                          ,data.years
-                    FROM (SELECT EXTRACT(DAY from day) as day
-                                ,sum_value
-                                ,EXTRACT(YEAR from day) as year
-                                ,RANK () OVER (PARTITION BY EXTRACT(DAY from day) ORDER BY sum_value DESC) as rank
-                                ,count(1) OVER (PARTITION BY EXTRACT(DAY from day)) as years
-                         FROM daily_summary
-                         WHERE station_id  = %(station_id)s
-                           AND EXTRACT(MONTH from day) = %(month)s
-                           AND variable_id = %(variable_id)s
-                           {filter_year_query}) data
-                    WHERE data.rank = 1
-                """, query_params_dict)
-                rows = cursor.fetchall()
+    # One database round trip for all selected variables. No Pandas required.
+    # EXTRACT(MONTH FROM day) is necessary for all-years seasonal comparisons;
+    # station+variable+day indexes can still help narrow eligible rows.
+    sql = f"""
+        SELECT day, variable_id, min_value, max_value,
+               avg_value, sum_value, num_records
+        FROM daily_summary
+        WHERE station_id = %(station_id)s
+          AND variable_id = ANY(%(variable_ids)s)
+          AND EXTRACT(MONTH FROM day) = %(month)s
+          {year_where}
+        ORDER BY variable_id, day
+    """
+    
+    with connection.cursor() as cursor:
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
 
-                if len(rows) > 0:
-                    df = pd.DataFrame(data=rows, columns=("day", "sum_value", "year", "years"))
-                    for index, row in df.iterrows():
-                        data_dict[int(row['day'])] = {"agg_value": round(row['sum_value'], 2), "year": row['year'],
-                                                      "years": row['years']}
-
-                    max_row = df.loc[df["sum_value"].idxmax()]
-                    summary_dict = {"agg_value": round(max_row['sum_value'], 2), "year": max_row['year']}
-
-
-        elif aggregation_type == 'Maximum':
-            colspan = 4
-            headers = ['Average', 'Extreme', 'Year', 'Years']
-            columns = ['value', 'agg_value', 'year', 'years']
-
-            with connection.cursor() as cursor:
-                cursor.execute(f"""
-                    SELECT data.day
-                          ,summary.value
-                          ,data.max_value
-                          ,data.year
-                          ,data.years
-                    FROM (SELECT EXTRACT(DAY from day) as day
-                                ,max_value
-                                ,EXTRACT(YEAR from day) as year
-                                ,RANK () OVER (PARTITION BY EXTRACT(DAY from day) ORDER BY max_value DESC) as rank
-                                ,count(1) OVER (PARTITION BY EXTRACT(DAY from day)) as years
-                         FROM daily_summary
-                         WHERE station_id  = %(station_id)s
-                           AND EXTRACT(MONTH from day) = %(month)s
-                           AND variable_id = %(variable_id)s
-                           {filter_year_query}) data,
-                        (SELECT EXTRACT(DAY from day) as day
-                                ,avg(max_value) as value
-                         FROM daily_summary
-                         WHERE station_id  = %(station_id)s
-                           AND EXTRACT(MONTH from day) = %(month)s
-                           AND variable_id = %(variable_id)s
-                           {filter_year_query}
-                         GROUP BY 1) summary
-                    WHERE data.rank = 1
-                    AND summary.day = data.day
-                """, query_params_dict)
-                rows = cursor.fetchall()
-
-                if len(rows) > 0:
-                    df = pd.DataFrame(data=rows, columns=("day", "value", "max_value", "year", "years"))
-                    for index, row in df.iterrows():
-                        data_dict[int(row['day'])] = {"value": round(row['value'], 2),
-                                                      "agg_value": round(row['max_value'], 2), "year": row['year'],
-                                                      "years": row['years']}
-
-                    max_row = df.loc[df["max_value"].idxmax()]
-                    summary_dict = {"value": round(df["value"].mean(), 2), "agg_value": round(max_row['max_value'], 2),
-                                    "year": max_row['year']}
-
-        elif aggregation_type == 'Minimum':
-            headers = ['Average', 'Extreme', 'Year', 'Years']
-            columns = ['value', 'agg_value', 'year', 'years']
-            colspan = 4
-            with connection.cursor() as cursor:
-                cursor.execute(f"""
-                    SELECT data.day
-                          ,summary.value
-                          ,data.min_value
-                          ,data.year
-                          ,data.years
-                    FROM (SELECT EXTRACT(DAY from day) as day
-                                ,min_value
-                                ,EXTRACT(YEAR from day) as year
-                                ,RANK () OVER (PARTITION BY EXTRACT(DAY from day) ORDER BY min_value ASC) as rank
-                                ,count(1) OVER (PARTITION BY EXTRACT(DAY from day)) as years
-                         FROM daily_summary
-                         WHERE station_id  = %(station_id)s
-                           AND EXTRACT(MONTH from day) = %(month)s
-                           AND variable_id = %(variable_id)s
-                           {filter_year_query}) data,
-                        (SELECT EXTRACT(DAY from day) as day
-                                ,avg(min_value) as value
-                         FROM daily_summary
-                         WHERE station_id  = %(station_id)s
-                           AND EXTRACT(MONTH from day) = %(month)s
-                           AND variable_id = %(variable_id)s
-                           {filter_year_query}
-                         GROUP BY 1) summary
-                    WHERE data.rank = 1
-                    AND summary.day = data.day
-                """, query_params_dict)
-                rows = cursor.fetchall()
-
-                if len(rows) > 0:
-                    df = pd.DataFrame(data=rows, columns=("day", "value", "min_value", "year", "years"))
-                    for index, row in df.iterrows():
-                        data_dict[int(row['day'])] = {"value": round(row['value'], 2),
-                                                      "agg_value": round(row['min_value'], 2), "year": row['year'],
-                                                      "years": row['years']}
-
-                    max_row = df.loc[df["min_value"].idxmin()]
-                    summary_dict = {"value": round(df["value"].mean(), 2), "agg_value": round(max_row['min_value'], 2),
-                                    "year": max_row['year']}
-
-        else:
-            with connection.cursor() as cursor:
-                cursor.execute(f"""
-                    SELECT EXTRACT(DAY from day)
-                          ,avg(avg_value)
-                    FROM daily_summary data
-                    WHERE station_id = %(station_id)s
-                    AND EXTRACT(MONTH from day) = %(month)s
-                    AND variable_id = %(variable_id)s
-                    {filter_year_query}
-                    GROUP BY 1
-                """, query_params_dict)
-                rows = cursor.fetchall()
-
-                if len(rows) > 0:
-                    for row in rows:
-                        day = int(row[0])
-                        value = round(row[1], 2)
-                        data_dict[day] = {"value": value}
-
-                    df = pd.DataFrame(data=rows, columns=("day", "value"))
-                    summary_dict = {"value": round(df["value"].mean(), 2)}
-
-        variable_dict[variable_id] = {
-            'metadata': {
-                "name": variable.symbol,
-                "id": variable.id,
-                "unit": variable.unit.name if variable.unit is not None else "",
-                "unit_symbol": variable.unit.symbol if variable.unit is not None else "",
-                "aggregation": aggregation_type,
-                "colspan": colspan,
-                "headers": headers,
-                "columns": columns
-            },
-            'data': data_dict,
-            'summary': summary_dict,
+    daily_buckets = defaultdict(dict)
+    month_buckets = {identifier: _em_new_bucket() for identifier in variable_ids}
+    for summary_day, variable_id, min_value, max_value, avg_value, sum_value, num_records in rows:
+        # Some summary generators store placeholder rows for days with no
+        # observations. A zero record count must never contribute a synthetic
+        # zero total or an extreme. If legacy num_records is NULL, the actual
+        # non-null measurement columns determine whether it contributes.
+        if num_records is not None and num_records <= 0:
+            continue
+        year, calendar_day = summary_day.year, summary_day.day
+        metric_row = {
+            'avg_value': avg_value,
+            'min_value': min_value,
+            'max_value': max_value,
+            'sum_value': sum_value,
         }
+        by_day = daily_buckets[variable_id]
+        if calendar_day not in by_day:
+            by_day[calendar_day] = _em_new_bucket()
+        _em_add(by_day[calendar_day], year, metric_row)
+        _em_add(month_buckets[variable_id], year, metric_row)
 
-    res['variables'] = variable_dict
-    station = Station.objects.get(pk=station_id)
-    res['station'] = {
-        "name": station.name,
-        "admin_region": station.region.name,
-        "latitude": station.latitude,
-        "longitude": station.longitude,
-        "elevation": station.elevation,
-        "variables": variable_symbol_dict,
+    for variable_id in variable_ids:
+        is_accumulation, aggregation_type = variable_config[variable_id]
+        bucket_days = daily_buckets.get(variable_id, {})
+        variable_dict[variable_id]['data'] = {
+            day: _em_bucket_result(bucket, is_accumulation, aggregation_type)
+            for day, bucket in sorted(bucket_days.items())
+        }
+        if bucket_days:
+            variable_dict[variable_id]['summary'] = _em_bucket_result(
+                month_buckets[variable_id], is_accumulation, aggregation_type
+            )
+
+    result = {
+        'variables': variable_dict,
+        'station': {
+            'name': station.name,
+            'admin_region': station.region.name if station.region is not None else '',
+            'latitude': station.latitude,
+            'longitude': station.longitude,
+            'elevation': station.elevation,
+            'variables': variable_symbol_dict,
+        },
+        'params': {
+            'month': month,
+            'period': period,
+            'begin_year': begin_year,
+            'end_year': end_year,
+        },
     }
+    return JsonResponse(result, status=status.HTTP_200_OK)
 
-    res['params'] = {
-        "month": month,
-        "period": period,
-    }
-
-    return JsonResponse(res, status=status.HTTP_200_OK)
+# ##################################################################################
 
 
 class DataInventoryView(WxPermissionRequiredMixin, LoginRequiredMixin, TemplateView):

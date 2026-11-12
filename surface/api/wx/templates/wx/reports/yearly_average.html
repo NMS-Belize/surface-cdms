@@ -1,348 +1,790 @@
-{% extends "base.html" %} {% block content %}
-<div class="srf-container">
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Yearly Average · SURFACE{% endblock %}
+{% block content %}
+
+<!--
+  Yearly Average report
+  ---------------------
+  Keep the report page scoped under .ya-page. base.html is shared by many SURFACE
+  screens, so generic CSS overrides (e.g. for tables or Vuetify menus) can
+  unintentionally break the map and monitoring screens.
+-->
+<div class="srf-container ya-page">
   <div id="app" v-cloak>
-    <v-app>
-      <v-content fluid fill-height style="background: white">
-        <v-layout column>
-          <v-flex>
-            <h1 class="display-1 text-uppercase">Yearly Average</h1>
-          </v-flex>
-          <v-layout column fluid>
-            <v-layout mt-3>
-              <v-flex sm1 md3 mb-3 lg3>
-                <v-autocomplete
-                  :items="stations"
-                  :item-text="(item) => `${item.name} ${item.code}`"
-                  item-value="id"
-                  v-model="requestData.selectedStationId"
-                  label="Station"
-                  @change="onChangeStation(requestData.selectedStationId)"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-              <v-flex sm1 md3 lg3 ml-5>
-                <v-autocomplete
-                  :items="variableItems"
-                  item-text="variable_name"
-                  item-value="variable"
-                  v-model="requestData.selectedElementId"
-                  label="Variable"
-                  required
-                  hint="*Required"
-                  persistent-hint
-                  :rules="simpleTextFieldsRules"
-                  autocomplete="off"
-                ></v-autocomplete>
-              </v-flex>
-            </v-layout>
-            <v-layout mt-3>
-              <v-flex sm1 md3 lg3 class="d-flex justify-between">
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="menu1"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="requestData.begin_date"
-                      label="Start date"
-                      prepend-icon="event"
-                      v-on="on"
-                      required
-                      hint="*Required"
-                      persistent-hint
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    name="begin_date"
+    <v-app class="ya-app">
+      <v-content class="ya-content">
+        <div class="ya-shell">
+
+          <!-- Follow Data Export's shared page-heading treatment. -->
+          <header class="ya-page-heading">
+            <div>
+              <h1 class="srf-display-1 text-uppercase">Yearly Average</h1>
+              <p>Compare monthly observations and annual averages across reporting years.</p>
+            </div>
+          </header>
+
+          <!--
+            Match Data Export's compact section layout. This report only has one
+            parameter section; avoid adding unnecessary subsections or decoration.
+          -->
+          <section class="ya-section ya-parameters" aria-labelledby="ya-filter-heading">
+            <div class="ya-section-head">
+              <span class="ya-section-step">01</span>
+              <div class="ya-section-title">
+                <h2 id="ya-filter-heading">Report parameters</h2>
+                <p>Select a station, variable and date range to generate the report.</p>
+              </div>
+              <i class="material-icons-outlined ya-section-symbol" aria-hidden="true">tune</i>
+            </div>
+
+            <div class="ya-section-body">
+              <div class="ya-filter-grid">
+              <v-autocomplete
+                v-model="requestData.selectedStationId"
+                :items="stations"
+                :item-text="stationDisplayName"
+                item-value="id"
+                label="Station"
+                placeholder="Select station"
+                outlined
+                dense
+                clearable
+                :loading="loadingStations"
+                :disabled="loadingStations"
+                :error-messages="stationsError ? [stationsError] : []"
+                hide-details="auto"
+                autocomplete="off"
+                no-data-text="No stations available"
+              ></v-autocomplete>
+
+              <v-autocomplete
+                v-model="requestData.selectedElementId"
+                :items="variableItems"
+                item-text="variable_name"
+                item-value="variable"
+                label="Variable"
+                placeholder="Select variable"
+                outlined
+                dense
+                clearable
+                :loading="loadingVariables"
+                :disabled="!hasSelectedStation || loadingVariables"
+                :error-messages="variablesError ? [variablesError] : []"
+                hide-details="auto"
+                autocomplete="off"
+                :no-data-text="hasSelectedStation ? 'No variables available' : 'Select a station first'"
+              ></v-autocomplete>
+
+              <!-- Vuetify mounts calendar menus outside the section overflow;
+                   content-class applies stacking only to these two calendars. -->
+              <v-menu
+                v-model="menu1"
+                :close-on-content-click="false"
+                transition="scale-transition"
+                offset-y
+                max-width="290px"
+                min-width="290px"
+                content-class="ya-calendar-menu"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-text-field
                     v-model="requestData.begin_date"
-                    @input="menu1 = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-              <v-flex sm1 md3 lg3 ml-5 class="d-flex justify-between">
-                <v-menu
-                  :close-on-content-click="false"
-                  v-model="menu2"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  class="max-50"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="requestData.end_date"
-                      label="End date"
-                      prepend-icon="event"
-                      v-on="on"
-                      required
-                      hint="*Required"
-                      persistent-hint
-                      :rules="simpleTextFieldsRules"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    name="end_date"
+                    label="Start date"
+                    outlined
+                    dense
+                    readonly
+                    hide-details="auto"
+                    prepend-inner-icon="mdi-calendar-month-outline"
+                    v-bind="attrs"
+                    v-on="on"
+                  ></v-text-field>
+                </template>
+                <v-date-picker
+                  v-model="requestData.begin_date"
+                  :max="requestData.end_date || undefined"
+                  @input="menu1 = false"
+                  no-title
+                  scrollable
+                ></v-date-picker>
+              </v-menu>
+
+              <v-menu
+                v-model="menu2"
+                :close-on-content-click="false"
+                transition="scale-transition"
+                offset-y
+                max-width="290px"
+                min-width="290px"
+                content-class="ya-calendar-menu"
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-text-field
                     v-model="requestData.end_date"
-                    @input="menu2 = false"
-                  ></v-date-picker>
-                </v-menu>
-              </v-flex>
-            </v-layout>
-            <v-layout mt-3 mb-5>
-              <v-flex class="d-flex justify-between">
-                <v-btn
-                  justify-end
-                  outlined
-                  color="primary"
-                  small
-                  @click="handleRequestParameters"
-                  :disabled="$v.requestData.$invalid"
-                  >ADD VARIABLE</v-btn
-                >
-              </v-flex>
-            </v-layout>
-            <v-layout ml-5 mt-5 mr-5>
-              <v-flex v-if="Object.keys(reportValues).length">
-                <table>
-                  <tr>
-                    <th></th>
-                    <th>JAN</th>
-                    <th>FEB</th>
-                    <th>MAR</th>
-                    <th>APR</th>
-                    <th>MAY</th>
-                    <th>JUN</th>
-                    <th>JUL</th>
-                    <th>AUG</th>
-                    <th>SEP</th>
-                    <th>OCT</th>
-                    <th>NOV</th>
-                    <th>DEZ</th>
-                    <th>AVG</th>
-                  </tr>
-                  <tr v-for="ano in Object.keys(reportValues)" :key="ano">
-                    <td
-                      style="padding: 5px; font-weight: bold; max-width: 20px"
-                    >
-                      [[ ano ]]
-                    </td>
+                    label="End date"
+                    outlined
+                    dense
+                    readonly
+                    hide-details="auto"
+                    prepend-inner-icon="mdi-calendar-month-outline"
+                    v-bind="attrs"
+                    v-on="on"
+                  ></v-text-field>
+                </template>
+                <v-date-picker
+                  v-model="requestData.end_date"
+                  :min="requestData.begin_date || undefined"
+                  @input="menu2 = false"
+                  no-title
+                  scrollable
+                ></v-date-picker>
+              </v-menu>
+              </div>
+            </div>
 
-                    <td
-                      v-for="mes in Object.keys(reportValues[ano])"
-                      :key="mes+ano"
-                      style="max-width: 1px"
-                    >
-                      [[ reportValues[ano][mes] || '-']]
-                    </td>
-                  </tr>
+            <div class="ya-filter-footer">
+              <p v-if="dateError" class="ya-field-error" role="alert">
+                <v-icon size="17" color="error">mdi-alert-circle-outline</v-icon>
+                [[ dateError ]]
+              </p>
+              <p v-else class="ya-filter-hint">
+                <v-icon size="16">mdi-information-outline</v-icon>
+                Averages are calculated from available monthly values; months without data are excluded.
+              </p>
 
+              <v-btn
+                color="primary"
+                depressed
+                class="ya-generate-button"
+                :loading="loadingReport"
+                :disabled="!isFormValid || loadingReport"
+                @click="handleRequestParameters"
+              >
+                <v-icon left size="18">mdi-chart-box-outline</v-icon>
+                Generate report
+              </v-btn>
+            </div>
+          </section>
+
+          <!-- An error is surfaced in the page rather than leaving a blank table. -->
+          <v-alert v-if="reportError" type="error" dense class="ya-report-alert" role="alert">
+            [[ reportError ]]
+          </v-alert>
+
+          <!-- Results use the exact parameter snapshot from the successful request.
+               Changing a filter clears stale results to avoid a misleading heading. -->
+          <section v-if="hasSearched || loadingReport" class="ya-section ya-results" aria-labelledby="ya-results-heading">
+            <div class="ya-section-head ya-results-header">
+              <span class="ya-section-step ya-results-symbol" aria-hidden="true">
+                <i class="material-icons-outlined">table_chart</i>
+              </span>
+              <div class="ya-section-title">
+                <h2 id="ya-results-heading">Monthly averages</h2>
+                <p v-if="reportContext" class="ya-results-subtitle">
+                  [[ reportContext.stationName ]] · [[ reportContext.variableName ]]
+                  <span class="ya-subtitle-separator">·</span>
+                  [[ reportContext.begin_date ]] to [[ reportContext.end_date ]]
+                </p>
+                <p v-else class="ya-results-subtitle">Report results</p>
+              </div>
+              <div v-if="reportRows.length && !loadingReport" class="ya-results-tools">
+                <span class="ya-count"><strong>[[ reportRows.length ]]</strong> [[ reportRows.length === 1 ? 'year' : 'years' ]]</span>
+                <v-btn outlined color="success" @click="downloadCsv">
+                  <v-icon left>mdi-download</v-icon>
+                  Export CSV
+                </v-btn>
+              </div>
+            </div>
+
+            <div v-if="loadingReport" class="ya-results-state" role="status" aria-live="polite">
+              <v-progress-circular indeterminate color="primary" size="32" width="3"></v-progress-circular>
+              <p>Generating report...</p>
+            </div>
+
+            <div v-else-if="reportRows.length" class="ya-table-wrap" tabindex="0" aria-label="Monthly average results, scroll horizontally if needed">
+              <!--
+                Always render twelve fixed month columns in chronological order.
+                The original Object.keys(row) loop could misalign sparse backend
+                results or put the computed AVG into the wrong column.
+              -->
+              <table class="ya-report-table">
+                <thead>
                   <tr>
+                    <th scope="col" class="ya-year-cell">Year</th>
+                    <th v-for="month in months" :key="'head-' + month.key" scope="col">
+                      [[ month.short ]]
+                    </th>
+                    <th scope="col" class="ya-average-cell">Annual avg.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in reportRows" :key="row.year">
+                    <th scope="row" class="ya-year-cell">[[ row.year ]]</th>
                     <td
-                      style="padding: 5px; font-weight: bold; max-width: 45px"
+                      v-for="(value, index) in row.months"
+                      :key="row.year + '-' + index"
+                      :class="{ 'ya-no-data': value === null }"
+                      :title="value === null ? 'No data for this month' : 'Monthly average'"
                     >
-                      Monthly Average
+                      [[ displayValue(value) ]]
                     </td>
-                    <td
-                      v-for="mes in Object.keys(reportMonthMean)"
-                      :key="mes+'_report'"
-                      style="max-width: 1px"
-                    >
-                      [[ reportMonthMean[mes] || '-']]
+                    <td class="ya-average-cell" :class="{ 'ya-no-data': row.average === null }">
+                      [[ displayValue(row.average) ]]
                     </td>
                   </tr>
-                </table>
-              </v-flex>
-            </v-layout>
-          </v-layout>
-        </v-layout>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th scope="row" class="ya-year-cell ya-footer-label">Monthly avg.</th>
+                    <td
+                      v-for="(value, index) in monthlyAverages"
+                      :key="'footer-' + index"
+                      :class="{ 'ya-no-data': value === null }"
+                    >
+                      [[ displayValue(value) ]]
+                    </td>
+                    <td class="ya-average-cell" :class="{ 'ya-no-data': overallAverage === null }">
+                      [[ displayValue(overallAverage) ]]
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div v-else class="ya-results-state">
+              <v-icon size="40" color="grey lighten-1">mdi-chart-box-outline</v-icon>
+              <h3>No data found</h3>
+              <p>There are no monthly averages for this station, variable, and date range.</p>
+            </div>
+
+            <p v-if="reportRows.length && !loadingReport" class="ya-table-caption">
+              — indicates no available data. A displayed 0.00 is a valid observation, not a missing value.
+              Annual and monthly averages are arithmetic means of available monthly entries.
+            </p>
+          </section>
+
+          <section v-else-if="!reportError" class="ya-section ya-placeholder">
+            <i class="material-icons-outlined" aria-hidden="true">table_chart</i>
+            <strong>No report generated yet</strong>
+            <p>Select a station, variable, and reporting period, then choose Generate report.</p>
+          </section>
+
+        </div>
       </v-content>
     </v-app>
   </div>
+</div>
+{% endblock %}
 
-  {% endblock %} {% block localjavascript %}
+{% block localjavascript %}
+<script>
+  /*
+   * Use the application's configured timezone for date defaults, rather than
+   * UTC from toISOString() or the user's browser timezone. This does not need
+   * the optional Moment Timezone extension.
+   */
+  function yearlyAverageToday(timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(new Date());
+      const value = {};
+      parts.forEach(part => { if (part.type !== 'literal') value[part.type] = part.value; });
+      return value.year + '-' + value.month + '-' + value.day;
+    } catch (error) {
+      // Invalid timezone configuration: fall back to the UTC calendar date.
+      console.warn('Unable to format SURFACE timezone for Yearly Average.', error);
+      return new Date().toISOString().slice(0, 10);
+    }
+  }
 
-  <script>
-    Vue.use(window.vuelidate.default);
+  const yaToday = yearlyAverageToday("{{ TIMEZONE_NAME|escapejs }}");
 
-    const { required, minLength } = window.validators;
-
-    new Vue({
-      el: "#app",
-      vuetify: new Vuetify(),
-      delimiters: ["[[", "]]"],
-      validations: {
-        requestData: {
-          selectedStationId: { required },
-          selectedElementId: { required },
-          begin_date: { required },
-          end_date: { required },
-        },
-      },
-      data: {
-        ano: null,
-        reportMonthMean: {
-          1: 0,
-          2: 0,
-          3: 0,
-          4: 0,
-          5: 0,
-          6: 0,
-          7: 0,
-          8: 0,
-          9: 0,
-          10: 0,
-          11: 0,
-          12: 0,
-        },
-        reportValues: [],
+  new Vue({
+    el: '#app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data() {
+      return {
+        months: [
+          { key: '1', short: 'Jan' }, { key: '2', short: 'Feb' },
+          { key: '3', short: 'Mar' }, { key: '4', short: 'Apr' },
+          { key: '5', short: 'May' }, { key: '6', short: 'Jun' },
+          { key: '7', short: 'Jul' }, { key: '8', short: 'Aug' },
+          { key: '9', short: 'Sep' }, { key: '10', short: 'Oct' },
+          { key: '11', short: 'Nov' }, { key: '12', short: 'Dec' }
+        ],
         stations: [],
         variableItems: [],
+        loadingStations: false,
+        loadingVariables: false,
+        loadingReport: false,
+        stationsError: '',
+        variablesError: '',
+        reportError: '',
         menu1: false,
         menu2: false,
-        menu3: false,
-        menu4: false,
+        // Preserve the original four inputs and the get_yearly_average API.
         requestData: {
           selectedStationId: null,
           selectedElementId: null,
-          begin_date: new Date().toISOString().substr(0, 10),
-          end_date: new Date().toISOString().substr(0, 10),
+          // A year-to-date default is more useful than querying only today.
+          begin_date: yaToday.slice(0, 4) + '-01-01',
+          end_date: yaToday
         },
-        simpleTextFieldsRules: [
-          (v) => (v !== undefined && v !== "") || "This field is required",
-        ],
+        reportValues: {},
+        reportContext: null,
+        hasSearched: false,
+        // Ignore late responses if the user changes the selected station or
+        // reporting period while an earlier request is still in flight.
+        reportRequestId: 0,
+        variableRequestId: 0
+      };
+    },
+    computed: {
+      hasSelectedStation() {
+        return this.requestData.selectedStationId !== null &&
+               this.requestData.selectedStationId !== undefined &&
+               this.requestData.selectedStationId !== '';
       },
-      methods: {
-        getStations() {
-          this.getAll("api/stations").then((data) => (this.stations = data));
-        },
-        getStationVariables(station_id) {
-          this.getAll(`api/stations_variables/?station_id=${station_id}`).then(
-            (data) => (this.variableItems = data)
-          );
-        },
-        getYearlyReportData(begin_date, end_date, station_id, variable_id) {
-          this.getAllReport(
-            `get_yearly_average?station_id=${station_id}&variable_id=${variable_id}&begin_date=${begin_date}&end_date=${end_date}`
-          ).then((data) => {
-            if (data) {
-              this.reportValues = data.results;
+      dateError() {
+        const start = this.requestData.begin_date;
+        const end = this.requestData.end_date;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '') ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) {
+          return 'Select both start and end dates.';
+        }
+        // ISO YYYY-MM-DD strings sort chronologically; no timezone conversion
+        // is needed to compare calendar-date selections.
+        return start > end ? 'The end date must be on or after the start date.' : '';
+      },
+      isFormValid() {
+        return this.hasSelectedStation &&
+               this.requestData.selectedElementId !== null &&
+               this.requestData.selectedElementId !== undefined &&
+               this.requestData.selectedElementId !== '' &&
+               !this.dateError;
+      },
+      reportRows() {
+        const results = this.reportValues;
+        if (!results || typeof results !== 'object' || Array.isArray(results)) return [];
 
-              let reportMonthQtd = {
-                1: 0,
-                2: 0,
-                3: 0,
-                4: 0,
-                5: 0,
-                6: 0,
-                7: 0,
-                8: 0,
-                9: 0,
-                10: 0,
-                11: 0,
-                12: 0,
-              };
-              this.reportMonthMean = {
-                1: 0,
-                2: 0,
-                3: 0,
-                4: 0,
-                5: 0,
-                6: 0,
-                7: 0,
-                8: 0,
-                9: 0,
-                10: 0,
-                11: 0,
-                12: 0,
-              };
-
-              Object.keys(this.reportValues).forEach((year) => {
-                let sum_by_ano = 0;
-                let count_by_ano = 0;
-                Object.keys(this.reportValues[year]).forEach((mes) => {
-                  if (this.reportValues[year][mes]) {
-                    this.reportMonthMean[mes] += Number(
-                      this.reportValues[year][mes]
-                    );
-                    reportMonthQtd[mes]++;
-                    sum_by_ano += Number(this.reportValues[year][mes]);
-                    count_by_ano++;
-                  }
-                });
-                if (sum_by_ano)
-                  this.reportValues[year]["AVG"] = (
-                    sum_by_ano / count_by_ano
-                  ).toFixed(2);
-              });
-
-              Object.keys(this.reportMonthMean).forEach((month) => {
-                const qtdAnos = reportMonthQtd[month];
-                if (qtdAnos)
-                  this.reportMonthMean[month] = (
-                    this.reportMonthMean[month] / qtdAnos
-                  ).toFixed(2);
-              });
-            } else {
-              this.reportValues = [];
-            }
+        return Object.keys(results)
+          .filter(year => /^\d{4}$/.test(String(year)))
+          .sort((a, b) => Number(b) - Number(a)) // Most recent year first.
+          .map(year => {
+            const source = results[year] || {};
+            const values = this.months.map(month => this.numericValue(source[month.key]));
+            const present = values.filter(value => value !== null);
+            return {
+              year: year,
+              months: values,
+              average: present.length
+                ? present.reduce((total, value) => total + value, 0) / present.length
+                : null
+            };
           });
-        },
-        handleRequestParameters() {
-          this.getYearlyReportData(
-            this.requestData.begin_date,
-            this.requestData.end_date,
-            this.requestData.selectedStationId,
-            this.requestData.selectedElementId
+      },
+      monthlyAverages() {
+        return this.months.map((month, monthIndex) => {
+          const values = this.reportRows
+            .map(row => row.months[monthIndex])
+            .filter(value => value !== null);
+          return values.length
+            ? values.reduce((total, value) => total + value, 0) / values.length
+            : null;
+        });
+      },
+      overallAverage() {
+        // Use each available year/month equally, as the original report did.
+        // Averaging monthly averages equally would bias months with less data.
+        const values = [];
+        this.reportRows.forEach(row => row.months.forEach(value => {
+          if (value !== null) values.push(value);
+        }));
+        return values.length
+          ? values.reduce((total, value) => total + value, 0) / values.length
+          : null;
+      }
+    },
+    watch: {
+      'requestData.selectedStationId'(stationId) {
+        this.requestData.selectedElementId = null;
+        this.variableItems = [];
+        this.variablesError = '';
+        this.clearReport();
+        if (stationId !== null && stationId !== undefined && stationId !== '') {
+          this.getStationVariables(stationId);
+        } else {
+          this.variableRequestId++;
+          this.loadingVariables = false;
+        }
+      },
+      
+      'requestData.selectedElementId'() { this.clearReport(); },
+
+      'requestData.begin_date'() { this.clearReport(); },
+
+      'requestData.end_date'() { this.clearReport(); }
+    },
+    methods: {
+      stationDisplayName(station) {
+        if (!station) return '';
+        return [station.name, station.code ? '(' + station.code + ')' : '']
+          .filter(Boolean).join(' ');
+      },
+      numericValue(value) {
+        /*
+         * Zero is valid data. The previous template used truthiness checks,
+         * incorrectly showing 0 as a missing reading and excluding it from
+         * annual/monthly averages. Only absent or nonnumeric values are missing.
+         */
+        if (value === null || value === undefined || String(value).trim() === '') return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      },
+      displayValue(value) {
+        return value === null || value === undefined ? '—' : Number(value).toFixed(2);
+      },
+      clearReport() {
+        ++this.reportRequestId;
+        this.loadingReport = false;
+        this.hasSearched = false;
+        this.reportError = '';
+        this.reportContext = null;
+        this.reportValues = {};
+      },
+      async fetchJson(url) {
+        const response = await fetch(url, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      },
+      async getAll(path) {
+        /*
+         * Django REST Framework list responses may be paginated. Follow each
+         * absolute/relative `next` URL rather than calling an undefined global
+         * getAll(context, ...), as the previous implementation did.
+         */
+        const output = [];
+        const visited = new Set();
+        let next = new URL('/' + path.replace(/^\/+/, ''), window.location.origin).href;
+        while (next) {
+          const url = new URL(next, window.location.origin);
+          if (url.origin !== window.location.origin) {
+            throw new Error('Unexpected cross-origin pagination URL');
+          }
+          if (visited.has(url.href)) throw new Error('Repeated pagination URL');
+          visited.add(url.href);
+          const data = await this.fetchJson(url.href);
+          if (Array.isArray(data)) {
+            output.push(...data);
+            break;
+          }
+          if (!data || !Array.isArray(data.results)) {
+            throw new Error('Unexpected API response format');
+          }
+          output.push(...data.results);
+          next = data.next || null;
+        }
+        return output;
+      },
+      async getStations() {
+        this.loadingStations = true;
+        this.stationsError = '';
+        try {
+          this.stations = await this.getAll('api/stations');
+        } catch (error) {
+          console.error('Yearly Average: unable to load stations', error);
+          this.stationsError = 'Unable to load stations. Reload to retry.';
+        } finally {
+          this.loadingStations = false;
+        }
+      },
+      async getStationVariables(stationId) {
+        const requestId = ++this.variableRequestId;
+        this.loadingVariables = true;
+        this.variablesError = '';
+        try {
+          const variables = await this.getAll(
+            'api/stations_variables/?station_id=' + encodeURIComponent(stationId)
           );
-        },
-        onChangeStation(station_id) {
-          this.getStationVariables(station_id);
-        },
-        getAll(path, url, oldData = []) {
-          return fetch(`/${path}`)
-            .then((res) => {
-              if (!res.body) {
-                return { next: null, results: [] };
-              }
-
-              return res.json();
-            })
-            .then(async (data) => {
-              const values = [...oldData, ...data.results];
-              if (!!data.next) {
-                return await getAll(
-                  context,
-                  path,
-                  `/${path}/${data.next.substr(data.next.indexOf(`/${path}`))}`,
-                  values
-                );
-              }
-              return values;
-            });
-        },
-        getAllReport(path, url, oldData = []) {
-          return fetch(`/${path}`).then((res) => {
-            if (!res.body) {
-              return { next: null, results: [] };
-            }
-
-            return res.json();
-          });
-        },
+          if (requestId !== this.variableRequestId) return;
+          this.variableItems = variables;
+        } catch (error) {
+          if (requestId !== this.variableRequestId) return;
+          console.error('Yearly Average: unable to load variables', error);
+          this.variablesError = 'Unable to load station variables.';
+        } finally {
+          if (requestId === this.variableRequestId) this.loadingVariables = false;
+        }
       },
-      mounted() {
-        this.getStations();
+      async getYearlyReportData(beginDate, endDate, stationId, variableId) {
+        const requestId = ++this.reportRequestId;
+        const station = this.stations.find(item => String(item.id) === String(stationId));
+        const variable = this.variableItems.find(item => String(item.variable) === String(variableId));
+        this.loadingReport = true;
+        this.reportError = '';
+        this.reportValues = {};
+        this.hasSearched = false;
+
+        const params = new URLSearchParams({
+          station_id: String(stationId), variable_id: String(variableId),
+          begin_date: beginDate, end_date: endDate
+        });
+        try {
+          const response = await this.fetchJson('/get_yearly_average?' + params.toString());
+          if (requestId !== this.reportRequestId) return;
+          const results = response && response.results;
+          // Some API responses use [] (rather than {}) for an empty report.
+          // Treat that as 'no data', not a failed request.
+          if (results == null || (Array.isArray(results) && results.length === 0)) {
+            this.reportValues = {};
+          } else if (typeof results === 'object' && !Array.isArray(results)) {
+            this.reportValues = results;
+          } else {
+            throw new Error('Unexpected report response format');
+          }
+          this.reportContext = {
+            stationName: station ? this.stationDisplayName(station) : 'Station ' + stationId,
+            variableName: variable ? variable.variable_name : 'Variable ' + variableId,
+            begin_date: beginDate,
+            end_date: endDate
+          };
+          this.hasSearched = true;
+        } catch (error) {
+          if (requestId !== this.reportRequestId) return;
+          console.error('Yearly Average: report request failed', error);
+          this.reportError = 'Unable to generate this report. Please try again.';
+          this.hasSearched = false;
+        } finally {
+          if (requestId === this.reportRequestId) this.loadingReport = false;
+        }
       },
-    });
-  </script>
-</div>
+      handleRequestParameters() {
+        if (!this.isFormValid || this.loadingReport) return;
+        this.getYearlyReportData(
+          this.requestData.begin_date,
+          this.requestData.end_date,
+          this.requestData.selectedStationId,
+          this.requestData.selectedElementId
+        );
+      },
+      downloadCsv() {
+        if (!this.reportRows.length || !this.reportContext) return;
+        const escapeCsv = value => {
+          const raw = String(value == null ? '' : value);
+          // Guard spreadsheet clients against CSV formula injection.
+          const safe = /^[=+@\-\t\r]/.test(raw) && !/^-?\d+(\.\d+)?$/.test(raw)
+            ? "'" + raw : raw;
+          return '"' + safe.replace(/"/g, '""') + '"';
+        };
+        const body = [
+          ['Year'].concat(this.months.map(month => month.short), ['Annual avg.']),
+          ...this.reportRows.map(row => [row.year]
+            .concat(row.months.map(v => v === null ? '' : v.toFixed(2)),
+                    [row.average === null ? '' : row.average.toFixed(2)])),
+          ['Monthly avg.'].concat(
+            this.monthlyAverages.map(v => v === null ? '' : v.toFixed(2)),
+            [this.overallAverage === null ? '' : this.overallAverage.toFixed(2)]
+          )
+        ].map(row => row.map(escapeCsv).join(',')).join('\r\n');
+        const blob = new Blob(['\ufeff', body], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'yearly_average_station_' +
+          this.requestData.selectedStationId + '_' +
+          this.requestData.selectedElementId + '.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // Some browsers start the download asynchronously; release the blob later.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    },
+    mounted() {
+      this.getStations();
+    }
+  });
+</script>
+
+<style>
+  /*
+   * Yearly Average adopts the same visual language as Data Export:
+   * white page, charcoal typography, 11px bordered sections, and compact inputs.
+   * All rules are scoped to .ya-page so no other SURFACE template is affected.
+   */
+  /* Preserve the shared SURFACE page padding. */
+  .ya-page {
+      width: 100%;
+      max-width: none;
+      padding: 24px 24px 34px;
+      background: #fff;
+      color: #252525;
+  }
+  .ya-page .v-application, .ya-page .v-application--wrap,
+  .ya-page .ya-app, .ya-page .ya-content { background: #fff !important; }
+  /* A report only takes the space it needs; don't force 100vh of empty Vuetify space. */
+  .ya-page .v-application--wrap { min-height: auto !important; }
+  .ya-shell { width: 100%; padding: 0 20px 28px; margin: 0 auto; }
+
+  /* Page title: match Data Export rather than restyling srf-display-1. */
+  .ya-page .ya-page-heading { padding: 20px 0 12px; }
+  .ya-page .ya-page-heading .srf-display-1 {
+    display: inline-block; margin: 0; color: #232323;
+    font-weight: inherit; letter-spacing: normal;
+  }
+  .ya-page .ya-page-heading p { margin: 5px 0 0; font-size: 13px; color: #737373; }
+
+  /* Section headers and fields are intentionally identical in scale to Data Export. */
+  .ya-page .ya-section {
+    border: 1px solid #e5e5e5; border-radius: 11px; background: #fff;
+    margin-bottom: 17px; box-shadow: 0 2px 8px rgba(0, 0, 0, .025);
+    overflow: hidden;
+  }
+  .ya-page .ya-section-head {
+    display: flex; align-items: center; gap: 13px; padding: 17px 20px;
+    border-bottom: 1px solid #eee; min-height: 74px;
+  }
+  .ya-page .ya-section-step {
+    width: 35px; height: 35px; flex: none; display: flex; align-items: center;
+    justify-content: center; background: #f2f2f2; border: 1px solid #e7e7e7;
+    color: #555; border-radius: 9px; font-size: 12px;
+    font-weight: 750; letter-spacing: .025em;
+  }
+  .ya-page .ya-section-title { flex: 1; min-width: 0; }
+  .ya-page .ya-section-title h2 {
+    color: #242424; margin: 0; font-size: 16px;
+    line-height: 1.4; font-weight: 700;
+  }
+  .ya-page .ya-section-title p { margin: 3px 0 0; color: #777; font-size: 12px; line-height: 1.5; }
+  .ya-page .ya-section-symbol { color: #9a9a9a; font-size: 23px; }
+  .ya-page .ya-section-body { padding: 19px 21px 17px; }
+
+  /* One compact row on wide screens; two rows when space is restricted. */
+  .ya-page .ya-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(205px, 1.1fr) minmax(205px, 1.1fr) minmax(160px, .85fr) minmax(160px, .85fr);
+    align-items: start; gap: 16px;
+  }
+  .ya-page .ya-filter-grid .v-input { font-size: 13px; margin-top: 0; }
+  .ya-page .ya-filter-grid .v-input__slot { background: #fff !important; }
+  .ya-page .ya-filter-grid .v-label { color: #626262; }
+  .ya-page .ya-filter-grid .v-text-field__details { min-height: 18px; }
+
+  .ya-page .ya-filter-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px 20px; padding: 14px 21px 17px; border-top: 1px solid #efefef;
+  }
+  .ya-page .ya-filter-hint, .ya-page .ya-field-error {
+    display: inline-flex; align-items: center; gap: 8px; margin: 0;
+    font-size: 12px; line-height: 1.5; color: #777;
+  }
+  .ya-page .ya-field-error { color: #b42332; }
+  .ya-page .ya-filter-hint .v-icon { color: #888; }
+  .ya-page .ya-generate-button {
+    flex: none; min-height: 39px; border-radius: 7px;
+    text-transform: none; letter-spacing: 0; font-size: 12px;
+    font-weight: 650; box-shadow: none;
+  }
+  .ya-page .ya-report-alert { margin: 7px 0 17px !important; }
+
+  /* Results section uses Data Export's neutral table, without blue-tinted cells. */
+  .ya-page .ya-results-header { flex-wrap: wrap; }
+  .ya-page .ya-results-symbol { background: #f2f2f2; border-color: #e7e7e7; color: #666; }
+  .ya-page .ya-results-symbol i { font-size: 19px; }
+  .ya-page .ya-results-subtitle { margin: 3px 0 0; color: #777; font-size: 12px; }
+  .ya-page .ya-subtitle-separator { padding: 0 3px; }
+  .ya-page .ya-results-tools { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .ya-page .ya-count {
+    display: inline-flex; align-items: center; gap: 5px; color: #525252;
+    background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 20px;
+    padding: 5px 10px; font-size: 11px;
+  }
+  .ya-page .ya-count strong { color: #282828; }
+  .ya-page .ya-results-tools .v-btn {
+    text-transform: none; letter-spacing: 0; font-size: 12px;
+    font-weight: 650; border-radius: 7px; box-shadow: none;
+  }
+  .ya-page .ya-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 13px 19px 0; }
+  .ya-page .ya-report-table {
+    width: 100%; min-width: 1020px; border-collapse: separate; border-spacing: 0;
+    border: 1px solid #e7e7e7; border-radius: 8px;
+    font-variant-numeric: tabular-nums; font-size: 12px;
+  }
+  .ya-page .ya-report-table th, .ya-page .ya-report-table td {
+    text-align: right; padding: 12px 10px; white-space: nowrap;
+    border-bottom: 1px solid #eee; border-right: 1px solid #f1f1f1;
+    background: #fff; color: #343434; font-weight: 400;
+  }
+  .ya-page .ya-report-table thead th {
+    background: #fafafa; color: #666; font-size: 11px;
+    font-weight: 750; text-transform: uppercase; letter-spacing: .02em;
+  }
+  /* Keep year visible while horizontally scrolling many month columns. */
+  .ya-page .ya-report-table .ya-year-cell {
+    position: sticky; left: 0; z-index: 1; min-width: 105px;
+    padding-left: 16px; text-align: left; font-weight: 700;
+    box-shadow: 1px 0 0 #e8e8e8;
+  }
+  .ya-page .ya-report-table thead .ya-year-cell { background: #fafafa; z-index: 2; }
+  .ya-page .ya-report-table tbody tr:hover th,
+  .ya-page .ya-report-table tbody tr:hover td { background: #fafafa; }
+  .ya-page .ya-report-table .ya-average-cell {
+    background: #f8f8f8; font-weight: 700; border-right: none;
+  }
+  .ya-page .ya-report-table tbody tr:hover .ya-average-cell { background: #f4f4f4; }
+  .ya-page .ya-report-table .ya-no-data { color: #a0a0a0; }
+  .ya-page .ya-report-table tfoot th,
+  .ya-page .ya-report-table tfoot td {
+    background: #f6f6f6; font-weight: 700;
+    border-top: 1px solid #e0e0e0; border-bottom: none;
+  }
+  .ya-page .ya-report-table tfoot .ya-average-cell,
+  .ya-page .ya-report-table tfoot .ya-year-cell { background: #f6f6f6; }
+  .ya-page .ya-table-caption {
+    padding: 12px 20px 16px; margin: 0;
+    color: rgb(245, 104, 104); font-size: 11px; line-height: 1.6;
+  }
+
+  /* Use the same quiet empty/loading treatment as Data Export's empty history. */
+  .ya-page .ya-results-state, .ya-page .ya-placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; gap: 7px;
+    padding: 39px 20px 43px;
+  }
+  .ya-page .ya-results-state > .v-icon, .ya-page .ya-placeholder > i {
+    font-size: 34px; color: #b4b4b4;
+  }
+  .ya-page .ya-results-state h3, .ya-page .ya-placeholder strong {
+    font-size: 13px; font-weight: 700; color: #4a4a4a; margin: 0;
+  }
+  .ya-page .ya-results-state p, .ya-page .ya-placeholder p {
+    color: #888; font-size: 12px; margin: 0;
+  }
+  .ya-page .ya-placeholder { min-height: 180px; }
+  /* Scope calendar stacking to this page: never override every Vuetify menu. */
+  .ya-calendar-menu { z-index: 2100 !important; }
+
+  @media (max-width: 1180px) {
+    .ya-page .ya-filter-grid { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .ya-page .ya-shell { padding: 0 11px 20px; }
+    .ya-page .ya-page-heading { padding: 14px 0 10px; }
+    .ya-page .ya-section-head { padding: 14px; gap: 10px; }
+    .ya-page .ya-section-body { padding: 15px 13px; }
+    .ya-page .ya-section-symbol { display: none; }
+    .ya-page .ya-filter-footer { padding: 14px 13px; }
+    .ya-page .ya-results-tools { width: 100%; justify-content: space-between; }
+    .ya-page .ya-table-wrap { padding: 11px 13px 0; }
+  }
+  @media (max-width: 630px) {
+    .ya-page .ya-filter-grid { grid-template-columns: 1fr; gap: 12px; }
+    .ya-page .ya-filter-footer { flex-direction: column; align-items: stretch; }
+    .ya-page .ya-generate-button { width: 100%; }
+  }
+</style>
+
 {% endblock %}

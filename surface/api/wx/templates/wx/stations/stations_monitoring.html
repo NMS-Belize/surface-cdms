@@ -1,317 +1,186 @@
 {% extends "base.html" %} {% block content %} {% load static %}
 
-<div id="app">
-  <v-app v-cloak>
+<div id="app" class="sm-root">
+  <v-app v-cloak class="sm-app">
 
-    <!-- Chart Dialog -->
-    <v-dialog v-model="dialog_chart" max-width="1000" style="z-index:9999;">
-      <v-card>
-        <v-card-title>History Chart</v-card-title>
-        <v-card-text>
-          <v-layout v-if="loading_chart" class="align-center justify-center" column> 
-            <span class="headline font-weight-thin" v-if="loading_chart">Loading Chart...</span><br>
-            <v-progress-circular indeterminate ></v-progress-circular>
-          </v-layout>
-          <v-alert v-if="chart_error" type="error" dense outlined>
-            [[ chart_error ]]
-          </v-alert>
+    <!-- Station history chart -->
+    <v-dialog v-model="dialog_chart" max-width="960" :z-index="2400" content-class="sm-dialog" scrollable>
+      <v-card class="sm-dialog-card">
+        <div class="sm-dialog-heading">
+          <div class="sm-dialog-heading-copy">
+            <h2>History Chart</h2>
+            <p>Observation history for the selected station variable.</p>
+          </div>
+          <v-spacer></v-spacer>
+          <v-btn icon title="Close history chart" aria-label="Close history chart" @click="dialog_chart = false"><v-icon>mdi-close</v-icon></v-btn>
+        </div>
+        <v-card-text class="sm-dialog-body">
+          <div v-if="loading_chart" class="sm-chart-loading">
+            <v-progress-circular indeterminate size="44" width="3" color="primary"></v-progress-circular>
+            <span>Loading station history…</span>
+          </div>
+          <v-alert v-if="chart_error" type="error" dense outlined>[[ chart_error ]]</v-alert>
           <highcharts v-if="!loading_chart && !chart_error && chartOptions" :options="chartOptions"></highcharts>
         </v-card-text>
-        <v-card-actions>
-          <v-btn color="primary" @click="dialog_chart = false">Close</v-btn>
-        </v-card-actions>
+        <v-card-actions class="sm-dialog-actions"><v-spacer></v-spacer><v-btn color="primary" depressed class="text-none" @click="dialog_chart = false">Done</v-btn></v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Inmation dialog -->
-    <v-dialog v-model="dialog_info" max-width="600" style="z-index:9999;">
-      <v-card>
-        <v-card-title>Information</v-card-title>
-        <v-card-text> Information will apear here...</v-card-text>
-        <v-card-actions>
-          <v-btn color="primary" @click="dialog_info = false">Close</v-btn>
-        </v-card-actions>
+    <!-- Explanation of the current monitoring map -->
+    <v-dialog v-model="dialog_info" max-width="490" :z-index="2400" content-class="sm-dialog">
+      <v-card class="sm-dialog-card">
+        <div class="sm-dialog-heading">
+          <div class="sm-dialog-heading-copy"><h2>[[ data_type ]]</h2><p>Monitoring map information</p></div>
+          <v-spacer></v-spacer>
+          <v-btn icon @click="dialog_info = false" aria-label="Close information"><v-icon>mdi-close</v-icon></v-btn>
+        </div>
+        <v-card-text class="sm-dialog-body sm-info-copy">
+          <p v-if="data_type === 'Communication'">Each station is colored according to its worst-performing configured variable. The lowest communication-hour count greater than zero determines its status.</p>
+          <p v-else-if="data_type === 'Quality Control'">Select a station to review how many readings fall into each QC category. Every observation is counted once, including Missing readings.</p>
+          <p v-else-if="data_type === 'Validation'">Map markers identify stations. Select one to inspect validated and unvalidated counts for each variable.</p>
+          <p v-else-if="data_type === 'Visits'">Marker colors summarize the timing of the next scheduled station visit.</p>
+          <p v-else-if="data_type === 'Equipment'">Marker colors represent the latest available equipment classifications.</p>
+        </v-card-text>
+        <v-card-actions class="sm-dialog-actions"><v-spacer></v-spacer><v-btn color="primary" depressed class="text-none" @click="dialog_info = false">Close</v-btn></v-card-actions>
       </v-card>
-    </v-dialog>   
+    </v-dialog>
 
-    <!-- page container -->
+        <!-- page container -->
     <v-layout column class="page-container">
       <!-- Three panel states: hidden (map only), split, and fullscreen. -->
       <v-layout class="monitoring-layout" :class="'sidebar-' + sidebarMode">
         <!-- Keep the map mounted so its width can animate all the way to zero. -->
         <v-flex class="align-center map-panel">
 
-            <v-layout
-                v-if="loading_map"
-                class="map-loading align-center justify-center"
-                column
-            >
-                <span class="headline font-weight-thin">
-                    Loading Map...
-                </span>
-                <v-progress-circular indeterminate></v-progress-circular>
-            </v-layout>
+            <div v-if="loading_map" class="sm-map-loading-overlay" role="status" aria-live="polite">
+              <div class="sm-map-loading-card">
+                <v-progress-circular indeterminate size="32" width="3" color="primary"></v-progress-circular>
+                <div><strong>Loading monitoring data</strong><span>Updating station statuses…</span></div>
+              </div>
+            </div>
+            <div v-if="map_error && !loading_map" class="sm-map-error">
+              <v-alert type="error" dense outlined class="mb-2">[[ map_error ]]</v-alert>
+              <v-btn small depressed color="primary" class="text-none" @click="getGlobalData"><v-icon left small>mdi-refresh</v-icon>Retry map</v-btn>
+            </div>
 
-            <v-alert v-if="map_error && !loading_map" type="error" dense outlined class="ma-2">
-              [[ map_error ]]
-            </v-alert>
+            <!-- Keep Leaflet mounted during filtering; preserve map position and avoid flicker. -->
+            <l-map ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom="false" class="sm-leaflet-map" @ready="onMonitoringMapReady">
 
-            <l-map v-if="!loading_map && !map_error" ref="myMap" :zoom="zoom" :center="center" :options="options" :double-click-zoom = "false">
-              <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
+                  <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
 
-              <!-- search function -->
+              <!-- Station search: compact map-surface control -->
               <l-control position="bottomleft">
-                  <v-text-field
-                    v-model="input_search"
-                    label="Search station by name"
-                    single-line
-                    solo
-                    append-icon="search"
-                  ></v-text-field>
-              </l-control>    
+                <div class="sm-map-search" @mousedown.stop @dblclick.stop>
+                  <v-text-field v-model="input_search" placeholder="Search stations…"
+                    prepend-inner-icon="mdi-magnify" clearable outlined dense hide-details
+                    aria-label="Search stations by name" class="sm-search-input"></v-text-field>
+                  <span class="sm-map-search-count">[[ filteredStations.length ]] / [[ station_list.length ]] stations</span>
+                </div>
+              </l-control>
 
-              <!-- info cards -->
+              <!-- Status legend is a single card; help opens a real explanation dialog. -->
               <l-control position="bottomright">
-                <template>
+                <div class="sm-map-legend" @mousedown.stop @dblclick.stop>
+                  <div class="sm-legend-header">
+                    <div><span class="sm-legend-overline">MAP OVERVIEW</span><strong>[[ data_type === 'Validation' ? 'Station locations' : 'Station status' ]]</strong></div>
+                    <v-btn icon x-small title="About this monitoring mode" aria-label="About this monitoring mode" @click.stop="dialog_info = true"><v-icon size="18">mdi-information-outline</v-icon></v-btn>
+                  </div>
+                  <div v-if="data_type === 'Validation'" class="sm-legend-empty">
+                    <span class="sm-legend-validation-dot"></span>
+                    <span>Select a station to see validation progress.</span>
+                  </div>
+                  <div v-else class="sm-legend-items">
+                    <div v-for="entry in legendItems" :key="entry.key" class="sm-legend-row">
+                      <span class="sm-legend-name"><span class="sm-legend-dot" :style="{ backgroundColor: entry.color }"></span>[[ entry.label ]]</span>
+                      <strong>[[ getPercentageColor(entry.color) ]]%</strong>
+                    </div>
+                  </div>
+                  <div class="sm-legend-footer">[[ filteredStations.length ]] station[[ filteredStations.length === 1 ? '' : 's' ]] on map</div>
+                </div>
+              </l-control>
 
-                  <!-- Info Card -->
-                  <v-card
-                    v-if="['Communication', 'Quality Control', 'Validation'].includes(data_type)"
-                    style="max-width: 200px;"
-                    class="mb-2"
-                  >
-                    <!-- title -->
-                    <v-card-title
-                      class="px-2 pt-1 pb-1"
-                      style="font-size: 12px; line-height: 1.2; color: #444;"
-                    >
-                      <v-btn
-                        class="mr-1"
-                        x-small
-                        icon
-                        @click="dialog_info=true"
-                        :disabled="true"
-                      >
-                        <v-icon>mdi-information</v-icon>
-                      </v-btn>
 
-                      <span class="mr-2">Note</span>
-                    </v-card-title>
-
-                    <!-- text/body -->
-                    <v-card-text
-                      class="px-2 pb-2"
-                      style="font-size: 12px; line-height: 1.4;"
-                    >
-                      <hr class="my-0 mb-1">
-
-                      <span
-                        v-if="data_type === 'Communication'"
-                        style="display: block; white-space: normal;"
-                      >
-                        Station color is based on the worst-performing configured variable.
-                        The lowest communication-hour count greater than 0 determines the station status.
-                      </span>
-
-                      <span
-                        v-else-if="data_type === 'Quality Control'"
-                        style="display: block; white-space: normal;"
-                      >
-                        Select a station to inspect its reading counts by QC status.
-                        The legend includes all five QC statuses.
-                      </span>
-                      <span v-else-if="data_type === 'Validation'" style="display: block; white-space: normal;">
-                        Select a station to inspect its validation progress.
-                        Map markers identify stations; the counts appear in the station panel.
-                      </span>
-                    </v-card-text>
-                  </v-card>
-
-                  <!-- Validation uses the map as a station selector. -->
-                  <!-- map observations -->
-                  <v-card v-if="data_type !== 'Validation'">
-                    <!-- title -->
-                    <v-card-title class="px-2 pt-1 pb-1" style="font-size: 12px; line-height: 1.2; color: #444;">
-                      <v-btn class="mr-1" x-small icon @click="dialog_info=true" :disabled=true>
-                          <v-icon>mdi-information</v-icon>
-                      </v-btn>
-                      <span v-if="['Communication', 'Quality Control'].includes(data_type)" class="mr-2 ">Map Observations</span>
-                      <span v-if="data_type=='Visits'" class="mr-2"> Next visit </span>
-                      <span v-if="data_type=='Equipment'" class="mr-2"> Equipment classification </span>
-
-                    </v-card-title>
-
-                    <!-- text -->
-                    <v-card-text class="px-2 pb-2">
-                      <hr class="my-0 mb-1">
-                      <div
-                        v-for="entry in legendItems"
-                        :key="entry.key"
-                        class="legend-item"
-                        style="display: flex; justify-content: space-between;"
-                      >
-                        <span style="display: flex; align-items: center;">
-                          <span
-                            class="legend-color circle-lg"
-                            :style="{ 'background-color': entry.color, 'border-color': entry.color }"
-                          ></span>
-                          <span>[[ entry.label ]]</span>
-                        </span>
-                        <span style="padding-left: 10px">[[ getPercentageColor(entry.color) ]]%</span>
-                      </div>
-                    </v-card-text>
-                  </v-card>
-                </template>
-
-              </l-control>      
-
-              <!-- zoom control -->
+                  <!-- zoom control -->
               <l-control-zoom position="topleft"></l-control-zoom>
 
-              <!-- Map control to go to the station map page. -->
+              <!-- Consistent, white Station Monitoring map actions -->
               <l-control position="topright">
-                <v-btn
-                  color="white"
-                  class="map-sidebar-toggle"
-                  title="Go to Main Map"
-                  href="{% url 'stations-map' %}"
-                >
+                <v-btn color="white" class="sm-map-tool" title="Go to Main Map" aria-label="Go to Main Map" href="{% url 'stations-map' %}">
                   <v-icon>mdi-map</v-icon>
                 </v-btn>
               </l-control>
-
-              <!-- Map control to open or close the monitoring panel. -->
               <l-control position="topright">
-                <v-btn
-                  color="white"
-                  class="map-sidebar-toggle"
+                <v-btn color="white" class="sm-map-tool" title="Refresh monitoring data" aria-label="Refresh monitoring data" @click.stop="refreshMonitoring" :loading="loading_map">
+                  <v-icon>mdi-refresh</v-icon>
+                </v-btn>
+              </l-control>
+              <l-control position="topright">
+                <v-btn color="white" class="sm-map-tool"
                   :title="sidebarMode === 'hidden' ? 'Show monitoring panel' : 'Hide monitoring panel'"
                   :aria-label="sidebarMode === 'hidden' ? 'Show monitoring panel' : 'Hide monitoring panel'"
-                  @click.stop="toggleSidebar"
-                >
+                  @click.stop="toggleSidebar">
                   <v-icon>[[ sidebarMode === 'hidden' ? 'mdi-table-eye' : 'mdi-table-eye-off' ]]</v-icon>
                 </v-btn>
               </l-control>
 
-              <!-- main control box -->
+
+                  <!-- Compact, purposeful monitoring-mode control -->
               <l-control position="topleft">
-                <div class="data-type-box">
+                <div class="sm-mode-control" @mousedown.stop @dblclick.stop>
+                  <v-btn block color="white" class="sm-mode-trigger text-none" @click.stop="reveal = !reveal"
+                    :aria-expanded="reveal ? 'true' : 'false'" aria-label="Change monitoring mode or reporting period">
+                    <span class="sm-mode-trigger-copy">
+                      <strong>[[ data_type ]]</strong>
+                      <small v-if="!isMaintenance(data_type)">[[ time_type === 'Last 24h' ? 'Rolling last 24 hours' : date + ' · ' + surface_offset_hrs ]]</small>
+                      <small v-else>Latest available</small>
+                    </span>
+                    <v-icon size="20" color="grey darken-1">[[ reveal ? 'mdi-chevron-up' : 'mdi-chevron-down' ]]</v-icon>
+                  </v-btn>
 
-                  <template>
+                  <v-expand-transition>
+                    <div v-show="reveal" class="sm-mode-menu">
+                      <div v-if="!isMaintenance(data_type)" class="sm-mode-section">
+                        <div class="sm-section-caption">REPORTING PERIOD</div>
+                        <v-btn-toggle mandatory v-model="time_type" @change="changeTimeType()" class="sm-time-toggle">
+                          <v-btn small value="Last 24h" class="text-none">Last 24h</v-btn>
+                          <v-btn small value="Pick a day" class="text-none">Pick a day</v-btn>
+                        </v-btn-toggle>
+                        <v-menu v-if="time_type === 'Pick a day'" v-model="date_menu" :close-on-content-click="false"
+                          transition="scale-transition" offset-y min-width="290px" attach="body" :z-index="2300" content-class="sm-date-picker-menu">
+                          <template v-slot:activator="{ on }">
+                            <v-text-field v-model="date" v-on="on" label="Reporting date"
+                              prepend-inner-icon="mdi-calendar-outline" outlined dense readonly hide-details
+                              class="sm-picker-input"></v-text-field>
+                          </template>
+                          <v-date-picker v-model="date" no-title @input="date_menu = false; changeTimeType()"></v-date-picker>
+                        </v-menu>
+                      </div>
+                      <div class="sm-mode-section">
+                        <div class="sm-section-caption">MONITORING VIEW</div>
+                        <v-radio-group v-model="data_type" @change="changeRadio(); reveal = false" class="sm-mode-radios" hide-details>
+                          <v-radio label="Communication" value="Communication" color="primary"></v-radio>
+                          <v-radio label="Quality Control" value="Quality Control" color="primary"></v-radio>
+                          <v-radio label="Validation" value="Validation" color="primary"></v-radio>
+                          <div class="sm-radio-divider">MAINTENANCE</div>
+                          <v-radio label="Visits" value="Visits" color="primary"></v-radio>
+                          <v-radio label="Equipment" value="Equipment" color="primary"></v-radio>
+                        </v-radio-group>
+                      </div>
+                    </div>
+                  </v-expand-transition>
+                </div>
+              </l-control>
 
-                    <v-layout column>
-                      <v-btn class="data-type-btn" color="white" @click="reveal = !reveal">
-                        <div class="d-flex flex-column">
-                          <v-icon right class="arrow-icon" v-if="!reveal">keyboard_arrow_down</v-icon>
-                          <v-icon right class="arrow-icon" v-if="reveal">keyboard_arrow_up</v-icon>
-                          <strong class="pb-1 truncate-text-230">
-                            <span>
-                              [[ data_type ]]
-                            </span>
-                          </strong>
 
-                          <!-- time / type tag -->
-                          <small class="d-flex justify-center">
-                            <span v-if="!['Visits', 'Equipment'].includes(data_type)">
-                              <span v-if="time_type==='Last 24h'">[[time_type]]</span>
-                              <span v-if="time_type==='Pick a day'">[[date]]</span>
-                            </span>
-                            <span v-else>Latest</span>
-                          </small>
-
-                          <!-- Offset tag -->
-                          <small class="d-flex justify-center pt-1">
-                            <span v-if="time_type==='Pick a day'" style="color: orange;">
-                              Offset [[surface_offset_hrs]]
-                            </span>
-                            <!-- <span v-else style="color: orange;">
-                              Offset UTC+0
-                            </span> -->
-                          </small>
-                        </div>
-                      </v-btn>
-
-                      <v-expand-transition v-if="reveal">
-
-                        <v-card class="mt-2">
-
-                          <div  class="d-flex justify-center align-center">
-                            <v-btn-toggle v-if="!isMaintenance(data_type)" mandatory v-model="time_type" @change="changeTimeType()">
-                              <v-btn class="px-6 mt-2" small value="Last 24h">Last 24h</v-btn>
-                              <v-btn class="px-6 mt-2" small value="Pick a day">Pick a day</v-btn>
-                            </v-btn-toggle>
-                          </div>
-
-                          <v-card-actions class="pa-0 ">
-
-                            <v-layout class="mt-2 ml-5 mr-6" column>
-
-                              <v-menu
-                                v-if="time_type === 'Pick a day'"
-                                v-model="date_menu"
-                                :close-on-content-click="false"
-                                :nudge-right="40"
-                                transition="scale-transition"
-                                offset-y
-                                min-width="290px"
-                                style="z-index: 999;"
-                              >
-                                <template class="mb-0" v-slot:activator="{ on }">
-
-                                  <v-text-field
-                                    v-model="date"
-                                    label="Select date"
-                                    prepend-icon="event"
-                                    readonly
-                                    v-on="on"
-                                  ></v-text-field>
-
-                                </template>
-
-                                <v-date-picker
-                                  class="mb-0"
-                                  v-model="date"
-                                  @input="date_menu = false"
-                                  @change="changeTimeType()"
-                                ></v-date-picker>
-
-                              </v-menu>
-
-                              <v-radio-group class="mt-0" v-model="data_type" @change="changeRadio()">
-
-                                <v-radio label="Communication" value="Communication"></v-radio>
-                                <v-radio label="Quality Control" value="Quality Control"></v-radio>
-                                <v-radio label="Validation" value="Validation"></v-radio>
-
-                                <span class="mb-1"> Maintenance </span>
-                                <v-radio class="ml-5" label="Visits" value="Visits"></v-radio>
-                                <v-radio class="ml-5" label="Equipment" value="Equipment"></v-radio>
-                              </v-radio-group>
-
-                            </v-layout>
-
-                          </v-card-actions>
-
-                        </v-card> 
-
-                      </v-expand-transition>   
-
-                    </v-layout>   
-
-                  </template>
-
-                </div>  
-              </l-control>    
-
-              <l-circle-marker
+                  <l-circle-marker
                 v-for="station in filteredStations"
                 :key = "station.id"
                 :lat-lng="station.position"
-                :radius="7"
+                :radius="selected.station.id === station.id ? 10 : 7"
                 color="white"
                 :fill-color="station.color"
                 :fill-opacity="1"
-                :weight="2.5"
+                :weight="selected.station.id === station.id ? 4 : 2.5"
                 @click="selectStation(station)"               
               > 
                 <l-tooltip> [[station.name]] </l-tooltip>
@@ -327,113 +196,74 @@
           @transitionend="onSidebarTransitionEnd"
         >
           <div class="sidebar-heading">
-            <span class="srf-display-2 text-uppercase" style="font-weight: bold;">Stations Monitoring</span>
-
+            <div class="sm-panel-title-group">
+              <h1 class="srf-display-1 text-uppercase sm-panel-title">Stations Monitoring</h1>
+            </div>
             <div class="sidebar-actions">
-              <!-- Expand within the content area; restoring returns to the split layout. -->
-              <v-btn
-                icon
-                small
-                :title="sidebarMode === 'fullscreen' ? 'Restore split view' : 'Expand monitoring panel'"
-                :aria-label="sidebarMode === 'fullscreen' ? 'Restore split view' : 'Expand monitoring panel'"
-                @click="toggleSidebarFullscreen"
-              >
-                <v-icon small>
-                  [[ sidebarMode === 'fullscreen' ? 'mdi-arrow-collapse-all' : 'mdi-arrow-expand-all' ]]
-                </v-icon>
+              <v-btn icon small :title="sidebarMode === 'fullscreen' ? 'Restore split view' : 'Expand monitoring panel'"
+                :aria-label="sidebarMode === 'fullscreen' ? 'Restore split view' : 'Expand monitoring panel'" @click="toggleSidebarFullscreen">
+                <v-icon size="19">[[ sidebarMode === 'fullscreen' ? 'mdi-arrow-collapse-all' : 'mdi-arrow-expand-all' ]]</v-icon>
               </v-btn>
-              <v-btn icon small title="Hide monitoring panel" aria-label="Hide monitoring panel" @click="hideSidebar">
-                <v-icon small>mdi-close</v-icon>
-              </v-btn>
+              <v-btn icon small title="Hide monitoring panel" aria-label="Hide monitoring panel" @click="hideSidebar"><v-icon size="20">mdi-close</v-icon></v-btn>
             </div>
           </div>
 
-          <!-- This option only refreshes the selected station, never the map. -->
-          <div v-if="selected.station.id !== null" class="station-history-toggle">
-            <v-switch
-              v-model="retrieveLast31Days"
-              label="Retrieve last 31 days of data"
-              inset
-              color="primary"
-              hide-details
-              dense
-              class="mt-0 pt-0"
-              @click="toggleSidebarFullscreen"
-              @change="getStationData(selected.station)"
-            ></v-switch>
-            <span class="station-history-hint">Relative to the selected reporting period</span>
+          <div v-if="selected.station.id !== null" class="sm-station-heading">
+            <span class="sm-station-icon"><v-icon size="20" color="primary">mdi-map-marker-outline</v-icon></span>
+            <div class="sm-station-heading-copy">
+              <div class="sm-station-name">[[ selected.station.name ]]</div>
+              <div class="sm-station-meta">
+                <span class="sm-station-code">[[ selected.station.code ]]</span>
+                <span v-if="selected.station.offset_hr_string">[[ selected.station.offset_hr_string ]]</span>
+                <span v-if="selected.station.lastupdate">Updated [[ selected.station.lastupdate ]] UTC</span>
+              </div>
+            </div>
+            <span class="sm-station-status-dot" :style="{ backgroundColor: selected.station.color || '#9ca3af' }" title="Station status"></span>
           </div>
 
-          <div v-if="selected.station.id === null" class="sidebar-empty-state">
-            <v-icon size="92" color="blue lighten-2">mdi-map-marker-radius</v-icon>
-            <p class="mt-3 mb-0" style="font-size: larger;">Select a station on the map to view its monitoring information.</p>
+          <!-- Station-only history option; never reload the map or change panel mode. -->
+          <div v-if="selected.station.id !== null && !isMaintenance(data_type)" class="station-history-toggle">
+            <v-switch v-model="retrieveLast31Days" label="Retrieve last 31 days of data" inset color="primary" hide-details dense
+              class="mt-0 pt-0" @change="getStationData(selected.station)"></v-switch>
+            <span class="station-history-hint">Only refreshes this station · Relative to the reporting period</span>
           </div>
 
-          <v-layout v-if="loading_station" class="align-center justify-center flex-grow-1" column>
-            <span class="headline font-weight-thin" v-if="loading_station">Loading...</span><br>
-            <v-progress-circular indeterminate ></v-progress-circular>
-          </v-layout>
+
+              <div v-if="selected.station.id === null" class="sidebar-empty-state">
+            <div class="sm-empty-icon"><v-icon size="43" color="blue-grey lighten-1">mdi-map-marker-radius-outline</v-icon></div>
+            <strong>Choose a station</strong>
+            <p>Select a station marker on the map to explore its monitoring status, readings, and history.</p>
+            <span class="sm-empty-hint"><v-icon size="16">mdi-cursor-default-click-outline</v-icon> Click any map marker to begin</span>
+          </div>
+
+          <div v-if="loading_station" class="sm-station-loading" role="status">
+            <v-progress-circular indeterminate color="primary" size="37" width="3"></v-progress-circular>
+            <strong>Loading station details</strong>
+            <span>Retrieving observations and monitoring summaries…</span>
+          </div>
 
           <v-alert v-if="station_error && !loading_station" type="error" dense outlined class="ma-2">
             [[ station_error ]]
           </v-alert>
           <div v-if="selected.station.id !== null && !loading_station && !station_error" class="station-content"> 
 
-            <!-- displaying the date of the current data being displayed -->
-            <div class="mt-2 ml-2 mr-2">
-
-                <!-- This alert DOES NOT appear on the visits & equipments page -->
-                <v-alert
-                    v-if="!['Visits', 'Equipment'].includes(data_type)"
-                    type="info"
-                    dense
-                    outlined
-                    text
-                    color="purple"
-                >
-                    Reporting period:
-                    <span v-if="time_type == 'Last 24h'"><b>Last 24 Hours</b></span>
-                    <span v-else><b>[[ date ]] in [[ timezone ]] ([[surface_offset_hrs]])</b></span>
-                    <div v-if="data_type === 'Quality Control'" class="mt-1">
-                      Each reading is counted once under its QC status, including readings marked Missing.
-                    </div>
-                    <div v-if="data_type === 'Communication'" class="mt-1">
-                      Summary hours and Latest Values are based on QC-accepted data.
-                    </div>
-                    <div v-if="data_type === 'Validation'" class="mt-1">
-                      Progress counts completed validation for all readings, including those marked Missing.
-                    </div>
-
-                </v-alert>
-
-                <!-- This alert appears on the visits page -->
-                <v-alert
-                  v-if="['Visits'].includes(data_type) && selected.station.offset_hr_string"
-                  type="info"
-                  dense
-                  outlined
-                  text
-                  color="purple"
-                >
-                  All time records displayed below are the selected station's timezone
-                  <span><b>([[selected.station.offset_hr_string]])</b></span>
-
-                </v-alert>
-
-                <!-- Selected station name -->
-                <v-btn
-                  v-if="selected.station.name"
-                  class="ma-1"
-                  medium
-                  depressed
-                  color="primary"
-                >
-                  [[ selected.station.name ]] - [[ selected.station.code ]]
-                </v-btn>
-
+            <!-- Station reporting context -->
+            <div class="sm-reporting-card" v-if="!isMaintenance(data_type)">
+              <div class="sm-reporting-header"><v-icon size="17" color="primary">mdi-calendar-clock-outline</v-icon><strong>Reporting period</strong></div>
+              <div class="sm-reporting-period">[[ time_type === 'Last 24h' ? 'Rolling last 24 hours' : date ]]</div>
+              <div class="sm-reporting-zone">[[ time_type === 'Last 24h' ? 'UTC-based rolling window' : timezone + ' (' + surface_offset_hrs + ')' ]]</div>
+              <p v-if="data_type === 'Quality Control'">Each reading is counted once by effective QC status, including Missing.</p>
+              <p v-else-if="data_type === 'Communication'">Summary hours and latest values reflect QC-accepted observations.</p>
+              <p v-else-if="data_type === 'Validation'">Progress includes all readings, including those marked Missing.</p>
+            </div>
+            <div class="sm-reporting-card" v-else-if="data_type === 'Visits' && selected.station.offset_hr_string">
+              <div class="sm-reporting-header"><v-icon size="17" color="primary">mdi-clock-outline</v-icon><strong>Station local time</strong></div>
+              <div class="sm-reporting-period">[[ selected.station.offset_hr_string ]]</div>
+              <div class="sm-reporting-zone">Maintenance timestamps use the selected station's offset.</div>
             </div>
 
-            <!-- communication tab -->
+
+                <!-- communication tab -->
             <v-tabs
               v-if="data_type=='Communication'"
               v-model="selectedTab"
@@ -449,7 +279,7 @@
               </v-tab>
 
               <v-tab-item class="tab-item-fill">
-                <v-layout column class="ma-2 fill-height">
+                <v-layout column class="sm-tab-layout fill-height">
 
                    <!-- station metadata section -->
                   <!-- <v-layout class="ma-2" shrink>
@@ -467,7 +297,7 @@
                   </v-layout> -->
 
                   <!-- communication control tab table -->
-                  <v-layout class="ma-2 table-area">
+                  <v-layout class="sm-table-wrap table-area">
                     <v-data-table
                       style="width: 100%;"
                       height="100%"
@@ -476,18 +306,18 @@
                       :items="selected.data"
                       item-key="name"
                       :items-per-page="-1"
-                      class="elevation-1"
+                      class="sm-data-table"
                     >
                       <template v-slot:item.amount="{ item }">
-                        <v-chip @click="goTo()" class="px-5" style="color: white;" :color="item.color">
+                        <v-chip @click="goTo()" small class="sm-count-chip" :color="item.color" dark>
                           [[item.amount]]
                         </v-chip>
                       </template>                               
                       <template v-slot:item.chart="{ item }">
                         <v-tooltip bottom>
                           <template v-slot:activator="{ on }">
-                            <v-btn @click="dialog_chart = true; getChartData(selected.station, item);" icon>
-                              <v-icon color="blue"> mdi-chart-bar </v-icon>  
+                            <v-btn v-on="on" @click="dialog_chart = true; getChartData(selected.station, item);" icon>
+                              <v-icon color="primary" size="20">mdi-chart-areaspline</v-icon>  
                             </v-btn>                  
                           </template>
                           <span>Open bar chart</span>
@@ -499,7 +329,7 @@
               </v-tab-item>
 
               <v-tab-item class="tab-item-fill">                
-                <v-layout column class="ma-2 fill-height">
+                <v-layout column class="sm-tab-layout fill-height">
 
                   <!-- <v-layout class="ma-2" shrink>              
                     <span v-if="selected.station.lastupdate">
@@ -513,7 +343,7 @@
                     </span>
                   </v-layout>   -->
 
-                  <v-layout class="ma-2 table-area">                
+                  <v-layout class="sm-table-wrap table-area">                
                     <v-data-table
                       style="width: 100%;"
                       height="100%"
@@ -522,10 +352,10 @@
                       :items="selected.data"
                       item-key="name"
                       :items-per-page="-1"
-                      class="elevation-1"
+                      class="sm-data-table"
                     >
                       <template v-slot:item.amount="{ item }">
-                        <v-chip style="color: white;" class="px-5" :color="item.color">
+                        <v-chip small class="sm-count-chip" :color="item.color" dark>
                           [[item.amount]]
                         </v-chip>
                       </template>                               
@@ -533,7 +363,7 @@
                         <v-tooltip bottom>
                           <template v-slot:activator="{ on }">
                             <v-btn @click="dialog_chart = true" icon>
-                              <v-icon color="blue"> mdi-chart-bar </v-icon>  
+                              <v-icon color="primary" size="20">mdi-chart-areaspline</v-icon>  
                             </v-btn>                  
                           </template>
                           <span>Open bar chart</span>
@@ -558,7 +388,7 @@
               </v-tab>
 
               <v-tab-item class="tab-item-fill">
-                <v-layout column class="ma-2 fill-height">
+                <v-layout column class="sm-tab-layout fill-height">
                   <!-- station metadata -->
                   <!-- <v-layout class="ma-2" shrink>
                     <span v-if="selected.station.lastupdate">
@@ -572,16 +402,16 @@
                     </span>
                   </v-layout> -->
 
-                  <v-layout class="ma-2 table-area">
+                  <v-layout class="sm-table-wrap table-area">
                     <v-data-table
                       style="width: 100%;"
                       height="100%"
                       fixed-header
                       :headers="headers()"
-                      :items="selected.data"
+                      :items="sortedQcData"
                       item-key="name"
                       :items-per-page="-1"
-                      class="elevation-1 monitoring-qc-table"
+                      class="sm-data-table monitoring-qc-table"
                     >
                       <template v-slot:item.amount="{ item }">
                         <div class="qc-reading-counts">
@@ -591,19 +421,18 @@
                             @click="goTo(selected.station.id, item.id)"
                             :title="flag.label + ': ' + item[flag.key] + ' readings'"
                             :color="flags[flag.key]"
-                            class="px-3"
-                            style="color: white;"
-                            small
+                            class="sm-qc-chip"
+                            small dark
                           >
-                            [[ item[flag.key] ]]
+                            <strong>[[ item[flag.key] ]]</strong>
                           </v-chip>
                         </div>
                       </template>
                       <template v-slot:item.chart="{ item }">
                         <v-tooltip bottom>
                           <template v-slot:activator="{ on }">
-                            <v-btn @click="dialog_chart = true; getChartData(selected.station, item)" icon>
-                              <v-icon color="blue"> mdi-chart-bar </v-icon>  
+                            <v-btn v-on="on" @click="dialog_chart = true; getChartData(selected.station, item)" icon>
+                              <v-icon color="primary" size="20">mdi-chart-areaspline</v-icon>  
                             </v-btn>                  
                           </template>
                           <span>Open bar chart</span>
@@ -624,16 +453,14 @@
             >
               <v-tab>Validation Progress</v-tab>
               <v-tab-item class="tab-item-fill">
-                <v-layout column class="ma-2 fill-height">
-                  <div v-if="selected.station.id !== null" class="validation-summary ma-2">
-                    <div class="validation-summary-counts mt-1">
-                      <span>Total: <b>[[ validationSummary.total ]]</b></span>
-                      <span>Validated: <b>[[ validationSummary.validated ]]</b></span>
-                      <span>Unvalidated: <b>[[ validationSummary.unvalidated ]]</b></span>
+                <v-layout column class="sm-tab-layout fill-height">
+                  <div v-if="selected.station.id !== null" class="validation-summary">
+                    <div class="sm-validation-stats">
+                      <div><span>Total readings</span><strong>[[ validationSummary.total ]]</strong></div>
+                      <div><span>Validated</span><strong>[[ validationSummary.validated ]]</strong></div>
+                      <div><span>Unvalidated</span><strong>[[ validationSummary.unvalidated ]]</strong></div>
                     </div>
-                    <div class="caption mt-1">
-                      Validated: [[ formatPercentage(validationSummary.validated_percentage) ]]
-                    </div>
+                    <div class="sm-validation-label"><span>Validation complete</span><strong>[[ formatPercentage(validationSummary.validated_percentage) ]]</strong></div>
                     <v-progress-linear
                       :value="validationSummary.validated_percentage === null ? 0 : validationSummary.validated_percentage"
                       :color="validationColors.validated"
@@ -648,7 +475,7 @@
                     <span><span class="validation-dot" :style="{ backgroundColor: validationColors.validated }"></span>Validated</span>
                     <span><span class="validation-dot" :style="{ backgroundColor: validationColors.unvalidated }"></span>Unvalidated</span>
                   </div>
-                  <v-layout class="ma-2 table-area">
+                  <v-layout class="sm-table-wrap table-area">
                     <v-data-table
                       style="width: 100%;"
                       height="100%"
@@ -657,7 +484,7 @@
                       :items="selected.data"
                       item-key="id"
                       :items-per-page="-1"
-                      class="elevation-1 monitoring-qc-table validation-table"
+                      class="sm-data-table monitoring-qc-table validation-table"
                     >
                       <template v-slot:item.validation_counts="{ item }">
                         <div class="qc-reading-counts">
@@ -667,10 +494,9 @@
                             :color="validationColors[state]"
                             :title="(state === 'validated' ? 'Validated: ' : 'Unvalidated: ') + item[state] + ' readings'"
                             @click="goTo(selected.station.id, item.id)"
-                            class="px-3"
-                            style="color: white;"
-                            small
-                          >[[ item[state] ]]</v-chip>
+                            class="sm-qc-chip"
+                            small dark
+                          ><span class="sm-qc-chip-label">[[ state === 'validated' ? 'Validated' : 'Unvalidated' ]]</span><strong>[[ item[state] ]]</strong></v-chip>
                         </div>
                       </template>
                       <template v-slot:item.validated_percentage="{ item }">
@@ -692,7 +518,7 @@
                         <v-tooltip bottom>
                           <template v-slot:activator="{ on }">
                             <v-btn v-on="on" @click="dialog_chart = true; getChartData(selected.station, item)" icon>
-                              <v-icon color="blue">mdi-chart-bar</v-icon>
+                              <v-icon color="primary" size="20">mdi-chart-areaspline</v-icon>
                             </v-btn>
                           </template>
                           <span>Open validation history</span>
@@ -716,9 +542,9 @@
               </v-tab>
 
               <v-tab-item class="tab-item-fill">
-                <v-layout column class="ma-2 fill-height">
-                  <v-card class="text-center" v-if="selected.station.name">
-                    <v-card-title class="justify-center">
+                <v-layout column class="sm-tab-layout fill-height">
+                  <v-card class="sm-maintenance-card" elevation="0" v-if="selected.station.name">
+                    <v-card-title class="sm-maintenance-title">
                       <div v-if="Object.keys(selected.data).length > 0">
                         Maintenance Report [[ selected.data['Maintenance Report ID'] ]]
                       </div>
@@ -726,11 +552,11 @@
                           Station does not have any approved maintenance report
                       </div>
                     </v-card-title>
-                    <v-row v-for="(item, key) in selected.data" :key="key">
+                    <v-row v-for="(item, key) in selected.data" :key="key" class="sm-maintenance-row">
                         <template v-if="key !== 'Maintenance Report ID'">
-                            <v-col cols="6" class="text-center">[[key]]</v-col>
-                            <v-col cols="6" class="text-center">
-                                <v-chip style="color: white;" v-if="key === 'Next Visit Date'" label :color="selected.color">
+                            <v-col cols="6" class="sm-maintenance-key">[[ key ]]</v-col>
+                            <v-col cols="6" class="sm-maintenance-value">
+                                <v-chip small dark v-if="key === 'Next Visit Date'" :color="selected.color">
                                     [[item]]
                                 </v-chip>
                                 <div v-else>[[item]]</div>
@@ -754,8 +580,8 @@
               </v-tab>
 
               <v-tab-item class="tab-item-fill">
-                <v-layout column class="ma-2 fill-height">
-                  <v-layout class="ma-2 table-area">
+                <v-layout column class="sm-tab-layout fill-height">
+                  <v-layout class="sm-table-wrap table-area">
                     <v-data-table
                       style="width: 100%;"
                       height="100%"
@@ -764,10 +590,10 @@
                       :items="selected.data"
                       item-key="name"
                       :items-per-page="-1"
-                      class="elevation-1"
+                      class="sm-data-table"
                     >
                       <template v-slot:item.classification="{ item }">
-                        <v-chip style="color: white;" :color="item.color">
+                        <v-chip small class="sm-count-chip" :color="item.color" dark>
                           [[item.classification]]
                         </v-chip>  
                       </template>
@@ -888,13 +714,27 @@
         axios.defaults.xsrfHeaderName = "X-CSRFToken";
         axios.defaults.xsrfCookieName = "csrftoken";      
 
-        // format date based on timezone.
-        // 'en-CA' locale formats the date natively as YYYY-MM-DD
-        this.date = new Intl.DateTimeFormat('en-CA', { 
-          timeZone: this.timezone 
-        }).format(new Date());
+        // Use configured SURFACE timezone, not the browser's timezone.
+        // formatToParts is more reliable than assuming an en-CA date string.
+        const todayParts = new Intl.DateTimeFormat('en-US', {
+          timeZone: this.timezone, year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(new Date());
+        const today = {};
+        todayParts.forEach(part => { if (part.type !== 'literal') today[part.type] = part.value; });
+        this.date = `${today.year}-${today.month}-${today.day}`;
 
         this.getGlobalData();
+
+        // Leaflet is kept mounted while the panel animates. Observe its real
+        // container size so tiles fill newly exposed space as it opens/closes.
+        this.$nextTick(() => this.installMonitoringMapResizeObserver());
+    },
+
+    beforeDestroy() {
+      if (this._smResizeObserver) this._smResizeObserver.disconnect();
+      if (this._smResizeFallback) window.removeEventListener('resize', this._smResizeFallback);
+      if (this._smResizeFrame) cancelAnimationFrame(this._smResizeFrame);
+      if (this._smResizeEndTimer) clearTimeout(this._smResizeEndTimer);
     },
 
     computed: {
@@ -928,13 +768,30 @@
       },
       
       filteredStations() {
+        const search = (this.input_search || '').trim().toUpperCase();
         return this.station_list.filter(station =>
-          this.input_search === "" || station.name.toUpperCase().includes(this.input_search.toUpperCase())
-        )
+          !search || String(station.name || '').toUpperCase().includes(search)
+        );
+      },
+
+      sortedQcData() {
+        // Surface problem variables first, without mutating the API response.
+        if (!Array.isArray(this.selected.data)) return [];
+        return this.selected.data.slice().sort((a, b) =>
+          (Number(b.bad) || 0) - (Number(a.bad) || 0) ||
+          (Number(b.suspicious) || 0) - (Number(a.suspicious) || 0) ||
+          String(a.name || '').localeCompare(String(b.name || ''))
+        );
       },    
     },
 
     watch: {
+      sidebarMode() {
+        // Start and finish invalidation; ResizeObserver handles intermediate frames.
+        this.$nextTick(() => this.refreshMapSize());
+        if (this._smResizeEndTimer) clearTimeout(this._smResizeEndTimer);
+        this._smResizeEndTimer = setTimeout(() => this.refreshMapSize(), 530);
+      },
       data_type: function (val) {
         // reset selected tab to zero when Quality control radio btn is selected
         if (['Quality Control', 'Validation'].includes(val)) {
@@ -959,51 +816,59 @@
         }                
       },
 
-      goToDataValidation(selected_station_id = null, item_var_id = null, utc_offset_min = null) {
-          let initial_datetime;
-          let final_datetime;
-
-          if (this.time_type === 'Last 24h') {
-              // Get the current time expressed in the station's UTC offset.
-              final_datetime = moment().utcOffset(utc_offset_min);
-
-              // Exact rolling 24-hour period.
-              initial_datetime = final_datetime.clone().subtract(24, 'hours');
-          }
-          else {
-              // Interpret the selected date as midnight in the default application's timezone.
-              const initial_datetime_default_timezone = moment.tz(
-                  this.date,
-                  'YYYY-MM-DD',
-                  this.timezone
-              ).startOf('day');
-
-              const final_datetime_default_timezone = initial_datetime_default_timezone
-                  .clone()
-                  .add(1, 'day');
-
-              // Shift those datetimes to the station's UTC offset.
-              initial_datetime = initial_datetime_default_timezone
-                  .clone()
-                  .utcOffset(utc_offset_min);
-
-              final_datetime = final_datetime_default_timezone
-                  .clone()
-                  .utcOffset(utc_offset_min);
-          }
-
-          const url =
-              `/wx/quality_control/validation?` +
-              `start_date=${initial_datetime.format('YYYY-MM-DD')}` +
-              `&start_time=${initial_datetime.format('HH:mm')}` +
-              `&end_date=${final_datetime.format('YYYY-MM-DD')}` +
-              `&end_time=${final_datetime.format('HH:mm')}` +
-              `&station_id=${selected_station_id}` +
-              `&variable_id=${item_var_id}`;
-
-          window.open(url, '_blank');
+      // Convert a calendar day's midnight in SURFACE's configured timezone into UTC.
+      // Intl avoids depending on the optional moment-timezone plugin.
+      localMidnightUtc(dateString) {
+        const [year, month, day] = dateString.split('-').map(Number);
+        const desired = Date.UTC(year, month - 1, day);
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: this.timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+        });
+        let guess = desired;
+        for (let i = 0; i < 4; i++) {
+          const parts = {};
+          formatter.formatToParts(new Date(guess)).forEach(part => {
+            if (part.type !== 'literal') parts[part.type] = Number(part.value);
+          });
+          const actual = Date.UTC(parts.year, parts.month - 1, parts.day,
+                                  parts.hour, parts.minute, parts.second);
+          guess += desired - actual;
+        }
+        return new Date(guess);
       },
-      
+
+      goToDataValidation(selected_station_id = null, item_var_id = null, utc_offset_min = null) {
+        const stationOffset = Number.isFinite(Number(utc_offset_min)) ? Number(utc_offset_min) : 0;
+        let initial_datetime;
+        let final_datetime;
+
+        if (this.time_type === 'Last 24h') {
+          // Rolling 24-hour interval, displayed using the selected station offset.
+          final_datetime = moment.utc().utcOffset(stationOffset);
+          initial_datetime = final_datetime.clone().subtract(24, 'hours');
+        } else {
+          // Pick-a-day is a calendar day in the configured SURFACE timezone.
+          // Calculate each midnight separately to handle DST correctly.
+          const startUtc = this.localMidnightUtc(this.date);
+          const [year, month, day] = this.date.split('-').map(Number);
+          const nextDate = new Date(Date.UTC(year, month - 1, day + 1))
+            .toISOString().slice(0, 10);
+          const endUtc = this.localMidnightUtc(nextDate);
+          initial_datetime = moment.utc(startUtc).utcOffset(stationOffset);
+          final_datetime = moment.utc(endUtc).utcOffset(stationOffset);
+        }
+
+        const url = `/wx/quality_control/validation?` +
+          `start_date=${initial_datetime.format('YYYY-MM-DD')}` +
+          `&start_time=${initial_datetime.format('HH:mm')}` +
+          `&end_date=${final_datetime.format('YYYY-MM-DD')}` +
+          `&end_time=${final_datetime.format('HH:mm')}` +
+          `&station_id=${encodeURIComponent(selected_station_id)}` +
+          `&variable_id=${encodeURIComponent(item_var_id)}`;
+        window.open(url, '_blank', 'noopener');
+      },
+
       goToDataInventory(){
         const url = `/wx/data/inventory`;
         window.open(url, '_blank');
@@ -1182,6 +1047,12 @@
         });
       },
       
+      refreshMonitoring() {
+        // Refresh the map and current station without resetting its history choice.
+        this.getGlobalData();
+        if (this.selected.station.id !== null) this.getStationData(this.selected.station);
+      },
+
       getStationData(station, days=1){
         const requestId = ++this.station_request_id;
         this.loading_station = true;
@@ -1276,12 +1147,40 @@
         }
       },
       
-      refreshMapSize(){
-        // Leaflet needs its dimensions recalculated after its container finishes resizing.
-        if (this.sidebarMode === 'fullscreen') return;
+      onMonitoringMapReady() {
+        // Recheck after Leaflet has initialized and after the initial layout settles.
         this.$nextTick(() => {
+          this.installMonitoringMapResizeObserver();
+          this.refreshMapSize();
+          setTimeout(() => this.refreshMapSize(), 120);
+        });
+      },
+
+      installMonitoringMapResizeObserver() {
+        if (this._smResizeObserver || this._smResizeFallback) return;
+        const panel = this.$el.querySelector('.map-panel');
+        if (!panel) return;
+
+        if (typeof ResizeObserver !== 'undefined') {
+          this._smResizeObserver = new ResizeObserver(() => this.refreshMapSize());
+          this._smResizeObserver.observe(panel);
+        } else {
+          // Older browsers still resize correctly at start/end and on window resize.
+          this._smResizeFallback = () => this.refreshMapSize();
+          window.addEventListener('resize', this._smResizeFallback);
+        }
+      },
+
+      refreshMapSize() {
+        // Throttle resize notifications to one Leaflet adjustment per frame.
+        if (this._smResizeFrame) return;
+        this._smResizeFrame = requestAnimationFrame(() => {
+          this._smResizeFrame = null;
+          const panel = this.$el.querySelector('.map-panel');
           const map = this.$refs.myMap && this.$refs.myMap.mapObject;
-          if (map) map.invalidateSize({ pan: false });
+          // Leaflet cannot size a hidden map (fullscreen panel state).
+          if (!map || !panel || panel.clientWidth < 40 || panel.clientHeight < 40) return;
+          map.invalidateSize({ pan: false, animate: false, debounceMoveend: true });
         });
       },
       
@@ -1313,6 +1212,10 @@
       },
       
       selectStation(station){
+        this.reveal = false;
+        this.dialog_chart = false;
+        this.chart_request_id += 1;
+        this.chartOptions = null;
         // Open the panel immediately, while the station request loads.
         this.sidebarMode = 'split';
         // Declare the metadata on each new object so Vue 2 observes it.
@@ -1329,334 +1232,299 @@
 </script>
 
 <style>
-  html,
-  body,
-  #app,
-  #app .v-application,
-  #app .v-application--wrap {
-    height: 100%;
+  /* SURFACE Station Monitoring · redesigned UI
+     Scoped to #app to avoid changing other pages in base.html. */
+  #app.sm-root {
+    --sm-text: #202a36;
+    --sm-muted: #6b7685;
+    --sm-border: #e3e8ed;
+    --sm-soft: #f8fafb;
+    --sm-white: #fff;
+    --sm-blue: #1976d2;
+    color: var(--sm-text);
+    font-family: Roboto, Arial, sans-serif;
+  }
+  html, body, #app.sm-root, #app.sm-root .v-application, #app.sm-root .v-application--wrap { height: 100%; }
+  #app.sm-root .v-application { background: #fff !important; color: var(--sm-text); }
+  #app.sm-root .page-container { height: 100%; min-height: 0; }
+  #app.sm-root .monitoring-layout {
+    width: 100%; height: calc(100vh - 120px); min-height: 480px;
+    flex-wrap: nowrap; overflow: hidden; background: #fff;
+    /* Leaflet's control panes cannot escape and overlap Vuetify popups. */
+    position: relative; z-index: 0; isolation: isolate;
+  }
+  #app.sm-root .map-panel {
+    position: relative; flex: 0 0 58.333333%; max-width: 58.333333%;
+    height: 100%; min-width: 0; min-height: 0; overflow: hidden;
+    transition: flex-basis 480ms cubic-bezier(.22, 1, .36, 1), max-width 480ms cubic-bezier(.22, 1, .36, 1);
+  }
+  #app.sm-root .sm-leaflet-map, #app.sm-root .map-panel .leaflet-container { width: 100%; height: 100%; }
+  #app.sm-root .sidebar-panel {
+    display: flex; flex-direction: column; flex: 0 0 41.666667%; max-width: 41.666667%;
+    height: 100%; min-width: 0; min-height: 0;
+    border-left: 1px solid var(--sm-border); background: #fff; overflow: hidden;
+    transition: flex-basis 480ms cubic-bezier(.22, 1, .36, 1), max-width 480ms cubic-bezier(.22, 1, .36, 1), border-color 250ms ease;
+  }
+  #app.sm-root .monitoring-layout.sidebar-hidden .map-panel { flex-basis: 100%; max-width: 100%; }
+  #app.sm-root .monitoring-layout.sidebar-hidden .sidebar-panel {
+    flex-basis: 0; max-width: 0; border-left-color: transparent; pointer-events: none;
+  }
+  #app.sm-root .monitoring-layout.sidebar-fullscreen .map-panel {
+    flex-basis: 0; max-width: 0; pointer-events: none;
+  }
+  #app.sm-root .monitoring-layout.sidebar-fullscreen .sidebar-panel {
+    flex-basis: 100%; max-width: 100%; border-left-color: transparent;
   }
 
-  .page-container {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .monitoring-layout {
-    width: 100%;
-    height: calc(100vh - 120px);
-    min-height: 0;
-    flex-wrap: nowrap;
-    overflow: hidden;
-  }
-
-  /* The split layout retains the original md7 / md5 proportions. */
-  .map-panel {
-    flex: 0 0 58.333333%;
-    max-width: 58.333333%;
-    height: 100%;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    transition: flex-basis 480ms cubic-bezier(0.22, 1, 0.36, 1),
-                max-width 480ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .sidebar-panel {
+  /* Keep standard Leaflet +/- zoom controls immediately to the LEFT of the
+     monitoring mode dropdown, with the same native appearance as Spatial Analysis. */
+  #app.sm-root .map-panel .leaflet-top.leaflet-left {
     display: flex;
-    flex-direction: column;
-    flex: 0 0 41.666667%;
-    max-width: 41.666667%;
-    height: 100%;
-    min-width: 0;
-    min-height: 0;
-    border-left: 2px solid #BBB;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  #app.sm-root .map-panel .leaflet-top.leaflet-left .leaflet-control {
+    float: none;
+    margin: 10px 0 0;
+  }
+  #app.sm-root .map-panel .leaflet-top.leaflet-left .leaflet-control-zoom {
+    order: -1;
+    margin-left: 10px;
+  }
+  #app.sm-root .map-panel .leaflet-top.leaflet-right .leaflet-control {
+    margin-top: 12px; margin-right: 14px;
+  }
+  /* Same buttons as the Spatial Analysis toolbar. */
+  #app.sm-root .sm-map-tool.v-btn {
+    height: 37px !important; min-width: 42px !important; width: 42px;
+    padding: 0 !important; border-radius: 4px; border: 0;
+    background: #fff !important; color: #262c33 !important;
+    box-shadow: 0 2px 7px rgba(0,0,0,.18) !important;
+  }
+  #app.sm-root .sm-map-tool .v-icon { font-size: 23px !important; }
+  #app.sm-root .sm-map-tool:hover { background: #f4f5f7 !important; }
+
+  #app.sm-root .sm-mode-control { width: 255px; max-width: calc(100vw - 40px); font-family: inherit; }
+  #app.sm-root .sm-mode-trigger.v-btn {
+    width: 100%; height: auto !important; min-height: 59px;
+    padding: 10px 12px !important; border-radius: 7px;
+    box-shadow: 0 2px 7px rgba(0,0,0,.18) !important;
+    border: 0; text-align: left;
+  }
+  #app.sm-root .sm-mode-trigger .v-btn__content {
+    display: flex; align-items: center; justify-content: flex-start; gap: 11px; width: 100%;
+    text-transform: none; white-space: normal;
+  }
+  #app.sm-root .sm-mode-trigger-copy { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; gap: 2px; }
+  #app.sm-root .sm-mode-trigger-copy strong { color: #263442; font-size: 15px; line-height: 1.3; font-weight: 750; }
+  #app.sm-root .sm-mode-trigger-copy small { color: #6c7a89; font-size: 11px; line-height: 1.35; }
+  #app.sm-root .sm-mode-menu {
+    margin-top: 8px; padding: 8px 13px 13px; background: white;
+    border: 1px solid var(--sm-border); border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(22,40,58,.13); overflow: visible;
+  }
+  #app.sm-root .sm-mode-section { padding-top: 11px; }
+  #app.sm-root .sm-mode-section + .sm-mode-section { border-top: 1px solid #edf0f3; margin-top: 11px; }
+  #app.sm-root .sm-section-caption, #app.sm-root .sm-radio-divider {
+    display: block; font-size: 10px; letter-spacing: .09em; font-weight: 750; color: #8792a0; margin-bottom: 10px;
+  }
+  #app.sm-root .sm-time-toggle { display: flex; width: 100%; box-shadow: none; border: 1px solid var(--sm-border); border-radius: 9px; }
+  #app.sm-root .sm-time-toggle .v-btn { flex: 1 1 50%; height: 33px; background: #fff; letter-spacing: 0; font-size: 12px; }
+  #app.sm-root .sm-time-toggle .v-btn.v-btn--active { background: #eaf3ff !important; color: #155da2 !important; }
+  #app.sm-root .sm-picker-input { margin-top: 12px; }
+  #app.sm-root .sm-picker-input .v-input__slot { min-height: 38px !important; border-radius: 8px; }
+  #app.sm-root .sm-mode-radios { margin-top: 0; padding-top: 0; }
+  #app.sm-root .sm-mode-radios .v-input--radio-group__input { gap: 1px; }
+  #app.sm-root .sm-mode-radios .v-radio { margin: 0; padding: 6px 7px; border-radius: 8px; }
+  #app.sm-root .sm-mode-radios .v-radio:hover { background: #f7f9fc; }
+  #app.sm-root .sm-mode-radios .v-label { font-size: 13px; color: #3d4c5a; }
+  #app.sm-root .sm-radio-divider { margin: 10px 7px 3px; }
+
+  #app.sm-root .sm-map-search {
+    width: 273px; max-width: calc(100vw - 40px);
+    padding: 8px 10px 6px; border: 1px solid #e5eaf0;
+    border-radius: 12px; background: #fff; box-shadow: 0 5px 23px rgba(25,41,57,.14);
+  }
+  #app.sm-root .sm-search-input .v-input__slot { border-radius: 7px; min-height: 36px !important; margin-bottom: 0; }
+  #app.sm-root .sm-search-input .v-input__control { min-height: 36px; }
+  #app.sm-root .sm-search-input fieldset { border-color: #e6ebef; }
+  #app.sm-root .sm-map-search-count { display: block; text-align: right; color: #8993a1; font-size: 10px; padding-right: 4px; padding-top: 3px; }
+
+  #app.sm-root .sm-map-legend {
+    width: 244px; max-width: calc(100vw - 35px);
+    padding: 12px 13px 9px; border-radius: 12px;
+    border: 1px solid #e4e8ee; background: #fff; color: #283645;
+    box-shadow: 0 6px 24px rgba(27,43,59,.13);
+  }
+  #app.sm-root .sm-legend-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 9px; gap: 6px; }
+  #app.sm-root .sm-legend-header > div { display: flex; flex-direction: column; gap: 1px; }
+  #app.sm-root .sm-legend-header strong { font-size: 14px; font-weight: 750; }
+  #app.sm-root .sm-legend-overline { font-size: 9px; color: #8190a0; font-weight: 800; letter-spacing: .11em; }
+  #app.sm-root .sm-legend-header .v-btn { margin-top: 4px; }
+  #app.sm-root .sm-legend-items { border-top: 1px solid #eef0f3; padding-top: 8px; }
+  #app.sm-root .sm-legend-row { display: flex; justify-content: space-between; align-items: center; gap: 9px; padding: 4px 0; font-size: 12px; }
+  #app.sm-root .sm-legend-row strong { font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 650; color: #5a6777; }
+  #app.sm-root .sm-legend-name { display: inline-flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+  #app.sm-root .sm-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,.08); flex-shrink: 0; }
+  #app.sm-root .sm-legend-empty { display: flex; gap: 9px; align-items: center; font-size: 12px; color: #657383; line-height: 1.5; padding: 8px 0; border-top: 1px solid #edf0f4; }
+  #app.sm-root .sm-legend-validation-dot { width: 11px; height: 11px; flex: 0 0 11px; background: #1976d2; border-radius: 50%; }
+  #app.sm-root .sm-legend-footer { margin-top: 7px; border-top: 1px solid #f0f2f4; padding-top: 8px; font-size: 10px; color: #84909e; }
+
+  /* Keep map mounted and show feedback without moving controls or changing viewport. */
+  #app.sm-root .sm-map-loading-overlay, #app.sm-root .sm-map-error {
+    position: absolute; z-index: 1050; left: 50%; top: 47%; transform: translate(-50%, -50%); pointer-events: none;
+  }
+  #app.sm-root .sm-map-loading-card {
+    display: flex; align-items: center; gap: 13px; padding: 14px 17px; min-width: 250px;
+    background: rgba(255,255,255,.97); border: 1px solid #e4e9ef;
+    border-radius: 13px; box-shadow: 0 10px 30px rgba(20,39,55,.13);
+  }
+  #app.sm-root .sm-map-loading-card > div { display: flex; flex-direction: column; gap: 3px; }
+  #app.sm-root .sm-map-loading-card strong { font-size: 13px; }
+  #app.sm-root .sm-map-loading-card span { font-size: 11px; color: #788593; }
+  #app.sm-root .sm-map-error { pointer-events: auto; min-width: 250px; max-width: calc(100% - 40px); text-align: center; padding: 15px; background: #fff; border-radius: 12px; box-shadow: 0 8px 28px #24334433; }
+
+  /* Station detail sheet. */
+  #app.sm-root .sidebar-heading {
+    display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto;
+    padding: 16px 20px; min-height: 59px; background: #fff;
+    border-bottom: 1px solid var(--sm-border);
+  }
+  #app.sm-root .sm-panel-title-group { min-width: 0; }
+  /* Identical typography to Spatial Analysis's section heading. */
+  #app.sm-root .sm-panel-title {
+    font-size: 19px; font-weight: 700; line-height: 1.3;
+    letter-spacing: 0; color: #252c34; margin: 0;
+  }
+  #app.sm-root .sidebar-actions { display: flex; align-items: center; gap: 4px; }
+  #app.sm-root .sidebar-actions .v-btn { color: #536171; }
+  #app.sm-root .sm-station-heading {
+    display: flex; align-items: center; gap: 11px; padding: 14px 19px;
+    background: #fff; border-bottom: 1px solid #eef1f4; min-width: 0;
+  }
+  #app.sm-root .sm-station-icon { flex-shrink: 0; height: 37px; width: 37px; display: grid; place-items: center; background: #f1f6fc; border-radius: 10px; }
+  #app.sm-root .sm-station-heading-copy { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
+  #app.sm-root .sm-station-name { font-size: 17px; font-weight: 750; line-height: 1.2; overflow-wrap: anywhere; color: #263440; }
+  #app.sm-root .sm-station-meta { display: flex; flex-wrap: wrap; gap: 2px 9px; align-items: center; color: #7a8795; font-size: 11px; }
+  #app.sm-root .sm-station-code { font-weight: 700; color: #576677; }
+  #app.sm-root .sm-station-status-dot { width: 12px; height: 12px; border: 2px solid #fff; box-shadow: 0 0 0 1px #d5dce4; border-radius: 50%; margin-left: auto; flex-shrink: 0; }
+  #app.sm-root .station-history-toggle { flex: 0 0 auto; padding: 10px 18px 9px; background: #fafbfc; border-bottom: 1px solid #e9edf2; }
+  #app.sm-root .station-history-toggle .v-label { font-size: 12px; color: #435366; }
+  #app.sm-root .station-history-hint { display: block; margin-top: 3px; padding-left: 1px; color: #89939f; font-size: 11px; line-height: 1.4; }
+  #app.sm-root .sidebar-empty-state { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 36px 29px; color: #6b7887; }
+  #app.sm-root .sm-empty-icon { display: grid; place-items: center; height: 79px; width: 79px; border-radius: 50%; background: #f4f7fa; border: 1px solid #e9edf2; margin-bottom: 17px; }
+  #app.sm-root .sidebar-empty-state strong { color: #273644; font-size: 20px; }
+  #app.sm-root .sidebar-empty-state p { max-width: 310px; margin: 8px 0 16px; font-size: 13px; line-height: 1.7; }
+  #app.sm-root .sm-empty-hint { display: flex; gap: 6px; align-items: center; color: #8c98a5; font-size: 11px; }
+  #app.sm-root .sm-station-loading { flex: 1; display: flex; flex-direction: column; gap: 9px; align-items: center; justify-content: center; font-size: 13px; color: #748293; text-align: center; padding: 20px; }
+  #app.sm-root .sm-station-loading strong { font-size: 15px; color: #384759; font-weight: 650; margin-top: 7px; }
+  #app.sm-root .sm-station-loading span { max-width: 280px; font-size: 12px; }
+
+  #app.sm-root .station-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  #app.sm-root .sm-reporting-card { flex: 0 0 auto; margin: 13px 17px 13px; padding: 12px 14px 11px; border: 1px solid #e6ebf0; background: #f9fafc; border-radius: 10px; }
+  #app.sm-root .sm-reporting-header { display: flex; gap: 7px; align-items: center; font-size: 11px; color: #57677a; }
+  #app.sm-root .sm-reporting-header strong { font-weight: 750; }
+  #app.sm-root .sm-reporting-period { margin-top: 5px; font-size: 14px; font-weight: 700; color: #2c3c4c; }
+  #app.sm-root .sm-reporting-zone { margin-top: 3px; color: #7c8996; font-size: 11px; }
+  #app.sm-root .sm-reporting-card p { color: #657587; font-size: 11px; line-height: 1.55; margin: 8px 0 0; }
+
+  /* Compact, breathable monitoring tables. */
+  #app.sm-root .sidebar-tabs { flex: 1 1 auto; height: auto; min-height: 0; display: flex; flex-direction: column; }
+  #app.sm-root .sidebar-tabs > .v-tabs-bar { flex: 0 0 auto; background: #fff; border-bottom: 1px solid #e5eaf0; }
+  #app.sm-root .sidebar-tabs .v-tab { font-size: 11px; letter-spacing: .025em; text-transform: none; font-weight: 700; color: #6c7887; }
+  #app.sm-root .sidebar-tabs .v-tab--active { color: #1662ac; }
+  #app.sm-root .sidebar-tabs > .v-window, #app.sm-root .sidebar-tabs > .v-tabs-items,
+  #app.sm-root .sidebar-tabs .v-window__container, #app.sm-root .sidebar-tabs .v-window-item {
+    flex: 1 1 auto; height: 100%; min-height: 0;
+  }
+  #app.sm-root .tab-item-fill { height: 100%; min-height: 0; }
+  #app.sm-root .tab-item-fill > .layout { height: 100%; min-height: 0; }
+  #app.sm-root .sm-tab-layout { padding: 12px 13px 18px; margin: 0; }
+  #app.sm-root .table-area { flex: 1 1 auto; min-height: 0; }
+  #app.sm-root .sm-table-wrap { margin: 0; overflow: hidden; }
+  #app.sm-root .sm-data-table {
+    width: 100%; height: 100%; border: 1px solid #e7ebf0; border-radius: 10px; box-shadow: none !important;
     background: #fff;
-    overflow: hidden;
-    transition: flex-basis 480ms cubic-bezier(0.22, 1, 0.36, 1),
-                max-width 480ms cubic-bezier(0.22, 1, 0.36, 1),
-                border-color 250ms ease;
   }
-
-  /* Animate both sides of the split so neither panel jumps or overlays the navbar. */
-  .monitoring-layout.sidebar-hidden .map-panel {
-    flex-basis: 100%;
-    max-width: 100%;
+  #app.sm-root .sm-data-table .v-data-table__wrapper { height: 100%; overflow: auto; }
+  #app.sm-root .sm-data-table .v-data-table-header th {
+    background: #f7f9fb; border-bottom: 1px solid #e7ecf0;
+    color: #6c7888 !important; font-size: 11px !important; font-weight: 800;
+    letter-spacing: .025em; text-transform: none; height: 43px;
   }
+  #app.sm-root .sm-data-table tbody td { border-color: #eef1f5 !important; color: #354456; font-size: 12px; height: 49px; }
+  #app.sm-root .sm-data-table tbody tr:hover { background: #f9fbfd !important; }
+  #app.sm-root .sm-data-table .v-data-footer { border-top: 1px solid #ecf0f4; background: #fff; font-size: 11px; }
+  #app.sm-root .sm-data-table .v-btn--icon { width: 30px; height: 30px; }
+  #app.sm-root .sm-count-chip { min-width: 43px; justify-content: center; border-radius: 7px; font-weight: 750; cursor: pointer; }
+  #app.sm-root .qc-reading-counts { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; padding: 3px 0; }
+  #app.sm-root .sm-qc-chip { height: 25px; border-radius: 6px; padding: 0 6px; gap: 5px; font-size: 10px; cursor: pointer; }
+  #app.sm-root .sm-qc-chip .v-chip__content { display: flex; gap: 5px; align-items: center; }
+  #app.sm-root .sm-qc-chip-label { white-space: nowrap; font-size: 9px; }
+  #app.sm-root .sm-qc-chip strong { font-size: 11px; font-variant-numeric: tabular-nums; }
+  #app.sm-root .monitoring-qc-table th, #app.sm-root .monitoring-qc-table td { padding: 0 8px !important; }
 
-  .monitoring-layout.sidebar-hidden .sidebar-panel {
-    flex-basis: 0;
-    max-width: 0;
-    border-left-color: transparent;
-    pointer-events: none;
+  /* Validation progress and visit details. */
+  #app.sm-root .validation-summary { flex: 0 0 auto; margin: 2px 0 12px; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--sm-border); background: #fbfcfd; }
+  #app.sm-root .sm-validation-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+  #app.sm-root .sm-validation-stats > div { display: flex; flex-direction: column; padding: 6px 7px; min-width: 0; }
+  #app.sm-root .sm-validation-stats span { font-size: 10px; color: #8290a0; }
+  #app.sm-root .sm-validation-stats strong { font-size: 22px; color: #293948; font-weight: 750; font-variant-numeric: tabular-nums; }
+  #app.sm-root .sm-validation-label { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; color: #6b7a8a; }
+  #app.sm-root .sm-validation-label strong { color: #296d4a; }
+  #app.sm-root .validation-key { display: flex; flex-wrap: wrap; gap: 7px 14px; margin: 0 0 12px; color: #748291; font-size: 11px; }
+  #app.sm-root .validation-key > span { display: inline-flex; align-items: center; }
+  #app.sm-root .validation-dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; }
+  #app.sm-root .validation-percentage { min-width: 70px; text-align: center; font-size: 12px; font-weight: 650; }
+  #app.sm-root .sm-maintenance-card { border: 1px solid #e7ecf0; border-radius: 10px; }
+  #app.sm-root .sm-maintenance-title { font-size: 14px; font-weight: 700; padding: 14px 16px; background: #f8fafc; border-bottom: 1px solid #e9edf1; }
+  #app.sm-root .sm-maintenance-row { padding: 6px 13px; margin: 0; border-bottom: 1px solid #f0f2f4; }
+  #app.sm-root .sm-maintenance-row:last-child { border-bottom: 0; }
+  #app.sm-root .sm-maintenance-key, #app.sm-root .sm-maintenance-value { font-size: 12px; padding: 9px 8px; }
+  #app.sm-root .sm-maintenance-key { color: #798795; }
+  #app.sm-root .sm-maintenance-value { color: #334155; font-weight: 600; }
+
+  /* Popups are detached from the Leaflet control tree (which clips overflow).
+     Use a consistent order: page/map < calendar < modal overlays/dialogs. */
+  .sm-date-picker-menu { z-index: 2300 !important; }
+  #app.sm-root .v-dialog__content { z-index: 2400 !important; }
+  .sm-dialog .sm-dialog-card { border-radius: 13px; overflow: hidden; }
+  .sm-dialog .sm-dialog-heading { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e7ebf0; padding: 16px 21px; }
+  .sm-dialog .sm-dialog-heading-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .sm-dialog .sm-dialog-heading h2 { margin: 0; font-size: 19px; font-weight: 750; color: #273746; }
+  .sm-dialog .sm-dialog-heading p { margin: 0; font-size: 12px; color: #718093; }
+  .sm-dialog .sm-dialog-body { padding: 20px 21px !important; min-height: 130px; }
+  .sm-dialog .sm-info-copy { min-height: 80px; font-size: 13px; line-height: 1.65; color: #465567; }
+  .sm-dialog .sm-info-copy p { margin: 0; }
+  .sm-dialog .sm-dialog-actions { border-top: 1px solid #e7ebf0; padding: 12px 20px; }
+  .sm-dialog .sm-chart-loading { display: flex; flex-direction: column; gap: 13px; align-items: center; justify-content: center; min-height: 280px; font-size: 13px; color: #718092; }
+
+  @media (max-width: 1050px) {
+    #app.sm-root .monitoring-layout.sidebar-split .map-panel { flex-basis: 0; max-width: 0; overflow: hidden; }
+    #app.sm-root .monitoring-layout.sidebar-split .sidebar-panel { flex-basis: 100%; max-width: 100%; }
   }
-
-  .monitoring-layout.sidebar-fullscreen .map-panel {
-    flex-basis: 0;
-    max-width: 0;
-    pointer-events: none;
+  @media (max-width: 650px) {
+    #app.sm-root .monitoring-layout { height: calc(100dvh - 115px); min-height: 400px; }
+    #app.sm-root .map-panel .leaflet-top.leaflet-left .leaflet-control { margin-top: 8px; }
+    #app.sm-root .sm-mode-control { width: 240px; max-width: calc(100vw - 20px); }
+    #app.sm-root .sm-mode-trigger.v-btn { padding: 9px 10px !important; min-height: 55px; }
+    #app.sm-root .sm-map-tool.v-btn { min-width: 34px !important; width: 34px; height: 34px !important; }
+    #app.sm-root .sm-map-tool .v-icon { font-size: 20px !important; }
+    #app.sm-root .sm-map-legend { width: 185px; padding: 9px; }
+    #app.sm-root .sm-legend-row { font-size: 11px; }
+    #app.sm-root .sm-map-search { width: 190px; }
+    #app.sm-root .sidebar-heading { padding: 10px 11px 10px 15px; min-height: 59px; }
+    #app.sm-root .sm-panel-title { font-size: 16px; }
+    #app.sm-root .sm-station-heading { padding: 11px 13px; }
+    #app.sm-root .sm-station-name { font-size: 15px; }
+    #app.sm-root .sm-reporting-card { margin: 9px 11px; padding: 9px 11px; }
+    #app.sm-root .sm-tab-layout { padding: 8px 8px 12px; }
+    #app.sm-root .sm-validation-stats strong { font-size: 18px; }
   }
-
-  .monitoring-layout.sidebar-fullscreen .sidebar-panel {
-    flex-basis: 100%;
-    max-width: 100%;
-    border-left-color: transparent;
-  }
-
-  .map-sidebar-toggle {
-    margin-top: 6px;
-  }
-
-  .sidebar-heading {
-    background: #f3f5f8;
-    border-bottom: 1px solid #d9dee6;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 10px 5px 16px;
-    min-height: 44px;
-    flex: 0 0 auto;
-  }
-
-  .sidebar-heading h4 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.025em;
-  }
-
-  .sidebar-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .station-history-toggle {
-    flex: 0 0 auto;
-    padding: 10px 16px 9px;
-    border-bottom: 1px solid #e5e9ef;
-    background: #fafbfc;
-  }
-
-  .station-history-hint {
-    display: block;
-    padding-left: 2px;
-    margin-top: 3px;
-    font-size: 12px;
-    color: red;
-  }
-
-  .sidebar-empty-state {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 24px;
-    color: #697586;
-  }
-
-  /* Keep the monitoring information readable on narrow screens. */
-  @media (max-width: 900px) {
-    .monitoring-layout.sidebar-split .map-panel {
-      flex-basis: 0;
-      max-width: 0;
-      overflow: hidden;
-    }
-
-    .monitoring-layout.sidebar-split .sidebar-panel {
-      flex-basis: 100%;
-      max-width: 100%;
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .map-panel,
-    .sidebar-panel {
-      transition-duration: 0.01ms;
-    }
+    #app.sm-root .map-panel, #app.sm-root .sidebar-panel { transition-duration: .01ms; }
   }
-
-  .station-content {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .sidebar-tabs {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .sidebar-tabs > .v-tabs-bar {
-    flex: 0 0 auto;
-  }
-
-  .sidebar-tabs > .v-window,
-  .sidebar-tabs > .v-tabs-items,
-  .sidebar-tabs .v-window__container,
-  .sidebar-tabs .v-window-item {
-    flex: 1 1 auto;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .tab-item-fill {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .tab-item-fill > .layout {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .table-area {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-
-  .table-area .v-data-table {
-    height: 100%;
-  }
-
-  .table-area .v-data-table__wrapper {
-    height: 100%;
-    overflow-y: auto;
-  }
-
-  .search-content {
-    position: absolute;
-    bottom: 16px;
-    left: 14px;
-    display: flex;
-    width: 100%;
-    max-width: 300px;
-    z-index: 995;
-  }
-
-  .v-data-table .v-data-table-header tr th {
-    font-size: 16px !important;
-  }
-
-  .data-type-box {
-    width: 100%;
-    width: 250px;
-    z-index: 995;
-  }
-
-  .data-type-btn {
-    padding: 8px 16px !important;
-    height: auto !important;
-  }
-
-  .data-type-btn .arrow-icon {
-    position: absolute;
-    right: 0px;
-    top: 30%;
-  }
-
-  .current-date-list {
-    min-height: auto;
-  }
-
-  .validation-summary {
-    flex: 0 0 auto;
-  }
-
-  .validation-summary-counts,
-  .validation-key {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
-  }
-
-  .validation-key {
-    flex: 0 0 auto;
-  }
-
-  .validation-key > span {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .validation-dot {
-    display: inline-block;
-    width: 9px;
-    height: 9px;
-    margin-right: 5px;
-    border-radius: 50%;
-  }
-
-  .validation-percentage {
-    min-width: 60px;
-    text-align: center;
-  }
-
-  .qc-reading-counts {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px;
-  }
-
-  .monitoring-qc-table th,
-  .monitoring-qc-table td {
-    padding: 0 8px !important;
-  }
-
-  .monitoring-qc-table.v-data-table .v-data-table-header th {
-    font-size: 14px !important;
-  }
-
-  .legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 1px;
-  }
-
-  .legend-color {
-    display: inline-block;
-    width: 20px;
-    height: 10px;
-    margin-right: 5px;
-  }
-
-  .circle-lg {
-    display: inline-block;
-    width: 13px;
-    height: 13px;
-    border-radius: 50%;
-    margin-right: 5px;
-    border: 2px solid white;
-  }
-
-  /* Center the loader within the full map area. */
-  .map-loading {
-      width: 100%;
-      height: 100%;
-  }
-
-  /* 1. Force the top-left container to align items horizontally */
-  .leaflet-top.leaflet-left {
-      display: flex;
-      flex-direction: row;
-      align-items: flex-start;
-      gap: 8px; /* Adds space between the zoom control and your l-control */
-  }
-
-  /* 2. Reset Leaflet's default vertical margins so elements align cleanly */
-  .leaflet-top.leaflet-left .leaflet-control {
-      margin-top: 10px;
-      margin-left: 10px;
-      margin-bottom: 0;
-      margin-right: 0;
-  }
-
 </style>
 
 {% endblock %}

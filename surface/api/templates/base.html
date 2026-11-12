@@ -8,11 +8,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
 
-    <!-- surfarce logo -->
+    <!-- SURFACE favicon. Keep this URL stable: bookmarks and pinned tabs depend on it. -->
     <link rel="icon" type="image/png" href="{% static 'images/circle_logo_small.png' %}">
 
     <title>{% block title %}Surface{% endblock %}</title>
 
+    <!-- Shared SURFACE typography; page-specific templates should reuse srf-display-* classes. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Encode+Sans:wght@100..900&display=swap" rel="stylesheet">
@@ -76,13 +77,77 @@
 
     {% include 'material/includes/material_css.html' %}
 
-    <style>      
+    <!--
+      IMPORTANT: SURFACE still uses Materialize, Bootstrap, MDL, and Vuetify.
+      Their CSS overlaps in places. Do not remove/reorder these shared
+      dependencies without checking all inherited templates first.
+    -->
+    <style>
+      /*
+        SURFACE GLOBAL STACKING ORDER
+        -------------------------------------------
+        Leaflet: isolated inside each map container
+        Floating UTC clock: 170
+        Permanent left navigation: 180
+        Vuetify menus/dialogs: framework-managed (above navigation)
+        Page-navigation loading overlay: 2400+
+        Toast notifications: 2500
+
+        Prefer local page-specific z-index adjustments over adding huge
+        global values; a high z-index in base.html affects every page.
+      */
+      .leaflet-container {
+        isolation: isolate;
+      }
+
+      #slide-out.sidenav {
+        z-index: 180;
+      }
+
+      /*
+        Active navigation styling — shared by leaf links and group headers.
+        The class srf-nav-group-active lives on the parent <li>, so only
+        style its first <a> (the group heading), not the entire group.
+
+        IMPORTANT: Do not add margin/padding here: the collapsed sidebar is
+        only 55px wide and changing the link box will shift its icon.
+        The ::before pseudo-element draws an inset highlight instead.
+      */
+      #slide-out .srf-nav-active,
+      #slide-out .srf-nav-group-active > a.collapsible-item:first-child {
+        position: relative;
+        isolation: isolate;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: #233044 !important;
+        font-weight: 700;
+      }
+
+      /* Rounded highlight; purely decorative, so link geometry is unchanged. */
+      #slide-out .srf-nav-active::before,
+      #slide-out .srf-nav-group-active > a.collapsible-item:first-child::before {
+        content: "";
+        position: absolute;
+        inset: 2px 6px;
+        border-radius: 10px;
+        background: rgba(25, 118, 210, 0.09);
+        z-index: -1;
+        pointer-events: none;
+      }
+
+      #slide-out .hover-item > a[role="button"]:focus-visible {
+        outline: 2px solid #1976d2;
+        outline-offset: -3px;
+      }
+
+      /* The shared font and title scale are intentionally unchanged. */      
       /* Floating UTC clock start */
       .wx-utc-widget {
         position: fixed;
         right: 20px;
         bottom: 20px;
-        z-index: 100000;
+        z-index: 170; /* Visible above maps, but below framework dialogs. */
         font-family: "Encode Sans", sans-serif;
 
         /* Makes dragging feel natural */
@@ -250,7 +315,7 @@
         position: fixed;
         top: 16px;
         right: 16px;
-        z-index: 99999;
+        z-index: 2500; /* Feedback stays visible during page navigation. */
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -295,6 +360,7 @@
         line-height: 1;
         padding: 0;
         opacity: 0.8;
+        color: inherit;
       }
 
       .wx-toast__close:hover { opacity: 1; }
@@ -327,7 +393,7 @@
           width: 100%;
           height: 100%;
           background: rgba(255, 255, 255, 0.306);
-          z-index: 1000;
+          z-index: 2400; /* Above dialogs while navigating to another page. */
           backdrop-filter: blur(5px);
         }
 
@@ -344,7 +410,7 @@
           left: 50%;
           margin-left: -35px;
           margin-top: -50px;
-          z-index: 1001;
+          z-index: 2401;
         }
 
         @keyframes spin {
@@ -407,9 +473,12 @@
         .v-date-picker-table--date.theme--light > table > thead > tr {
           border: none;
         }
-        .v-menu__content {
-          min-width: 290px!important;
-        }
+        /*
+          Do not set a global minimum width for .v-menu__content.
+          Vuetify attaches date pickers, menus and autocompletes here;
+          forcing every popup to 290px made compact map controls oversized.
+          Set min-width on individual menus using their component props.
+        */
         .srf-field-max-300 {
           max-width: 300px;
         }
@@ -873,13 +942,12 @@
     {% block extrastyle %} {% endblock %}
   </head>
   <body>
-    <!--  <ul id="slide-out" class="sidenav sidenav-fixed collapsed-mode accent_background" onmouseover="hoverOpenSidebar()" onmouseout="hoverCloseSidebar()" onmouseleave="closeSidebarSubMenu()" style="z-index: 9999;"> -->
+    <!-- Sidebar navigation is the permanent page-level control. -->
     <ul
       id="slide-out"
       class="sidenav sidenav-fixed collapsed-mode accent_background"
       onmouseenter="hoverOpenSidebar()"
       onmouseleave="hoverCloseSidebar(); closeSidebarSubMenu();"
-      style="z-index: 9999;"
     >
 
       <div style="display: flex;
@@ -1104,7 +1172,7 @@
               {% endif %}
 
               {% if request|has_any_feature_permission:"yearly-average:read" %}
-                <a id="yearly-average" href="{% url 'yearly-average' %}" class="left-space hidden-link">Yearly Average<i class="material-icons secondary-content" onclick="mainOverlayLoader()">timeline</i></a>
+                <a id="yearly-average" href="{% url 'yearly-average' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Yearly Average<i class="material-icons secondary-content">timeline</i></a>
               {% endif %}
 
               {% if request|has_any_feature_permission:"extremes-means:read" %}
@@ -1201,6 +1269,12 @@
     </ul>
 
 
+    <!--
+      Keep the explicit viewport height for now: several existing Leaflet and
+      monitoring children rely on percentage heights from this container.
+      Each map page is responsible for sizing its own Leaflet element and
+      calling invalidateSize() when its available space changes.
+    -->
     <main style="height: 100vh; width: 100%">
 
       <div class="page-content">
@@ -1297,8 +1371,6 @@
 
     <script defer src="https://unpkg.com/material-design-lite@1.3.0/material.min.js"></script>
 
-    <script src="https://momentjs.com/downloads/moment.min.js" defer></script>
-    <script defer src="https://momentjs.com/downloads/moment-timezone-with-data-10-year-range.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.3.1.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.15/lodash.js"></script>
     <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js" defer></script>
@@ -1345,6 +1417,37 @@
 
 
     <script type="text/javascript" src="https://cdn.datatables.net/v/bs4/dt-1.10.20/b-1.6.1/b-html5-1.6.1/fh-3.1.6/datatables.min.js"></script>
+    <!--
+      SHARED DEPENDENCY: Moment.js + Moment Timezone.
+
+      IMPORTANT: Load this pair AFTER all other shared vendor scripts,
+      including material/includes/material_js.html, in case a vendor
+      script installs its own Moment.js instance. Load BEFORE block js
+      and block localjavascript, which may call moment(...).tz(...).
+
+      Keep these synchronous and in order. Do not add defer or async.
+      If your deployment blocks CDN access, copy both files into Django
+      static files and replace the URLs below with {% static ... %} paths.
+    -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.31.0/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.1/moment-timezone-with-data-10-year-range.min.js"></script>
+    <script>
+      /*
+       * Record dependency health right after loading. This helps distinguish
+       * an unavailable CDN script from Moment being overwritten later.
+       * Check window.__surfaceMomentTimezoneAtLoad in DevTools.
+       */
+      window.__surfaceMomentTimezoneAtLoad = {
+        momentVersion: typeof window.moment === 'function' ? window.moment.version : null,
+        timezoneLoaded: typeof window.moment === 'function' &&
+          typeof window.moment.tz === 'function' &&
+          typeof window.moment().tz === 'function'
+      };
+      if (!window.__surfaceMomentTimezoneAtLoad.timezoneLoaded) {
+        console.error('[SURFACE] Moment Timezone missing immediately after shared imports. Check Network for the timezone JS request.');
+      }
+    </script>
+
     {% block js %}
     <script>
       $(document).ready(function(){
@@ -1352,8 +1455,8 @@
         $('.collapsible').collapsible();
         const menu = document.getElementById('slide-out');
         const blockContent = document.getElementById('block-content');
-        const wrapSidenav = document.getElementById('wrap-sidenav');
-        const instance = M.Collapsible.getInstance(document.querySelector('.collapsible')); 
+        const instance = M.Collapsible.getInstance(document.querySelector('.collapsible'));
+        let submenuCloseTimer = null; // Timer is cancelled when the sidebar re-opens. 
         
         // Select all elements with the class "custom-navbar-text"
         const navbarItems = document.querySelectorAll('.custom-navbar-text');
@@ -1362,7 +1465,9 @@
         const dropdownIconItems = document.querySelectorAll('.hide-dropdown-icon');
         
         // WEB
-        hoverOpenSidebar = function() {
+        // These are used by the sidebar's HTML mouse handlers.
+        window.hoverOpenSidebar = function() {
+          if (submenuCloseTimer) clearTimeout(submenuCloseTimer);
           // Loop through each element to fade IN the navbar options
           navbarItems.forEach(el => {
             el.classList.replace('custom-navbar-text', 'custom-navbar-text-fade-in'); // remove the fade OUT and add the fade IN
@@ -1379,7 +1484,7 @@
           blockContent.classList.remove('p-55');
         }
 
-        hoverCloseSidebar = function() {
+        window.hoverCloseSidebar = function() {
           // Loop through each element to fade OUT the navbar options
           navbarItems.forEach(el => {
             el.classList.replace('custom-navbar-text-fade-in', 'custom-navbar-text'); // remove the fade IN and add the fade OUT
@@ -1395,18 +1500,32 @@
           blockContent.classList.remove('p-300');
           blockContent.classList.add('p-55');
 
-          setTimeout(() => {
-            instance.close($('li.active').index());
-          }, 1000000); // Wait until close animation finish to execute function
+          // Close Materialize submenus shortly after the width transition.
+          // The previous 1,000,000ms delay left stale menus open for ~17 min.
+          submenuCloseTimer = setTimeout(() => {
+            // Do not close a menu if the user returned during the animation.
+            if (!menu.classList.contains('collapsed-mode') || !instance) return;
+            const activeItem = menu.querySelector('.collapsible > li.active');
+            if (!activeItem) return;
+            const siblings = Array.from(activeItem.parentElement.children);
+            const index = siblings.indexOf(activeItem);
+            if (index >= 0) instance.close(index);
+          }, 350);
         }
 
-        closeSidebarSubMenu = function() {
-          // close all open nav bar options
-          document.querySelectorAll('.hover-item').forEach(item => {
+        window.closeSidebarSubMenu = function() {
+          // Close custom submenus, keeping aria-expanded in sync.
+          document.querySelectorAll('#slide-out .hover-item').forEach(item => {
             item.classList.remove('open');
+            const trigger = item.querySelector('a.collapsible-item');
+            if (trigger) trigger.setAttribute('aria-expanded', 'false');
           });
 
-          instance.close($('li.active').index());
+          if (!instance) return;
+          menu.querySelectorAll('.collapsible > li.active').forEach(activeItem => {
+            const index = Array.from(activeItem.parentElement.children).indexOf(activeItem);
+            if (index >= 0) instance.close(index);
+          });
         }
 
       });
@@ -1418,41 +1537,84 @@
           document.getElementById('main-spinner').style.display = 'block';
       }
 
-      // Check if the overlay and spinner are displayed when the page is loaded
-      window.onload = function() {
+      // Add, rather than overwrite, the page's existing load listeners.
+      window.addEventListener('load', function() {
           var overlay = document.getElementById('main-overlay');
           
           // Check if the overlay display is currently 'block'
-          if (overlay.style.display === 'block') {
-              // Hide the overlay and spinner if display is 'block'
+          if (overlay && overlay.style.display === 'block') {
+              // Hide a loader left visible by a cancelled navigation.
               overlay.style.display = 'none';
-              document.getElementById('main-spinner').style.display = 'none';
+              const spinner = document.getElementById('main-spinner');
+              if (spinner) spinner.style.display = 'none';
           }
-      };
+      });
 
       // Hide the spinner and overlay when the page is restored from cache (e.g., when pressing back button)
       window.addEventListener('pageshow', function(event) {
           var overlay = document.getElementById('main-overlay');
           
           // Check if the event is triggered from cache
-          if (event.persisted) {
+          if (event.persisted && overlay) {
               overlay.style.display = 'none';
-              document.getElementById('main-spinner').style.display = 'none';
+              const spinner = document.getElementById('main-spinner');
+              if (spinner) spinner.style.display = 'none';
           }
       });
 
-      // JS to show the dropdow options in navbar
-      document.querySelectorAll('.nav-dropdown-toggle').forEach(link => {
-        link.addEventListener('click', function() {
-          const li = this.closest('.hover-item');
+      // ---------------------------------------------------------------
+      // NAVIGATION: custom expandable groups and current-route highlight.
+      // Using the trigger only (instead of the entire <li>) avoids
+      // accidentally toggling a group when a child navigation link is used.
+      // ---------------------------------------------------------------
+      document.querySelectorAll('#slide-out .nav-dropdown-toggle').forEach(group => {
+        const trigger = group.querySelector('a.collapsible-item');
+        if (!trigger) return;
+        trigger.setAttribute('role', 'button');
+        trigger.setAttribute('tabindex', '0');
+        trigger.setAttribute('aria-expanded', 'false');
 
-          // close all other hover-items
-          document.querySelectorAll('.hover-item').forEach(item => {
-            if (item !== li) item.classList.remove('open');
+        trigger.addEventListener('click', event => {
+          event.preventDefault();
+          const shouldOpen = !group.classList.contains('open');
+          document.querySelectorAll('#slide-out .hover-item').forEach(other => {
+            other.classList.remove('open');
+            const otherTrigger = other.querySelector('a.collapsible-item');
+            if (otherTrigger) otherTrigger.setAttribute('aria-expanded', 'false');
           });
+          group.classList.toggle('open', shouldOpen);
+          trigger.setAttribute('aria-expanded', String(shouldOpen));
+        });
 
-          // toggle this one
-          li.classList.toggle('open');
+        // Accessible navigation without changing desktop hover behavior.
+        trigger.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (typeof window.hoverOpenSidebar === 'function') window.hoverOpenSidebar();
+            trigger.click();
+          }
+        });
+      });
+
+      // Visually identify the active page, including links inside groups.
+      // Only exact path matches are highlighted (no false matches by prefix).
+      document.addEventListener('DOMContentLoaded', function () {
+        const normalizePath = value => value.replace(/\/+$/, '') || '/';
+        const currentPath = normalizePath(window.location.pathname);
+        document.querySelectorAll('#slide-out a[href]').forEach(link => {
+          const href = link.getAttribute('href');
+          if (!href || href.startsWith('#')) return;
+          try {
+            const target = new URL(link.href, window.location.href);
+            if (target.origin !== window.location.origin ||
+                normalizePath(target.pathname) !== currentPath) return;
+            link.classList.add('srf-nav-active');
+            link.setAttribute('aria-current', 'page');
+            const group = link.closest('.hover-item');
+            if (group) group.classList.add('srf-nav-group-active');
+          } catch (error) {
+            // Some links can be generated by plugins; ignore malformed URLs.
+          }
         });
       });
 
@@ -1496,8 +1658,12 @@
           instead of waiting for them to refresh or click something.
       */
 
-      // Same value as Django's SESSION_COOKIE_AGE.
-      // 6 hours 30 minutes
+      // LEGACY BEHAVIOR: fixed client-side redirect is retained for compatibility.
+      // It cannot know when Django extends a sliding session and can interrupt
+      // unsaved work. Treat server-side authentication/401 responses as the
+      // authority, and replace this with a server-provided expiry in a
+      // separate, tested change.
+      // Same value as Django's SESSION_COOKIE_AGE: 6 hours 30 minutes.
       const SESSION_COOKIE_AGE_SECONDS = 23400;
 
       // Convert seconds to milliseconds because JavaScript timers use milliseconds.
@@ -1705,7 +1871,10 @@
         }
 
         const timezoneName = widget.dataset.timezoneName;
-        const timezoneOffset = Number(widget.dataset.timezoneOffset || 0);
+        const fallbackOffset = Number(widget.dataset.timezoneOffset || 0);
+        // Read the offset for NOW, rather than relying on a fixed offset that
+        // could become inaccurate during daylight-saving transitions.
+        const timezoneOffset = getTimezoneOffsetMinutes(now, timezoneName, fallbackOffset);
 
         // -------------------------
         // UTC
@@ -1753,6 +1922,28 @@
       }
 
 
+      /**
+       * Return the UTC offset in minutes for a named IANA timezone at a date.
+       * Intl computes DST-aware offsets. Older browsers fall back to the
+       * configured offset passed in the widget's data attribute.
+       */
+      function getTimezoneOffsetMinutes(date, timezoneName, fallbackMinutes) {
+        try {
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezoneName,
+            timeZoneName: 'longOffset'
+          }).formatToParts(date);
+          const name = (parts.find(part => part.type === 'timeZoneName') || {}).value || '';
+          if (name === 'GMT' || name === 'UTC') return 0;
+          const match = name.match(/^(?:GMT|UTC)([+-])(\d{1,2})(?::(\d{2}))?$/);
+          if (!match) return fallbackMinutes;
+          const minutes = Number(match[2]) * 60 + Number(match[3] || 0);
+          return (match[1] === '-' ? -1 : 1) * minutes;
+        } catch (error) {
+          return fallbackMinutes;
+        }
+      }
+
       function formatUtcOffset(offsetMinutes) {
         const sign = offsetMinutes >= 0 ? '+' : '-';
 
@@ -1779,6 +1970,14 @@
 
         let startX = 0;
         let startLeft = 0;
+
+        // The trigger remains keyboard operable as a native button.
+        trigger.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            widget.classList.toggle('wx-utc-widget--open');
+          }
+        });
 
         trigger.addEventListener('pointerdown', function (e) {
           isDragging = true;
@@ -1872,7 +2071,7 @@
         class="wx-utc-widget__trigger"
         id="wx-utc-trigger"
         aria-label="Show current time"
-        title="Current UTC and defualt time"
+        title="Current UTC and configured time"
       >
         <i class="material-icons wx-utc-icon">schedule</i>
       </button>

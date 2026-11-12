@@ -1,238 +1,23 @@
-{% extends "base.html" %} {% block content %} {% load static %}
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
 
-<div id="app">
-  <v-app v-cloak>
-    <v-navigation-drawer
-      v-model="stationsDetail"
-      color="white"
-      class="livedata"
-      :right="!right"
-    >
-      <v-card v-if="Sandbox != null" class="stations-detail">
-        <div>
-          <div class="truncate-text">
-            <a v-bind:href="[[Sandbox.station_url]]">
-              <span class="pl-2 pt-3 station-link"
-                >[[ Sandbox.station_name ]]</span
-              >
-            </a>
-
-            <a v-bind:href="[[Sandbox.stationReport]]">
-              <span class="pl-2 pt-3 station-link">More information</span>
-            </a>
-          </div>
-
-          <div class="truncate-text">
-            <span class="pl-2 pt-2" style="color: orange;">Last updated: [[ lastUpdateMessage ]]</span>
-            <!-- <span class="pl-2 pt-2" style="color: orange;">[[ lastUpdateStationMessage ]]</span> -->
-          </div>
-
-          <v-btn
-            class="btn-close-dialog"
-            v-if="stationsDetail"
-            @click="stationsDetail = false"
-            icon
-            color="error"
-          >
-            <v-icon class="material-icons">clear</v-icon>
-          </v-btn>
-        </div>
-        <v-card-text>
-          <v-tabs @change="handleTabUpdate" v-model="selectedTab">
-            <v-tab key="latest">Latest</v-tab>
-            <v-tab-item key="latest">
-              <v-list dense disabled>
-                <v-list-item-group color="primary">
-                  <v-list-item
-                    v-for="(item, index) in Sandbox.latest"
-                    :key="index"
-                  >
-                    <v-list-item-content>
-                      <v-list-item-title
-                        v-html="item.variable.name"
-                      ></v-list-item-title>
-                    </v-list-item-content>
-
-                    <span class="avg">
-                      [[ valueFormatting(item.value) || 0.00 ]]
-                      [[ item.variable.unit_symbol ]]
-                    </span>
-                  </v-list-item>
-                </v-list-item-group>
-              </v-list>
-            </v-tab-item>
-
-            <v-tab key="last24">Last 24h</v-tab>
-            <v-tab-item key="last24">
-              <v-list dense disabled>
-                <v-list-item-group color="primary">
-                  <v-list-item
-                    v-for="(item, index) in Sandbox.past24h"
-                    :key="index"
-                  >
-                    <v-list-item-content>
-                      <v-list-item-title
-                        v-html="item.variable.name"
-                      ></v-list-item-title>
-                    </v-list-item-content>
-
-                    <span class="avg">
-                      [[ valueFormatting(item.value) || 0.00 ]]
-                      [[ item.variable.unit_symbol ]]
-                    </span>
-
-                  </v-list-item>
-                </v-list-item-group>
-              </v-list>
-            </v-tab-item>
-
-            <v-tab key="currentday">Current day</v-tab>
-            <v-tab-item key="currentday">
-              <v-list dense disabled>
-                <v-list-item-group color="primary">
-                  <v-list-item
-                    v-for="(item, index) in Sandbox.currentday"
-                    :key="index"
-                  >
-                    <v-list-item-content>
-                      <v-list-item-title
-                        v-html="item.variable.name"
-                      ></v-list-item-title>
-                    </v-list-item-content>
-
-                    <span class="avg">
-                      [[ valueFormatting(item.value) || 0.00 ]]
-                      [[ item.variable.unit_symbol ]]
-                    </span>
-                    
-                  </v-list-item>
-                </v-list-item-group>
-              </v-list>
-            </v-tab-item>
-          </v-tabs>
-        </v-card-text>
-      </v-card>
-    </v-navigation-drawer>
-
-    <v-navigation-drawer
-      v-model="drawer"
-      class="optionsDrawer pt-4"
-      color="white"
-      :right="right"
-      transition="scroll-y-transition"
-    >
-      <div class="w-100 my-2">
-        <span class="pl-5"><strong>Filter by</strong></span>
-      </div>
-
-      <v-expansion-panels
-        v-model="expansionFilters"
-        :accordion="true"
-        class="no-elevation"
-      >
-        <v-expansion-panel value="0">
-          <v-expansion-panel-header>Status</v-expansion-panel-header>
-          <v-expansion-panel-content>
-            <div>
-              <v-switch v-model="defaultFilter.is_active" label="Active">
-              </v-switch>
-              <v-switch v-model="defaultFilter.is_inactive" label="Inactive">
-              </v-switch>
-            </div>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <v-expansion-panel value="1">
-          <v-expansion-panel-header>Type</v-expansion-panel-header>
-          <v-expansion-panel-content>
-            <div>
-              <v-switch v-model="defaultFilter.is_automatic" label="Automatic">
-              </v-switch>
-              <v-switch v-model="defaultFilter.is_manual" label="Manual">
-              </v-switch>
-            </div>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <v-expansion-panel value="2">
-          <v-expansion-panel-header>Profile</v-expansion-panel-header>
-          <v-expansion-panel-content>
-            <div>
-              <v-switch
-                v-for="profile in profiles"
-                :key="profile.id"
-                v-model="defaultFilter.profile"
-                :label="profile.name"
-                :value="profile.name"
-              >
-              </v-switch>
-            </div>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <v-expansion-panel value="3">
-          <v-expansion-panel-header>Region</v-expansion-panel-header>
-          <v-expansion-panel-content>
-            <div>
-              <v-switch
-                v-for="region in regions"
-                :key="region.id"
-                v-model="defaultFilter.region_id"
-                :label="region.name"
-                :value="region.id"
-              >
-              </v-switch>
-            </div>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <v-expansion-panel value="4">
-          <v-expansion-panel-header>Watershed</v-expansion-panel-header>
-          <v-expansion-panel-content class="watershed-list">
-            <div>
-              <v-switch
-                v-for="watershed in watersheds"
-                :key="watershed.id"
-                v-model="defaultFilter.watershed"
-                :label="watershed.name"
-                :value="watershed.name"
-              >
-              </v-switch>
-            </div>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <v-expansion-panel value="5">
-          <v-expansion-panel-header>Communication</v-expansion-panel-header>
-          <v-expansion-panel-content>
-            <div>
-              <v-switch
-                v-for="station_communication in station_communications"
-                :key="station_communication.id"
-                v-model="defaultFilter.station_communications"
-                :label="station_communication.description"
-                :value="station_communication.name"
-              >
-              </v-switch>
-            </div>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-      </v-expansion-panels>
-    </v-navigation-drawer>
-
-    <!-- map -->
-    <div style="height: 100vh; width: 100%">
+<div id="app" class="smap-page">
+  <v-app v-cloak class="smap-app">
+    <div class="smap-workspace" ref="mapFrame" aria-label="Stations map">
+      <!-- Keep Leaflet fully mounted and full-width. Drawers float above, not beside it. -->
+      <div class="smap-map-layer">
       <l-map
         ref="myMap"
         :zoom="zoom"
         :center="center"
         :options="options"
-        style="height: 100vh; width: 100%"
+        class="smap-leaflet" @ready="onMainMapReady"
       >
         <l-tile-layer :url="Url" :attribution="Attribution"></l-tile-layer>
 
         <!--  -->
-        <div v-if="!showWindBarbs">
+        <template v-if="!showWindBarbs">
           <l-marker
             v-for="marker in filteredMarkers"
             :key="marker.id"
@@ -254,13 +39,13 @@
             </l-icon>
             <l-tooltip>[[ marker.tooltip ]]</l-tooltip>
           </l-marker>
-        </div>
+        </template>
 
-        <!--  -->
-        <div v-show="showWindBarbs">
+        <!-- The two map marker modes are mutually exclusive Leaflet layers. -->
+        <template v-else>
           <l-marker
             v-for="marker in filteredMarkers"
-            :key="marker.id"
+            :key="String(marker.id) + '-wind-' + (showMarkerValues ? 'values' : 'no-values')"
             :lat-lng.sync="marker.position"
             :visible="marker.visible"
             :draggable="marker.draggable"
@@ -274,7 +59,7 @@
               >[[ marker.tooltip ]]</l-tooltip
             >
 
-            <l-popup v-show="showMarkerValues" :options="popupOptions">
+            <l-popup v-if="showMarkerValues" :options="popupOptions">
 
               <div class="left">
                 <div class="value temp-max">[[ marker.tempMax ]]</div>
@@ -291,7 +76,7 @@
             </l-popup>
 
           </l-marker>
-        </div>
+        </template>
 
         <!-- ground water -->
         <l-geo-json
@@ -336,318 +121,279 @@
         <!-- zoom control -->
         <l-control-zoom :position="zoomPosition"></l-control-zoom>
       </l-map>
-    </div>
+      </div>
 
-    <div class="variables-box">
-      <v-menu
-        v-model="menu"
-        :close-on-content-click="false"
-        :nudge-width="200"
-        offset-y
-        transition="slide-y-transition"
-        content-class="variables-menu"
-        bottom
-      >
-        <template v-slot:activator="{ on }">
-
-          <v-btn class="variables-btn w-100" color="white" light v-on="on">
-
-            <div class="d-flex flex-column">
-
-              <v-icon class="arrow-icon right material-icons" right>
-                keyboard_arrow_down
-              </v-icon>
-              
-              <strong class="pb-1 truncate-text-230">
-                <span v-if="SelectedVariable">
-                  [[ SelectedVariable.name ]]
-                </span>
-                <span v-if="!SelectedVariable"> No variable selected </span>
-              </strong>
-
-              <small class="d-flex justify-center">
-                <span v-if="timeToggle === 0">Last 24h</span>
-
-                <span v-if="timeToggle === 1">Current day</span>
-
-                <div lass="d-flex justify-center" v-if="timeToggle === 2">
-                  <span class="pr-3">Pick a day</span> |
-                  <span class="pl-3" v-if="requestObject.currentDate"
-                    >[[ requestObject.currentDate ]]</span
-                  >
-                  <span v-if="!requestObject.currentDate"
-                    >No date selected</span
-                  >
-                </div>
-
-              </small>
-
-              <small class="d-flex justify-center pt-1">
-                <span style="color: orange;" v-if="timeToggle != 0">
-                  Default Offset [[surface_offset_hrs]]
-                </span>
-              </small>
-
+      <!-- Data selector: aligned next to the native Leaflet zoom control. -->
+      <div class="smap-variable-box">
+        <v-menu v-model="menu" :close-on-content-click="false" offset-y
+          transition="scale-transition" content-class="smap-variable-menu" :z-index="1600">
+          <template v-slot:activator="{ on }">
+            <v-btn v-on="on" color="white" class="smap-variable-trigger text-none" elevation="1">
+              <span class="smap-variable-trigger-text">
+                <span class="smap-overline">MAP OBSERVATIONS</span>
+                <strong class="smap-variable-name">[[ SelectedVariable ? SelectedVariable.name : 'Select variable' ]]</strong>
+                <small>[[ mapPeriodLabel ]]</small>
+              </span>
+              <v-icon size="19">mdi-chevron-down</v-icon>
+            </v-btn>
+          </template>
+          <v-card class="smap-menu-card" elevation="0">
+            <div class="smap-menu-heading">
+              <v-icon size="18" color="primary">mdi-tune-variant</v-icon>
+              <strong>Map observations</strong>
             </div>
-          </v-btn>
-        </template>
-
-        <v-card>
-          <v-list>
-            <v-list-item
-              class="current-date-list d-flex flex-column align-start"
-            >
-              <div class="d-flex justify-center align-center">
-                <v-btn-toggle
-                  mandatory
-                  v-model="timeToggle"
-                  @change="changeTimeToggle()"
-                >
-                  <v-btn small>
-                    <span>Last 24h</span>
-                  </v-btn>
-
-                  <v-btn small>
-                    <span>Current day</span>
-                  </v-btn>
-
-                  <v-btn small>
-                    <span>Pick a day</span>
-                  </v-btn>
-                </v-btn-toggle>
+            <div class="smap-menu-body">
+              <div class="smap-section-label">REPORTING PERIOD</div>
+              <v-btn-toggle v-model="timeToggle" mandatory class="smap-period-buttons" @change="changeTimeToggle()">
+                <v-btn x-small class="text-none">Last 24h</v-btn>
+                <v-btn x-small class="text-none">Current day</v-btn>
+                <v-btn x-small class="text-none">Pick a day</v-btn>
+              </v-btn-toggle>
+              <v-menu v-if="timeToggle === 2" v-model="menuDatePicker"
+                :close-on-content-click="false" offset-y min-width="290px"
+                content-class="smap-date-menu" :z-index="2000">
+                <template v-slot:activator="{ on }">
+                  <v-text-field v-model="requestObject.currentDate" v-on="on" readonly
+                    label="Reporting date" prepend-inner-icon="mdi-calendar-outline"
+                    outlined dense hide-details class="mt-3"></v-text-field>
+                </template>
+                <v-date-picker v-model="requestObject.currentDate" no-title
+                  @change="getSummaries()" @input="menuDatePicker = false"></v-date-picker>
+              </v-menu>
+              <div v-if="timeToggle !== 0" class="smap-timezone-hint">
+                <v-icon size="14">mdi-clock-outline</v-icon>
+                Configured timezone: [[ timezone ]] ([[ surface_offset_hrs ]])
               </div>
-
-              <div class="pt-4">
-                <v-menu
-                  v-if="timeToggle === 2"
-                  v-model="menuDatePicker"
-                  :close-on-content-click="false"
-                  :nudge-right="40"
-                  transition="scale-transition"
-                  offset-y
-                  min-width="290px"
-                >
-                  <template v-slot:activator="{ on }">
-                    <v-text-field
-                      v-model="requestObject.currentDate"
-                      label="Select current date"
-                      prepend-icon="event"
-                      readonly
-                      v-on="on"
-                    ></v-text-field>
-                  </template>
-                  <v-date-picker
-                    v-model="requestObject.currentDate"
-                    @change="getSummaries()"
-                    @input="menuDatePicker = false"
-                  ></v-date-picker>
-                </v-menu>
-              </div>
-            </v-list-item>
-          </v-list>
-
-          <v-list>
-            <v-list-item>
-              <v-checkbox
-                v-model="showMarkerValues"
-                label="Show values"
-              ></v-checkbox>
-            </v-list-item>
-          </v-list>
-
-          <v-list>
-            <v-list-item>
-              <v-radio-group
-                color="black"
-                class="w-100"
-                v-model="requestObject.summaryId"
-                @change="getSummaries()"
-              >
-                <v-radio
-                  v-for="variable in variables"
-                  :key="variable.id"
-                  :label="variable.name"
-                  :value="variable.id"
-                ></v-radio>
+              <v-divider class="my-3"></v-divider>
+              <v-switch v-model="showMarkerValues" color="primary" inset dense hide-details
+                class="smap-switch" label="Show values on map"></v-switch>
+              <div class="smap-section-label smap-section-label--spaced">WEATHER VARIABLE</div>
+              <v-radio-group v-model="requestObject.summaryId" @change="getSummaries()"
+                class="smap-variable-list" hide-details>
+                <v-radio v-for="variable in variables" :key="variable.id"
+                  :label="variable.name" :value="variable.id" color="primary"></v-radio>
               </v-radio-group>
-            </v-list-item>
-          </v-list>
-        </v-card>
-      </v-menu>
-    </div>
-
-    <div class="search-content">
-      <v-text-field
-        v-model="defaultFilter.inputSearch"
-        label="Search station by name"
-        single-line
-        solo
-        append-icon="search"
-      ></v-text-field>
-    </div>
-
-    <div class="status-box">
-      <div class="d-flex flex-row justify-center pt-2">
-        <span
-          v-if="[[filteredMarkers.length]] > 1 || [[filteredMarkers.length]] < 1"
-          >Showing [[filteredMarkers.length]] stations</span
-        >
-        <span v-if="[[filteredMarkers.length]] == 1"
-          >Showing [[filteredMarkers.length]] station</span
-        >
-      </div>
-      <div>Last synced: [[ lastUpdate || '-']]</div>
-    </div>
-
-    <!-- mouse coordinate display box -->
-    <div class="mouse-coordinates-box">
-
-      <div class="d-flex flex-row justify-center pt-2">
-        Latitude:&nbsp&nbsp<span class="mouse-lat"></span>
+            </div>
+          </v-card>
+        </v-menu>
       </div>
 
-      <div>
-        Longitude:&nbsp&nbsp<span class="mouse-lng"></span>
-      </div>
-
-    </div>
-
-    <!-- overlays box -->
-    <div
-      class="overlays-filter"
-      v-bind:class="{ 'options-menu-opened': drawer === true }"
-    >
-      <v-menu
-        content-class="layers-menu"
-        left
-        offset-x
-        :close-on-content-click="closeOnContentClick"
-      >
-        <template v-slot:activator="{ on }">
-          <v-btn color="white" dark v-on="on">
-            <v-icon class="material-icons" color="black">layers</v-icon>
-          </v-btn>
-        </template>
-
-        <v-list class="overlays-list">
-          <v-list-item-title class="pl-4">Overlays</v-list-item-title>
-
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadWatershed"
-              v-model="showWatershed"
-              @change="toggleWatershedOverlay()"
-              label="Watershed"
-            ></v-switch>
-          </v-list-item>
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadGroundwater"
-              v-model="showGroundwater"
-              @change="toggleGroundwaterOverlay()"
-              label="Groundwater"
-            ></v-switch>
-          </v-list-item>
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadBasemap"
-              v-model="showBasemap"
-              @change="toggleRegionsOverlay()"
-              label="Administrative Regions"
-            ></v-switch>
-          </v-list-item>
-          <!-- <v-list-item>
-            <v-switch @change="toggleRiverOverlay()" label="Rivers"></v-switch>
-          </v-list-item> -->
-          <v-list-item>
-            <v-switch
-              inset
-              :loading="loadNationalWaters"
-              v-model="showNationalWaters"
-              @change="toggleNationalWatersOverlay()"
-              label="National waters"
-            ></v-switch>
-          </v-list-item>
-
-          <v-divider></v-divider>
-          <v-list-item-title class="pl-4">Basemaps</v-list-item-title>
-
-          <v-radio-group
-            color="black"
-            class="w-100"
-            v-model="selectedBasemap"
-            @change="setBasemap()"
-          >
-            <v-list class="overlays-list">
-              <v-list-item
-                v-for="(basemap, index) in basemaps"
-                :key="basemap.index"
-              >
-                <v-radio
-                  :label="basemap.displayName"
-                  :value="basemap"
-                ></v-radio>
-              </v-list-item>
-            </v-list>
-          </v-radio-group>
-        </v-list>
-      </v-menu>
-    </div>
-
-    <!-- search functionality -->
-    <div
-      class="options-menu"
-      v-bind:class="{ 'options-menu-opened': drawer === true }"
-    >
-      <v-btn color="white" dark @click="toggleSidenav()">
-        <v-icon class="material-icons" color="black">search</v-icon>
-      </v-btn>
-    </div>
-
-    <!-- Station Monitoring navigation -->
-    <div
-        class="station-monitoring-btn"
-        :class="{ 'options-menu-opened': drawer === true }"
-    >
-        <v-btn
-            color="white"
-            light
-            href="{% url 'stations-monitoring' %}"
-            title="Station Monitoring"
-        >
-          <i class="material-icons">monitor</i>
+      <!-- White map actions match Spatial Analysis and Station Monitoring. -->
+      <div class="smap-map-tools" :class="{'smap-map-tools--shifted': drawer || stationsDetail}" aria-label="Map actions">
+        <v-menu left offset-y :close-on-content-click="false"
+          content-class="smap-layers-menu" :z-index="1600">
+          <template v-slot:activator="{ on }">
+            <v-btn v-on="on" color="white" class="smap-map-btn" title="Map layers and basemaps" aria-label="Map layers and basemaps">
+              <v-icon>mdi-layers</v-icon>
+            </v-btn>
+          </template>
+          <v-card elevation="0" class="smap-menu-card">
+            <div class="smap-menu-heading"><v-icon size="18" color="primary">mdi-layers-triple-outline</v-icon><strong>Map layers</strong></div>
+            <div class="smap-menu-body">
+              <div class="smap-section-label">OVERLAYS</div>
+              <v-switch v-model="showWatershed" color="primary" inset dense hide-details
+                :loading="loadWatershed" @change="toggleWatershedOverlay()" label="Watershed" class="smap-switch"></v-switch>
+              <v-switch v-model="showGroundwater" color="primary" inset dense hide-details
+                :loading="loadGroundwater" @change="toggleGroundwaterOverlay()" label="Groundwater" class="smap-switch"></v-switch>
+              <v-switch v-model="showBasemap" color="primary" inset dense hide-details
+                :loading="loadBasemap" @change="toggleRegionsOverlay()" label="Administrative regions" class="smap-switch"></v-switch>
+              <v-switch v-model="showNationalWaters" color="primary" inset dense hide-details
+                :loading="loadNationalWaters" @change="toggleNationalWatersOverlay()" label="National waters" class="smap-switch"></v-switch>
+              <v-divider class="my-3"></v-divider>
+              <div class="smap-section-label">BASEMAP STYLE</div>
+              <v-radio-group v-model="selectedBasemap" @change="setBasemap()" class="smap-variable-list" hide-details>
+                <v-radio v-for="(basemap, index) in basemaps" :key="index" :label="basemap.displayName"
+                  :value="basemap" color="primary"></v-radio>
+              </v-radio-group>
+            </div>
+          </v-card>
+        </v-menu>
+        <v-btn color="white" class="smap-map-btn" @click="toggleSidenav()"
+          :title="drawer ? 'Close station filters' : 'Filter stations'"
+          :aria-label="drawer ? 'Close station filters' : 'Filter stations'">
+          <v-icon>mdi-filter-variant</v-icon>
         </v-btn>
+        <v-btn color="white" class="smap-map-btn" href="{% url 'stations-monitoring' %}"
+          title="Station Monitoring" aria-label="Station Monitoring">
+          <v-icon>mdi-monitor-dashboard</v-icon>
+        </v-btn>
+      </div>
+
+      <!-- Low-profile status bar and search, kept clear of the Leaflet attribution. -->
+      <div class="smap-map-footer">
+        <!-- search -->
+        <div class="smap-map-search">
+          <v-text-field v-model="defaultFilter.inputSearch" placeholder="Search stations"
+            aria-label="Search stations" prepend-inner-icon="mdi-magnify"
+            solo flat dense hide-details clearable class="smap-search-field"></v-text-field>
+        </div>
+
+        <!-- last synced -->
+        <div class="smap-map-status">
+          <strong>[[ filteredMarkers.length ]]</strong> station[[ filteredMarkers.length === 1 ? '' : 's' ]]
+          <span class="smap-status-dot"></span>
+          <span>Last synced: [[ lastUpdate || '—' ]]</span>
+        </div>
+
+        <!-- coords -->
+        <div class="smap-map-coordinates" aria-label="Map cursor coordinates">
+          <v-icon size="16">mdi-crosshairs-gps</v-icon>
+
+          <div class="smap-coordinate-values">
+            <div class="smap-coordinate-row">
+              <span class="smap-coordinate-label">Lat</span>
+              <span class="smap-coordinate-number mouse-lat">—</span>
+            </div>
+
+            <div class="smap-coordinate-row">
+              <span class="smap-coordinate-label">Lon</span>
+              <span class="smap-coordinate-number mouse-lng">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Station details: same right-side visual structure as Station Monitoring. -->
+      <v-navigation-drawer v-model="stationsDetail" absolute right :temporary="false" :width="390"
+        color="white" class="smap-detail-drawer" aria-label="Selected station details">
+        <div class="smap-drawer-head">
+          <div>
+            <div class="smap-drawer-eyebrow">STATION DETAILS</div>
+            <h2 class="srf-display-1 text-uppercase smap-drawer-title">Station information</h2>
+          </div>
+          <v-btn icon small @click="stationsDetail = false" title="Close station details" aria-label="Close station details">
+            <v-icon size="19">mdi-close</v-icon>
+          </v-btn>
+        </div>
+        <div v-if="stationDetailError" class="smap-detail-message">
+          <v-alert type="error" outlined dense>[[ stationDetailError ]]</v-alert>
+        </div>
+        <div v-else-if="!Sandbox" class="smap-detail-loading">
+          <v-progress-circular indeterminate size="28" width="3" color="primary"></v-progress-circular>
+          <span>Loading station information…</span>
+        </div>
+        <template v-else>
+          <div class="smap-station-identity">
+            <h3>[[ Sandbox.station_name ]]</h3>
+            <div class="smap-station-links">
+              <a :href="Sandbox.station_url" title="View station details">Station details <v-icon x-small color="primary">mdi-open-in-new</v-icon></a>
+              <a :href="Sandbox.stationReport" title="Open station report">Station report <v-icon x-small color="primary">mdi-open-in-new</v-icon></a>
+            </div>
+          </div>
+          <div class="smap-update-line">
+            <v-icon size="15">mdi-clock-outline</v-icon>
+            Last updated: <strong>[[ lastUpdateMessage ]]</strong>
+          </div>
+          <v-tabs v-model="selectedTab" @change="handleTabUpdate" fixed-tabs class="smap-detail-tabs">
+            <v-tab>Latest</v-tab>
+            <v-tab>Last 24h</v-tab>
+            <v-tab>Current day</v-tab>
+            <v-tab-item>
+              <div class="smap-data-list" v-if="Sandbox.latest && Sandbox.latest.length">
+                <div v-for="(item, index) in Sandbox.latest" :key="index" class="smap-data-row">
+                  <span class="smap-data-name">[[ item.variable.name ]]</span>
+                  <span class="smap-data-value">[[ item.value === null || item.value === undefined ? '—' : valueFormatting(item.value) ]] <small>[[ item.variable.unit_symbol ]]</small></span>
+                </div>
+              </div>
+              <div v-else class="smap-empty">No latest observations available.</div>
+            </v-tab-item>
+            <v-tab-item>
+              <div class="smap-data-list" v-if="Sandbox.past24h && Sandbox.past24h.length">
+                <div v-for="(item, index) in Sandbox.past24h" :key="index" class="smap-data-row">
+                  <span class="smap-data-name">[[ item.variable.name ]]</span>
+                  <span class="smap-data-value">[[ item.value === null || item.value === undefined ? '—' : valueFormatting(item.value) ]] <small>[[ item.variable.unit_symbol ]]</small></span>
+                </div>
+              </div>
+              <div v-else class="smap-empty">No observations available for the last 24 hours.</div>
+            </v-tab-item>
+            <v-tab-item>
+              <div class="smap-data-list" v-if="Sandbox.currentday && Sandbox.currentday.length">
+                <div v-for="(item, index) in Sandbox.currentday" :key="index" class="smap-data-row">
+                  <span class="smap-data-name">[[ item.variable.name ]]</span>
+                  <span class="smap-data-value">[[ item.value === null || item.value === undefined ? '—' : valueFormatting(item.value) ]] <small>[[ item.variable.unit_symbol ]]</small></span>
+                </div>
+              </div>
+              <div v-else class="smap-empty">No observations available for the current day.</div>
+            </v-tab-item>
+          </v-tabs>
+        </template>
+      </v-navigation-drawer>
+
+      <!-- Station filters remain an on-map overlay; the map never changes dimensions. -->
+      <v-navigation-drawer v-model="drawer" absolute right :temporary="false" :width="320"
+        color="white" class="smap-filter-drawer" aria-label="Station filters">
+        <div class="smap-drawer-head">
+          <div>
+            <div class="smap-drawer-eyebrow">MAP FILTERS</div>
+            <h2 class="srf-display-1 text-uppercase smap-drawer-title">Filter stations</h2>
+          </div>
+          <v-btn icon small @click="drawer = false" title="Close filters" aria-label="Close filters">
+            <v-icon size="19">mdi-close</v-icon>
+          </v-btn>
+        </div>
+        <div class="smap-filter-summary">[[ filteredMarkers.length ]] of [[ markers.length ]] stations shown</div>
+        <v-expansion-panels v-model="expansionFilters" accordion flat class="smap-filters">
+          <v-expansion-panel>
+            <v-expansion-panel-header>Status</v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <v-switch v-model="defaultFilter.is_active" inset dense hide-details color="primary" label="Active"></v-switch>
+              <v-switch v-model="defaultFilter.is_inactive" inset dense hide-details color="primary" label="Inactive"></v-switch>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+          <v-expansion-panel>
+            <v-expansion-panel-header>Station type</v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <v-switch v-model="defaultFilter.is_automatic" inset dense hide-details color="primary" label="Automatic"></v-switch>
+              <v-switch v-model="defaultFilter.is_manual" inset dense hide-details color="primary" label="Manual"></v-switch>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+          <v-expansion-panel>
+            <v-expansion-panel-header>Profile</v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <v-switch v-for="profile in profiles" :key="profile.id" v-model="defaultFilter.profile"
+                :label="profile.name" :value="profile.name" inset dense hide-details color="primary"></v-switch>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+          <v-expansion-panel>
+            <v-expansion-panel-header>Region</v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <v-switch v-for="region in regions" :key="region.id" v-model="defaultFilter.region_id"
+                :label="region.name" :value="region.id" inset dense hide-details color="primary"></v-switch>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+          <v-expansion-panel>
+            <v-expansion-panel-header>Watershed</v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <v-switch v-for="watershed in watersheds" :key="watershed.id" v-model="defaultFilter.watershed"
+                :label="watershed.name" :value="watershed.name" inset dense hide-details color="primary"></v-switch>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+          <v-expansion-panel>
+            <v-expansion-panel-header>Communication</v-expansion-panel-header>
+            <v-expansion-panel-content>
+              <v-switch v-for="station_communication in station_communications"
+                :key="station_communication.id" v-model="defaultFilter.station_communications"
+                :label="station_communication.description" :value="station_communication.name"
+                inset dense hide-details color="primary"></v-switch>
+            </v-expansion-panel-content>
+          </v-expansion-panel>
+        </v-expansion-panels>
+      </v-navigation-drawer>
     </div>
 
-    <!-- alerts -->
-    <v-alert
-      v-model="alertVisible"
-      :type="alertType"
-      dismissible
-      transition="scale-transition"
-      style="
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-      "
-    >
+    <v-snackbar v-model="alertVisible" :color="alertType" bottom :timeout="4000">
       [[ alertMessage ]]
-    </v-alert>
+      <template v-slot:action="{ attrs }">
+        <v-btn text v-bind="attrs" @click="alertVisible = false">Close</v-btn>
+      </template>
+    </v-snackbar>
   </v-app>
-
 </div>
+{% endblock %}
 
-{% endblock %} {% block localjavascript %}
+{% block localjavascript %}
 <script src="{% static 'js/leaflet-windbarb.js' %}"></script>
-
-<!-- leaflet measure script -->
 <script src="{% static 'js/leaflet-measure.js' %}"></script>
-
 <script>
 
   $(function () {
@@ -731,7 +477,9 @@
       url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      options: { zoomControl: false },
+      // Keep Leaflet's normal mouse-wheel zoom active on the map itself.
+      // Controls, dropdowns, and station drawers still scroll independently.
+      options: { zoomControl: false, scrollWheelZoom: true },
       zoomPosition: "topleft",
       menuDatePicker: false,
 
@@ -774,7 +522,7 @@
       // SUMMARIES
       showMarkerValues: true,
       requestObject: {
-        currentDate: moment(new Date()).format('YYYY-MM-DD'),
+        currentDate: null,
         summaryId: -1
       },
 
@@ -818,6 +566,9 @@
       // SANDBOX
       sandbox: null,
       stationsDetail: false,
+      stationDetailError: null,
+      stationDetailRequestId: 0,
+      summaryRequestId: 0,
       popupContent: "",
       popupVariable: "",
       lastUpdateMessage: "",
@@ -849,6 +600,11 @@
     },
     
     computed: {
+      mapPeriodLabel() {
+        if (this.timeToggle === 0) return 'Last 24h';
+        if (this.timeToggle === 1) return 'Current day';
+        return this.requestObject.currentDate ? `Pick a day · ${this.requestObject.currentDate}` : 'Pick a day';
+      },
       filteredMarkers() {
         return this.markers.filter(marker =>
           (
@@ -1061,9 +817,10 @@
     
     methods: {
       openPopup: function (event) {
+        if (!this.showWindBarbs || !this.showMarkerValues) return;
         this.$nextTick(() => {
-          event.target.openPopup();
-        })
+          if (event && event.target && event.target.getPopup()) event.target.openPopup();
+        });
       },
       
       // Alert popup control
@@ -1247,7 +1004,7 @@
       
       changeTimeToggle() {
         if (this.timeToggle === 1) {
-            this.requestObject.currentDate = moment(new Date()).tz(this.timezone).format('YYYY-MM-DD');
+            this.requestObject.currentDate = this.configuredToday();
         }
 
         this.getSummaries();
@@ -1263,6 +1020,8 @@
       
       toggleSidenav() {
         this.drawer = !this.drawer;
+        if (this.drawer) this.stationsDetail = false;
+        this.$nextTick(() => this.refreshMainMapSize());
       },
       
       getProfiles() {
@@ -1334,29 +1093,20 @@
       },
       
       getSummaries() {
-        if (this.timeToggle === 0) { //0 === Last 24h
-
-          this.getLast24Summaries(this.requestObject.summaryId)
-
-        } else {
-          if (this.requestObject.summaryId !== null && this.requestObject.currentDate) {
-
-            this.getDailySummaries(
-              this.requestObject.summaryId,
-              this.requestObject.currentDate
-            );
-
-            localStorage.setItem("summaryId", this.requestObject.summaryId);
-
-          } else {
-            return;
-          }
+        const requestId = ++this.summaryRequestId;
+        const id = this.requestObject.summaryId;
+        if (id === null || id === undefined) return;
+        if (this.timeToggle === 0) {
+          return this.getLast24Summaries(id, requestId);
         }
+        if (!this.requestObject.currentDate) return;
+        localStorage.setItem('summaryId', id);
+        return this.getDailySummaries(id, this.requestObject.currentDate, requestId);
       },
-      
-      getDailySummaries(id, date) {
-        if (id === -1) {
-          this.showWindBarbSummaries(this.timeToggle, date);
+
+      getDailySummaries(id, date, requestId) {
+        if (Number(id) === -1) {
+          return this.showWindBarbSummaries(this.timeToggle, date, requestId);
         } else {
           this.showWindBarbs = false;
 
@@ -1365,10 +1115,11 @@
           const params = `api/dailysummaries/?search_type=variable&search_value=${id}&search_date_start=${today}&search_date_end=${tomorrow}`;
 
           return this.getAll(params).then(res => {
-            this.lastUpdate = moment().format('D MMM YY, h:mm A');
+            if (requestId !== this.summaryRequestId) return;
+            this.lastUpdate = this.configuredNowDisplay();
 
             this.markers = this.markers.map(e => {
-              const summary = res.find(data => data.station === e.id);
+              const summary = res.find(data => String(data.station) === String(e.id));
 
               e.icon = this.defaultIcon;
 
@@ -1398,18 +1149,19 @@
         }
       },
       
-      getLast24Summaries(id) {
-        if (id === -1) {
-          this.showWindBarbSummaries(this.timeToggle, null);
+      getLast24Summaries(id, requestId) {
+        if (Number(id) === -1) {
+          return this.showWindBarbSummaries(this.timeToggle, null, requestId);
         } else {
           this.showWindBarbs = false;
           const params = `api/last24hrsummaries/?search_type=variable&search_value=${id}`;
 
           return this.getAll(params).then(res => {
-            this.lastUpdate = moment().format('D MMM YY, h:mm A') ;
+            if (requestId !== this.summaryRequestId) return;
+            this.lastUpdate = this.configuredNowDisplay() ;
 
             this.markers = this.markers.map(e => {
-              const summary = res.find(data => data.station === e.id);
+              const summary = res.find(data => String(data.station) === String(e.id));
 
               e.icon = this.defaultIcon;
 
@@ -1440,23 +1192,28 @@
       },
       
       // to display the wind barbs
-      showWindBarbSummaries(timeToggle, date) {
-        // Enable wind barb layer / UI state
+      showWindBarbSummaries(timeToggle, date, requestId) {
         this.showWindBarbs = true;
+        // Clear last period's icons while requesting the new period.
+        this.markers.forEach(marker => {
+          marker.icon = this.defaultIcon;
+          marker.tempMax = '';
+          marker.tempMin = '';
+          marker.atmPressure = '';
+          marker.precipitation = '';
+        });
+        if (!L.WindBarb || typeof L.WindBarb.icon !== 'function') {
+          this.showAlert('Wind-barb plugin is unavailable.', 'error');
+          return Promise.resolve();
+        }
 
-        // Generate a unique request id to prevent race conditions
-        // (older async responses should not overwrite newer ones)
-        const requestId = Date.now();
-        this._lastWindRequest = requestId;
-
-        // Fetch wind + weather summary data
-        this.getWindBards(timeToggle, date).then((wind) => {
-
-          // If another request was made after this one, ignore this response
-          if (this._lastWindRequest !== requestId) return;
+        return this.getWindBards(timeToggle, date).then(wind => {
+          // A response for an older date or weather variable must never overwrite
+          // the newest selection, even if it resolves after a mode change.
+          if (requestId !== this.summaryRequestId) return;
 
           // Update "last updated" timestamp for the UI
-          this.lastUpdate = moment().format('D MMM YY, h:mm A');
+          this.lastUpdate = this.configuredNowDisplay();
 
           // Normalize station IDs to avoid:
           // - string vs number mismatches
@@ -1487,60 +1244,51 @@
           // Track stations that cannot display wind barbs (for debugging)
           const missingWindBarbs = [];
 
-          // Loop through all map markers (weather stations)
+          // Update the existing reactive station objects; use only THIS period's values.
           this.markers.forEach(marker => {
             const stationId = normalizeId(marker.id);
-
-            // Look up wind data for this station
             const windSpeed = windSpeedMap.get(stationId);
             const windDirection = windDirectionMap.get(stationId);
-
-            /*
-              IMPORTANT:
-              Do NOT blindly reset values every time.
-              If only one dataset is missing, keep the last valid value.
-              This prevents wind barbs from "appearing then disappearing".
-            */
-            if (!windSpeed && !windDirection) {
-              marker.windSpeed = null;
-              marker.windDirection = null;
-            } else {
-              marker.windSpeed = windSpeed ?? marker.windSpeed;
-              marker.windDirection = windDirection ?? marker.windDirection;
-            }
-
-            // Look up other weather summaries
             const tempMax = tempMaxMap.get(stationId);
             const tempMin = tempMinMap.get(stationId);
             const atmPressure = atmPressureMap.get(stationId);
             const precipitation = precipitationMap.get(stationId);
 
-            // Assign values (formatted) or keep existing ones if missing
-            marker.tempMax = tempMax ? tempMax.value.toFixed(1) : marker.tempMax;
-            marker.tempMin = tempMin ? tempMin.value.toFixed(1) : marker.tempMin;
-            marker.atmPressure = atmPressure ? atmPressure.value.toFixed(1) : marker.atmPressure;
-            marker.precipitation = precipitation ? precipitation.value.toFixed(1) : marker.precipitation;
+            const numberOrNull = summary => {
+              if (!summary || summary.value === null || summary.value === undefined ||
+                  String(summary.value).trim() === '') return null;
+              const n = Number(summary.value);
+              return Number.isFinite(n) ? n : null;
+            };
+            const displayValue = summary => {
+              const n = numberOrNull(summary);
+              return n === null ? '' : n.toFixed(1);
+            };
 
-            // Decide which icon to display
-            if (marker.windSpeed && marker.windDirection) {
-              // Both wind speed and direction exist → draw wind barb
+            marker.windSpeed = windSpeed || null;
+            marker.windDirection = windDirection || null;
+            marker.tempMax = displayValue(tempMax);
+            marker.tempMin = displayValue(tempMin);
+            marker.atmPressure = displayValue(atmPressure);
+            marker.precipitation = displayValue(precipitation);
+
+            const speed = numberOrNull(windSpeed);
+            const direction = numberOrNull(windDirection);
+            // Wind direction is passed through in degrees, as in the original page.
+            // Do not reverse it: the plugin's meteorological convention must be
+            // checked separately against real observations.
+            if (speed !== null && speed >= 0 && direction !== null &&
+                direction >= 0 && direction <= 360) {
               marker.icon = L.WindBarb.icon({
                 fillColor: 'black',
                 pointRadius: 1,
-                deg: marker.windDirection.value,
-                speed: marker.windSpeed.value,
+                deg: direction,
+                speed: speed,
                 iconAnchor: [16, 32],
                 forceDir: true
               });
             } else {
-              // Missing wind data → track for debugging
-              missingWindBarbs.push({
-                station: stationId,
-                hasSpeed: !!windSpeed,
-                hasDirection: !!windDirection
-              });
-
-              // Optional: fallback icon (can be removed if undesired)
+              missingWindBarbs.push({ station: stationId, hasSpeed: speed !== null, hasDirection: direction !== null });
               marker.icon = L.icon({
                 iconUrl: "{% static 'images/close.png' %}",
                 iconSize: [8, 8]
@@ -1552,6 +1300,10 @@
           // if (missingWindBarbs.length) {
           //  console.warn('Stations missing wind barbs:', missingWindBarbs);
           // }
+        }).catch(error => {
+          if (requestId !== this.summaryRequestId) return;
+          console.error('Unable to load wind-barb summaries:', error);
+          this.showAlert('Unable to load wind-barb observations.', 'error');
         });
       },
       
@@ -1597,82 +1349,159 @@
       },
       
       openStationsDetailDialog(marker, event) {
-        // reset selected station offset everytime you open the dialog
+        const requestId = ++this.stationDetailRequestId;
         this.selected_station_utc_offset = null;
-
-        this.getById("api/livedata", marker.id).then(data => {
-          data.latest_last_update = this.formatDatetime(data.latest_last_update_station_time)
-          data.past24h_last_update = this.formatDatetime(data.past24h_last_update_station_time)
-          data.currentday_last_update = this.formatDatetime(data.currentday_last_update_station_time)
-
-          this.selected_station_utc_offset = data.station_offset;
-
-          this.sandbox = data;
-          this.sandbox.station_url = `{% url 'stations-list' %}${this.sandbox.station_id}`
-          this.sandbox.stationReport = `{% url 'station-report' %}?station_id=${this.sandbox.station_id}`
-          this.selectedTab = 0;
-          this.handleTabUpdate(this.selectedTab);
-        });
-        // });
+        this.sandbox = null;
+        this.stationDetailError = null;
+        this.drawer = false;
         this.stationsDetail = true;
-        event.target.closePopup();
+        this.selectedTab = 0;
+
+        if (event && event.target && event.target.closePopup) event.target.closePopup();
+        this.getById('api/livedata', marker.id).then(data => {
+          if (requestId !== this.stationDetailRequestId) return;
+          data.latest_last_update = this.formatDatetime(data.latest_last_update_station_time);
+          data.past24h_last_update = this.formatDatetime(data.past24h_last_update_station_time);
+          data.currentday_last_update = this.formatDatetime(data.currentday_last_update_station_time);
+          this.selected_station_utc_offset = data.station_offset;
+          this.sandbox = data;
+          this.sandbox.station_url = `{% url 'stations-list' %}${data.station_id}`;
+          this.sandbox.stationReport = `{% url 'station-report' %}?station_id=${data.station_id}`;
+          this.handleTabUpdate(0);
+        }).catch(error => {
+          if (requestId !== this.stationDetailRequestId) return;
+          this.stationDetailError = 'Unable to load station details. Select the station again to retry.';
+          console.error(error);
+        });
       },
       
       closeDialog() {
         this.stationsDetail = false;
       },
       
-      getById(path, id, oldData = []) {
-        return fetch(`/${path}/${id}/`).then(res => {
-          if (!res.body) {
-            return { next: null, results: [] };
-          }
-
-          return res.json();
+      getById(path, id) {
+        return fetch(`/${path}/${id}/`, { credentials: 'same-origin' }).then(response => {
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
+          return response.json();
         });
       },
       
-      getAll(path, url, oldData = []) {
-        return fetch(`/${path}`)
-          .then(res => {
-            if (!res.body) {
-              return { next: null, results: [] };
-            }
-            if (res.status === 500) {
-              console.error('Internal Server Error');
-              return { next: null, results: [] };
-            }
-            if (res.status === 404) {
-              console.error('Not Found');
-              return { next: null, results: [] };
-            }
-            return res.json();
-          })
-          .then(async data => {
-            const values = [...oldData, ...data.results];
-            if (!!data.next) {
-              return await getAll(
-                context,
-                path,
-                `/${path}/${data.next.substr(
-                  data.next.indexOf(`/${path}`)
-                )}`,
-                values
-              );
-            }
-            return values;
-          }).catch((err) => {
-            console.log('err', err);
+      // Fetch every page of a DRF endpoint while preserving the existing array result.
+      async getAll(path) {
+        let nextUrl = '/' + String(path).replace(/^\/+/, '');
+        const data = [];
+        const visited = new Set();
+
+        while (nextUrl) {
+          const resolved = new URL(nextUrl, window.location.origin);
+          if (resolved.origin !== window.location.origin || visited.has(resolved.href)) {
+            throw new Error('Invalid or repeated pagination URL');
+          }
+          visited.add(resolved.href);
+          const response = await fetch(resolved.href, { credentials: 'same-origin' });
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
+          const payload = await response.json();
+          if (Array.isArray(payload)) return data.concat(payload);
+          if (!payload || !Array.isArray(payload.results)) throw new Error('Unexpected API response');
+          data.push(...payload.results);
+          nextUrl = payload.next || null;
+        }
+        return data;
+      },
+
+      // Built-in Intl formatting avoids requiring the Moment Timezone plugin.
+      configuredToday() {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: this.timezone, year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(new Date());
+        const field = type => (parts.find(part => part.type === type) || {}).value;
+        return `${field('year')}-${field('month')}-${field('day')}`;
+      },
+
+      configuredNowDisplay() {
+        return new Intl.DateTimeFormat('en-GB', {
+          timeZone: this.timezone, day: 'numeric', month: 'short', year: '2-digit',
+          hour: 'numeric', minute: '2-digit', hour12: true
+        }).format(new Date());
+      },
+
+      formatConfiguredTimestamp(value) {
+        if (!value) return 'Not available';
+        // The backend's last-update timestamps represent UTC instants.
+        const instant = moment.utc(value).toDate();
+        if (Number.isNaN(instant.getTime())) return 'Not available';
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: this.timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+        }).formatToParts(instant);
+        const field = type => (parts.find(part => part.type === type) || {}).value;
+        return `${field('year')}-${field('month')}-${field('day')} ${field('hour')}:${field('minute')}`;
+      },
+
+      fitWorkspaceToViewport() {
+        // The old `100vh - 120px` guessed the SURFACE header height.
+        // Measure the map's actual starting position so its bottom reaches
+        // the viewport bottom, regardless of the installation's header size.
+        const frame = this.$refs.mapFrame;
+        if (!frame) return;
+        const viewport = window.visualViewport;
+        const bottom = viewport
+          ? viewport.offsetTop + viewport.height
+          : window.innerHeight;
+        const top = frame.getBoundingClientRect().top;
+        const available = Math.max(120, Math.floor(bottom - top));
+        const desired = `${available}px`;
+        if (frame.style.height !== desired) frame.style.height = desired;
+      },
+
+      refreshMainMapSize() {
+          const map = this.$refs.myMap && this.$refs.myMap.mapObject;
+          if (!map || !map._loaded) return;
+
+          /*
+          * Recalculate Leaflet's dimensions after the container resizes.
+          *
+          * IMPORTANT:
+          * pan: true allows Leaflet to compensate for changes in container
+          * dimensions and preserve the geographic center.
+          *
+          * Using pan: false can make the map appear shifted when its
+          * container height or width changes after initialization.
+          */
+          map.invalidateSize({
+              pan: true,
+              animate: false
           });
       },
-      
+
+      onMainMapReady() {
+        // Vue / Vuetify can finish laying out the page after Leaflet is ready.
+        // Resize without changing the configured center or the user's pan/zoom.
+        this.$nextTick(() => {
+          this.fitWorkspaceToViewport();
+          this.refreshMainMapSize();
+          const map = this.$refs.myMap && this.$refs.myMap.mapObject;
+          if (map && map.scrollWheelZoom && !map.scrollWheelZoom.enabled()) {
+            map.scrollWheelZoom.enable();
+          }
+        });
+        (this._smapInitialResizeTimers || []).forEach(clearTimeout);
+        this._smapInitialResizeTimers = [80, 250, 600].map(delay =>
+          setTimeout(() => {
+            this.fitWorkspaceToViewport();
+            this.refreshMainMapSize();
+          }, delay)
+        );
+      },
+
       handleTabUpdate(selectedTab) {
-        const lastUpdateDate = moment.utc(this.sandbox[this.tabsLastUpdate[selectedTab]]).tz(this.timezone).format('YYYY-MM-DD HH:mm');
+        if (!this.sandbox) return;
+        const lastUpdateDate = this.formatConfiguredTimestamp(this.sandbox[this.tabsLastUpdate[selectedTab]]);
         this.lastUpdateMessage = `${lastUpdateDate}`;
 
         // display offset in hours
         this.lastUpdateStationMessage = `Station Offset, UTC 
-                                          ${this.selected_station_utc_offset/60 >= 0 
+                                          ${(Number(this.selected_station_utc_offset) || 0)/60 >= 0 
                                           ?
                                           `+${this.selected_station_utc_offset/60}` 
                                           : 
@@ -1685,12 +1514,37 @@
     },
     
     mounted() {
-      // showing lat/lng coordinates when mouse moves
-      this.$refs.myMap.mapObject.on('mousemove',function(e){
-        $('.mouse-lat').html(`${e.latlng.lat}`)
+      this._smapInitialResizeTimers = this._smapInitialResizeTimers || [];
+      this._smapResizeObserver = null;
+      this._smapRefreshInterval = null;
+      this._smapOnWindowResize = () => {
+        this.fitWorkspaceToViewport();
+        this.refreshMainMapSize();
+      };
+      window.addEventListener('resize', this._smapOnWindowResize, { passive: true });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', this._smapOnWindowResize, { passive: true });
+      }
+      if (window.ResizeObserver && this.$refs.mapFrame) {
+        this._smapResizeObserver = new ResizeObserver(() => this.refreshMainMapSize());
+        this._smapResizeObserver.observe(this.$refs.mapFrame);
+      }
+      this.onMainMapReady();
 
-        $('.mouse-lng').html(`${e.latlng.lng}`)
-      })
+      // Update coordinates using consistent decimal precision.
+      // Only the display is rounded; Leaflet's actual coordinates remain unchanged.
+      this.$refs.myMap.mapObject.on('mousemove', function(e) {
+          const latElement = document.querySelector('.smap-map-coordinates .mouse-lat');
+          const lngElement = document.querySelector('.smap-map-coordinates .mouse-lng');
+
+          if (latElement) {
+              latElement.textContent = e.latlng.lat.toFixed(10);
+          }
+
+          if (lngElement) {
+              lngElement.textContent = e.latlng.lng.toFixed(10);
+          }
+      });
 
       // adding leaflet measure
       this.$nextTick(() => {
@@ -1719,22 +1573,13 @@
       this.getStationCommunications();
       // this.getElements();
       // this.getGeoJson();
-      this.getStations().then(res => {
-
-        this.requestObject.currentDate = moment(new Date()).tz(this.timezone).format('YYYY-MM-DD');
-
-        if (this.requestObject.summaryId && this.requestObject.currentDate) {
-          
-          this.getDailySummaries(
-            this.requestObject.summaryId,
-            this.requestObject.currentDate
-          );
-          
-          return;
-        }
-
+      this.getStations().then(() => {
+        this.requestObject.currentDate = this.configuredToday();
         this.getSummaries();
-
+        this.onMainMapReady();
+      }).catch(error => {
+        console.error('Unable to load station markers:', error);
+        this.showAlert('Unable to load station markers.', 'error');
       });
       /*
       this.markers = this.markers.map(e => {
@@ -1753,16 +1598,25 @@
         e.popupVariable = summary.variable.unit_symbol || "";
         return e;
       });*/
-      setInterval(() => {
+      this._smapRefreshInterval = setInterval(() => {
         this.getSummaries();
       }, 60000); // 1 minute
+    },
+
+    beforeDestroy() {
+      window.removeEventListener('resize', this._smapOnWindowResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', this._smapOnWindowResize);
+      }
+      if (this._smapResizeObserver) this._smapResizeObserver.disconnect();
+      this._smapInitialResizeTimers.forEach(clearTimeout);
+      if (this._smapRefreshInterval) clearInterval(this._smapRefreshInterval);
     }
   });
 
 </script>
-
 <style>
-  /* leaflet measure css start */
+/* leaflet measure css start */
     .leaflet-control-measure h6,.leaflet-measure-resultpopup h6{
         margin:0 0 12px;
         padding-bottom:10px;
@@ -2011,384 +1865,209 @@
         /* z-index: 1000 !important; */
     }
   /* leaflet measure end */
-  [v-cloak] {
-    visibility: hidden !important;
-    display: block !important;
-  }
-  .leaflet-interactive svg {
-    margin-top: -14px !important;
-  }
-  /* .leaflet-marker-pane{
-    z-index: 600 !important;
-  } */
-  .leaflet-popup-pane {
-    z-index: 500 !important;
-  }
-  .leaflet-popup-close-button {
-    color: red !important;
-  }
-  .windbarbPopup {
-    left: -50px !important;
-    bottom: -15px !important;
-  }
-  .leaflet-popup {
-    margin-bottom: 0px !important;
-  }
-  .windbarbPopup .leaflet-popup-content {
-    width: 65px;
-    height: 1px;
-  }
-  .windbarbPopup .leaflet-popup-tip-container {
-    display: none;
-  }
-  .windbarbPopup > div > div > div {
-    display: flex;
-    justify-content: space-between;
-    width: 90px;
-    position: absolute;
-    top: 0px;
-    left: 15px;
-    color: rgb(95, 95, 95);
-    font-size: 0.65rem;
-  }
-  .windbarbPopup > div > div > div .left {
-    display: flex;
-    flex-direction: column;
-    width: 27px;
-    align-items: start;
-  }
-  .windbarbPopup > div > div > div .right {
-    display: flex;
-    flex-direction: column;
-    width: 42px;
-    align-items: start;
-  }
-  .windbarbPopup .value {
-    font-weight: bold;
-  }
-  .windbarbPopup .leaflet-popup-content-wrapper {
-    background: transparent !important;
-    color: #333;
-    box-shadow: none !important;
-  }
-  .watershed-list {
-    overflow: auto;
-    height: calc(100vh - 309px);
-  }
-  .livedata {
-    margin-left: 14px;
-    width: 100% !important;
-    max-width: 342px !important;
-    border: 1px solid gray !important;
-    max-height: calc(100vh - 162px) !important;
-    width: 100%;
-    margin-top: 86px;
-    overflow: auto;
-    box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-      0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
-  }
-  .variables-btn {
-    padding: 8px 16px !important;
-    height: auto !important;
-  }
-  .variables-btn .arrow-icon {
-    position: absolute;
-    right: 0px;
-    top: 30%;
-  }
-  .search-station-field .v-input__slot {
-    box-shadow: none !important;
-    background: rgb(240, 240, 240) !important;
-  }
-  .search-station-field .v-input__slot:hover {
-    box-shadow: none !important;
-    background: rgb(233, 233, 233) !important;
-  }
-  .optionsDrawer {
-    height: 100% !important;
-    transition: visibility 0s linear 0.7s, opacity 0.7s ease-in-out;
-  }
-  .v-text-field.v-text-field--enclosed .v-text-field__details {
-    margin-bottom: 8px;
-    display: none;
-  }
-  .v-overlay {
-    display: none;
-  }
-  .v-input--selection-controls {
-    margin-top: 0px;
-    padding-top: 0px;
-  }
-  .v-label {
-    font-size: 14px;
-  }
-  .v-input--radio-group--column .v-radio:not(:last-child):not(:only-child) {
-    margin-bottom: 4px;
-  }
-  .v-input--selection-controls__ripple {
-    z-index: 5 !important;
-  }
-  .v-input__slot {
-    margin-bottom: 0px;
-  }
-  button:focus {
-    background-color: transparent !important;
-  }
-  .custom-headline-tooltip {
-    width: 92px;
-    /* background-color: rgba(255, 255, 255, 0.884); */
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 15px !important;
-    display: flex;
-    justify-content: center;
-    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
-  }
-  .custom-headline {
-    background-color: rgba(255, 255, 255, 0.884);
-    padding: 2px;
-    border-radius: 10px;
-    position: absolute;
-    top: -36px;
-    left: -33px;
-    width: 98px;
-    font-size: 15px !important;
-    display: flex;
-    justify-content: center;
-    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
-  }
-  .custom-headline-arrow {
-    width: 40px;
-    height: 10px;
-    position: absolute;
-    left: 50%;
-    margin-left: -20px;
-    overflow: hidden;
-    top: 23px;
-    pointer-events: none;
-    display: inline-block;
-    border-style: solid;
-    border-width: 10px 20px 0px 20px;
-    border-color: white transparent transparent transparent;
-    z-index: 1;
-  }
-  .truncate-text-230 {
-    max-width: 230px;
-  }
-  .truncate-text-230 span {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .truncate-text {
-    max-width: 275px;
-    line-height: 16px;
-  }
-  .truncate-text span,
-  .truncate-text a span {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .btn-close-dialog {
-    position: absolute;
-    top: 0px;
-    right: 0px;
-  }
-  .station-link:hover {
-    text-decoration: underline;
-    cursor: pointer;
-  }
-  .v-card__text {
-    padding: 0px !important;
-  }
-  .index-top {
-    z-index: 999;
-  }
-  .v-slide-group__prev {
-    display: none !important;
-  }
-  .v-slide-group__next {
-    display: none !important;
-  }
-  .v-navigation-drawer--close {
-    display: none !important;
-  }
-  .stations-detail {
-    position: absolute;
-    top: 0px;
-    left: 0px;
-    height: 100%;
-    width: 100%;
-    background-color: #fafafa;
-    border-radius: 5px;
-  }
-  @media screen and (max-width: 992px) {
-    .stations-detail {
-      top: 168px;
-      left: 16px;
-      height: 100%;
-      max-height: 60vh !important;
-      max-width: 300px !important;
-    }
-  }
-  /* Station Monitoring navigation button */
-  .station-monitoring-btn {
-      position: absolute;
-      top: 120px;
-      right: 16px;
-      z-index: 995;
-      transition: 0.15s;
-  }
 
-  .options-menu-opened {
-    right: 272px !important;
-    transition: 0.15s;
-  }
-  .options-menu {
-    z-index: 995;
-    position: absolute;
-    top: 68px;
-    right: 16px;
-    transition: 0.15s;
-  }
-  .current-date-list {
-    min-height: auto;
-  }
-  .variables-menu .input {
-    min-height: 0px;
-  }
-  .variables-menu {
-    min-width: auto !important;
-    z-index: 99999 !important;
-  }
-  .layers-menu .v-messages {
-    display: none !important;
-  }
-  .overlays-filter {
-    z-index: 995;
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    transition: 0.15s;
-  }
-  .overlays-list .v-messages {
-    display: none !important;
-  }
-  aside {
-    z-index: 9999 !important;
-    position: absolute;
-  }
-  .search-content {
-    position: absolute;
-    bottom: 16px;
-    left: 14px;
-    display: flex;
-    width: 100%;
-    max-width: 300px;
-    z-index: 995;
-  }
-  .status-box {
-    position: absolute;
-    bottom: 16px;
-    left: 330px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: start;
-    background-color: white;
-    padding: 12px;
-    width: 100%;
-    height: 48px;
-    max-width: 250px;
-    font-size: 14px;
-    z-index: 995;
-    border-radius: 2px;
-    box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-      0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
-  }
-  .mouse-coordinates-box {
-    position: absolute;
-    bottom: 16px;
-    left: 595px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: start;
-    background-color: white;
-    padding: 12px;
-    width: 100%;
-    height: 48px;
-    max-width: 250px;
-    font-size: 14px;
-    z-index: 995;
-    border-radius: 2px;
-    box-shadow: 0px 3px 10px -2px rgba(0, 0, 0, 0.2),
-      0px 2px 2px 0px rgba(0, 0, 0, 0.14), 0px 1px 5px 0px rgba(0, 0, 0, 0.12);
-  }
-  .variables-box {
-    position: absolute;
-    top: 10px;
-    left: 56px;
-    display: flex;
-    width: 100%;
-    max-width: 300px;
-    z-index: 995;
-  }
-  .variables-box .v-input__control .v-input__slot {
-    border: 1px solid gray;
-    border-radius: 5px;
-  }
+/* SURFACE Stations Map — same typography, whitespace, and controls as the
+   finished Spatial Analysis / Station Monitoring pages. All rules are scoped. */
+[v-cloak] { display: none !important; }
+#app.smap-page { width: 100%; background: #fff; }
+.smap-page .v-application--wrap { min-height: 0; }
+.smap-page .smap-workspace {
+  position: relative;
+  /* JS measures the real header-to-viewport distance at runtime.
+     This is only a no-JS / pre-mount fallback. */
+  height: calc(100dvh - 100px);
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  background: #edf1f0;
+  isolation: isolate;
+}
+.smap-page .smap-map-layer {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  width: 100%; height: 100%; z-index: 0;
+}
+.smap-page .smap-map-layer .smap-leaflet,
+.smap-page .smap-map-layer .leaflet-container {
+  width: 100% !important; height: 100% !important;
+  min-width: 0; min-height: 0;
+}
+.smap-page .leaflet-control-zoom { box-shadow: 0 2px 8px rgba(0,0,0,.16); }
+.smap-page .leaflet-top.leaflet-left .leaflet-control-zoom { margin: 14px 0 0 14px; }
+.smap-page .leaflet-top.leaflet-left .leaflet-control-measure { margin-left: 14px; }
+.smap-page .smap-variable-box { position: absolute; z-index: 5; top: 14px; left: 68px; width: 255px; max-width: calc(100vw - 78px); }
+.smap-page .smap-variable-trigger {
+  width: 100%; min-width: 0 !important; max-width: none; height: 59px !important;
+  border-radius: 5px; display: flex; gap: 12px; justify-content: space-between;
+  padding: 9px 13px !important; color: #27303c !important; background: #fff !important;
+  box-shadow: 0 2px 9px rgba(0,0,0,.14) !important;
+}
+.smap-page .smap-variable-trigger .v-btn__content { width: 100%; justify-content: space-between; }
+.smap-page .smap-variable-trigger-text { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; text-align: left; gap: 3px; }
+.smap-page .smap-overline { font-size: 10px; line-height: 1; font-weight: 700; letter-spacing: .10em; color: #697586; }
+.smap-page .smap-variable-name { display: block; max-width: 192px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; letter-spacing: 0; line-height: 1.2; }
+.smap-page .smap-variable-trigger small { font-size: 11px; font-weight: 400; color: #657184; }
+.smap-page .smap-map-tools { position: absolute; z-index: 5; top: 14px; right: 14px; display: flex; flex-direction: column; gap: 8px; transition: right .24s ease; }
+.smap-page .smap-map-tools--shifted { right: 406px; }
+.smap-page .smap-map-btn {
+  width: 38px; min-width: 38px !important; height: 38px !important;
+  background: #fff !important; color: #333 !important; border-radius: 4px;
+  box-shadow: 0 2px 7px rgba(0,0,0,.15) !important;
+}
+.smap-page .smap-map-btn .v-icon { font-size: 23px; }
+.smap-page .smap-map-footer { position: absolute; z-index: 5; bottom: 23px; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: end; pointer-events: none; }
+.smap-page .smap-map-footer > * { pointer-events: auto; }
+.smap-page .smap-map-search { width: 260px; max-width: 100%; }
+.smap-page .smap-search-field .v-input__slot { min-height: 40px !important; border: 1px solid #e0e4e8; border-radius: 5px !important; background: #fff !important; box-shadow: 0 2px 8px rgba(0,0,0,.13) !important; }
+.smap-page .smap-search-field .v-input__control { min-height: 40px !important; }
+.smap-page .smap-map-status, .smap-page .smap-map-coordinates {
+  height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 12px;
+  color: #3c4654; background: #fff; font-size: 12px;
+  border: 1px solid #e0e4e8; border-radius: 5px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.13);
+}
+.smap-page .smap-map-status strong { font-size: 14px; }
+.smap-page .smap-status-dot { width: 3px; height: 3px; border-radius: 50%; background: #a2aab5; margin: 0 3px; }
 
-  input::placeholder {
-    /* Chrome, Firefox, Opera, Safari 10.1+ */
-    color: black;
-    opacity: 0.7; /* Firefox */
-  }
+/* Keep the coordinate panel at a fixed width. */
+.smap-page .smap-map-coordinates {
+  width: 174px;
+  min-width: 174px;
+  flex: 0 0 174px;
+  height: 54px;
+  padding: 6px 11px;
+  gap: 9px;
+  font-variant-numeric: tabular-nums;
+}
 
-  /* MATERIALIZE */
-  input:not([type]),
-  input[type="text"]:not(.browser-default),
-  input[type="password"]:not(.browser-default),
-  input[type="email"]:not(.browser-default),
-  input[type="url"]:not(.browser-default),
-  input[type="time"]:not(.browser-default),
-  input[type="date"]:not(.browser-default),
-  input[type="datetime"]:not(.browser-default),
-  input[type="datetime-local"]:not(.browser-default),
-  input[type="tel"]:not(.browser-default),
-  input[type="number"]:not(.browser-default),
-  input[type="search"]:not(.browser-default),
-  textarea.materialize-textarea {
-    background-color: transparent;
-    border: none !important;
-    border-bottom: 1px solid black !important;
-    border-radius: 0 !important;
-    outline: none !important;
-    /* height: 0em!important; */
-    width: 100%;
-    font-size: 16px;
-    margin: 0px;
-    padding: 0;
-    -webkit-box-shadow: none;
-    box-shadow: none;
-    -webkit-box-sizing: content-box;
-    box-sizing: content-box;
-    -webkit-transition: border 0.3s, -webkit-box-shadow 0.3s;
-    transition: border 0.3s, -webkit-box-shadow 0.3s;
-    transition: box-shadow 0.3s, border 0.3s;
-    transition: box-shadow 0.3s, border 0.3s, -webkit-box-shadow 0.3s;
-  }
+/* Stack latitude and longitude vertically. */
+.smap-page .smap-coordinate-values {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 
-  @media screen and (max-width: 968px) {
-    aside.v-navigation-drawer.v-navigation-drawer--absolute.v-navigation-drawer--is-mobile.v-navigation-drawer--open.v-navigation-drawer--right.theme--light.white {
-      height: 92vh !important;
-    }
-  }
+/* Keep labels and numbers aligned. */
+.smap-page .smap-coordinate-row {
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: baseline;
+}
+
+/* Use fixed-width digits to prevent shifting. */
+.smap-page .smap-coordinate-number {
+  display: block;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
+  font-family: ui-monospace, SFMono-Regular, Menlo,
+               Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #344054;
+}
+
+.smap-page .smap-coordinate-label { font-size: 10px; font-weight: 700; letter-spacing: .05em; color: #687587; }
+.smap-page .smap-map-coordinates .v-icon { color: #64748b; }
+.smap-page .smap-detail-drawer, .smap-page .smap-filter-drawer {
+  z-index: 10 !important;
+  height: 100% !important;
+  border-left: 1px solid #e1e5ea !important;
+  box-shadow: -4px 0 18px rgba(20, 32, 48, .09) !important;
+  background: #fff !important;
+}
+.smap-page .smap-drawer-head {
+  min-height: 66px; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 14px 16px; border-bottom: 1px solid #e5e9ee; background: #fff;
+}
+.smap-page .smap-drawer-eyebrow { color: #7b8795; font-weight: 700; font-size: 10px; letter-spacing: .11em; margin-bottom: 4px; }
+.smap-page .smap-drawer-title { color: #272d35 !important; margin: 0; font-size: 16px !important; font-weight: 700 !important; letter-spacing: .025em; line-height: 1.3; }
+.smap-page .smap-station-identity { padding: 19px 17px 15px; }
+.smap-page .smap-station-identity h3 { margin: 0 0 10px; font-size: 17px; line-height: 1.4; font-weight: 650; color: #27303a; }
+.smap-page .smap-station-links { display: flex; flex-wrap: wrap; gap: 14px; }
+.smap-page .smap-station-links a { font-size: 12px; color: #1976d2; text-decoration: none; font-weight: 600; }
+.smap-page .smap-station-links a:hover { text-decoration: underline; }
+.smap-page .smap-update-line { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 10px 17px; font-size: 12px; color: #627084; background: #f7f8fa; border-block: 1px solid #e9ecf0; }
+.smap-page .smap-update-line strong { color: #344054; font-weight: 600; }
+.smap-page .smap-detail-tabs { background: #fff; }
+.smap-page .smap-detail-tabs .v-tab { font-size: 12px; letter-spacing: 0; text-transform: none; min-width: 0; padding: 0 5px; }
+.smap-page .smap-detail-tabs .v-tabs-bar { border-bottom: 1px solid #edf0f2; }
+.smap-page .smap-data-list { padding: 4px 14px 24px; }
+.smap-page .smap-data-row { display: flex; justify-content: space-between; align-items: center; gap: 13px; padding: 12px 3px; border-bottom: 1px solid #edf0f2; }
+.smap-page .smap-data-name { color: #394455; font-size: 13px; min-width: 0; }
+.smap-page .smap-data-value { font-size: 13px; color: #243449; font-weight: 700; white-space: nowrap; text-align: right; }
+.smap-page .smap-data-value small { color: #6b7786; font-size: 11px; font-weight: 400; }
+.smap-page .smap-empty { padding: 30px 16px; text-align: center; font-size: 13px; color: #758294; }
+.smap-page .smap-detail-loading { min-height: 210px; display: flex; align-items: center; justify-content: center; gap: 14px; flex-direction: column; color: #6b7787; font-size: 13px; }
+.smap-page .smap-detail-message { padding: 16px; }
+.smap-page .smap-filter-summary { padding: 11px 16px; color: #6b7584; font-size: 12px; background: #fafbfc; border-bottom: 1px solid #e9edf2; }
+.smap-page .smap-filters { border-radius: 0; }
+.smap-page .smap-filters .v-expansion-panel { border-bottom: 1px solid #e7eaee; border-radius: 0 !important; }
+.smap-page .smap-filters .v-expansion-panel::before { box-shadow: none !important; }
+.smap-page .smap-filters .v-expansion-panel-header { min-height: 51px; font-size: 13px; font-weight: 650; color: #344155; padding: 0 17px; }
+.smap-page .smap-filters .v-expansion-panel-content__wrap { padding: 4px 15px 14px; }
+.smap-page .smap-filters .v-input--selection-controls { margin: 8px 0 0; padding: 0; }
+.smap-page .smap-filters .v-input__slot { margin-bottom: 0; }
+.smap-page .smap-filters .v-label { font-size: 13px; color: #405066; }
+.smap-page .smap-switch.v-input--selection-controls { margin: 8px 0; padding: 0; }
+.smap-page .smap-switch .v-input__slot { margin-bottom: 0; }
+.smap-page .smap-switch .v-label { font-size: 13px; }
+/* Synoptic readings are display-only overlays: don't let the many open
+   Leaflet popups capture wheel events and block map zoom underneath them. */
+.smap-page .windbarbPopup { left: -50px !important; bottom: -15px !important; pointer-events: none !important; }
+/* Status and coordinate indicators are display-only; the search stays interactive. */
+.smap-page .smap-map-footer > .smap-map-status,
+.smap-page .smap-map-footer > .smap-map-coordinates { pointer-events: none; }
+.smap-page .windbarbPopup .leaflet-popup-content { width: 65px; height: 1px; }
+.smap-page .windbarbPopup .leaflet-popup-tip-container { display: none; }
+.smap-page .windbarbPopup > div > div > div { display: flex; justify-content: space-between; width: 90px; position: absolute; top: 0; left: 15px; color: #5f5f5f; font-size: .65rem; }
+.smap-page .windbarbPopup > div > div > div .left { display:flex; flex-direction:column; width:27px; align-items:start; }
+.smap-page .windbarbPopup > div > div > div .right { display:flex; flex-direction:column; width:42px; align-items:start; }
+.smap-page .windbarbPopup .value { font-weight: bold; }
+.smap-page .windbarbPopup .leaflet-popup-content-wrapper { background: transparent !important; color: #333; box-shadow: none !important; }
+.smap-page .custom-headline { background: rgba(255,255,255,.92); padding: 4px 7px; border-radius: 7px; position:absolute; top:-38px; left:-36px; width:106px; font-size:13px !important; display:flex; justify-content:center; font-weight:700; color:#283544; box-shadow:0 2px 8px rgba(0,0,0,.20); }
+.smap-page .custom-headline-arrow { width: 18px; height: 0; position: absolute; left: 50%; transform: translateX(-50%); top: 27px; pointer-events: none; border-style: solid; border-width: 7px 8px 0; border-color: #fff transparent transparent; }
+.smap-page .leaflet-popup-close-button { color: #e03131 !important; }
+.smap-page .leaflet-popup { margin-bottom: 0 !important; }
+
+/* Menus are mounted in Vuetify's overlay container, outside the map's layers. */
+.smap-variable-menu, .smap-layers-menu { min-width: 285px !important; max-width: min(355px, 96vw); z-index: 1600 !important; }
+.smap-date-menu { z-index: 2000 !important; }
+.smap-menu-card { width: 100%; background: #fff; border: 1px solid #e5e9ef; border-radius: 7px; overflow: hidden; }
+.smap-menu-heading { min-height: 48px; padding: 12px 16px; border-bottom: 1px solid #e5e9ef; display: flex; align-items: center; gap: 8px; color: #303945; font-size: 14px; }
+.smap-menu-body { padding: 16px; max-height: min(62vh, 535px); overflow-y: auto; }
+.smap-section-label { margin-bottom: 11px; color: #6e7b8a; font-size: 10px; letter-spacing: .10em; font-weight: 750; }
+.smap-section-label--spaced { margin-top: 19px; }
+.smap-timezone-hint { display: flex; align-items: center; gap: 6px; color: #778393; font-size: 11px; margin-top: 11px; }
+.smap-period-buttons { display: flex; width: 100%; }
+.smap-period-buttons .v-btn { flex: 1 1 0; padding: 0 5px !important; font-size: 11px; letter-spacing: 0; }
+.smap-variable-list { margin: 0; padding: 0; }
+.smap-variable-list .v-radio { margin: 0 0 9px !important; }
+.smap-variable-list .v-label { font-size: 13px; color: #3e4a5d; }
+.smap-variable-list .v-messages { display: none; }
+.smap-layers-menu .smap-menu-body { max-height: min(65vh, 520px); }
+
+@media (max-width: 900px) {
+  .smap-page .smap-map-tools--shifted { right: 14px; }
+  .smap-page .smap-map-tools--shifted .smap-map-btn { visibility: hidden; pointer-events: none; }
+  .smap-page .smap-detail-drawer, .smap-page .smap-filter-drawer { width: min(390px, 100%) !important; max-width: 100% !important; }
+  .smap-page .smap-map-footer { bottom: 25px; gap: 7px; }
+  .smap-page .smap-map-coordinates { display: none; }
+}
+@media (max-width: 600px) {
+  .smap-page .smap-workspace { min-height: 0; }
+  .smap-page .smap-variable-box { top: 12px; left: 63px; width: min(240px, calc(100vw - 120px)); }
+  .smap-page .smap-variable-trigger { min-width: 0 !important; width: 100%; height: 59px !important; padding: 8px !important; }
+  .smap-page .smap-variable-name { max-width: 170px; font-size: 12px; }
+  .smap-page .smap-map-tools { top: 12px; right: 10px; }
+  .smap-page .smap-map-btn { width: 34px; min-width: 34px !important; height: 34px !important; }
+  .smap-page .smap-map-footer { left: 10px; right: 10px; }
+  .smap-page .smap-map-search { width: min(230px, 100%); }
+  .smap-page .smap-map-status { font-size: 11px; height: 36px; padding: 0 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .smap-page .smap-map-tools { transition: none; }
+}
 </style>
-
 {% endblock %}
