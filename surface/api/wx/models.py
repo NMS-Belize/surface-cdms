@@ -971,7 +971,7 @@ class Document(BaseModel):
 DATA_EXPORT_MODE_CHOICES = [
     ("legacy", "Legacy AQC/MQC settings"),
     ("validated", "Validated data"),
-    ("aqc_good", "Good data - AQC only"),
+    ("qc_good", "Good data (Effective QC)"),
     ("all", "All data"),
     ("summary", "Stored summary"),
 ]
