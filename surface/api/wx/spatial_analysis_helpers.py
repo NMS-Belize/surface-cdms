@@ -46,8 +46,8 @@ def positive_int(value, label, maximum=None):
         result = int(str(value))
     except (TypeError, ValueError):
         raise ValueError("{} must be a whole number.".format(label))
-    if result < 1:
-        raise ValueError("{} must be a positive integer.".format(label))
+    if result < 0:
+        raise ValueError("{} must be a none negative integer.".format(label))
     if maximum is not None and result > maximum:
         raise ValueError("{} must not exceed {}.".format(label, maximum))
     return result
@@ -65,8 +65,7 @@ def quality_flag_ids(value):
         raise ValueError("quality_flags must contain comma-separated integer IDs.")
     if len(raw_ids) > 100:
         raise ValueError("Too many quality flags were selected.")
-    ids = [positive_int(item.strip() if isinstance(item, str) else item,
-                        "quality_flags") for item in raw_ids]
+    ids = [positive_int(item.strip() if isinstance(item, str) else item, "quality_flags") for item in raw_ids]
     return sorted(set(ids))
 
 

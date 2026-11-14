@@ -1890,6 +1890,7 @@
 .smap-page .smap-map-layer .leaflet-container {
   width: 100% !important; height: 100% !important;
   min-width: 0; min-height: 0;
+  cursor: crosshair;
 }
 .smap-page .leaflet-control-zoom { box-shadow: 0 2px 8px rgba(0,0,0,.16); }
 .smap-page .leaflet-top.leaflet-left .leaflet-control-zoom { margin: 14px 0 0 14px; }
@@ -2068,6 +2069,21 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .smap-page .smap-map-tools { transition: none; }
+}
+
+/* 
+ * Wind barb alignment
+ *
+ * Restore the 14px SVG adjustment used by the original
+ * Stations Map. The wind-barb plugin renders its station
+ * dot and staff as separate elements.
+ *
+ * This rule positions the dot to match the original
+ * working layout without changing station coordinates,
+ * wind speed, or wind direction.
+ */
+.smap-page .leaflet-marker-pane .leaflet-interactive > svg {
+    margin-top: -14px !important;
 }
 </style>
 {% endblock %}

@@ -737,12 +737,14 @@
 
       // Support a URL pointing directly to a station, variable, month and year.
       setParamsAndRunQuery() {
+
         const params = new URLSearchParams(window.location.search);
         const stationId = Number(params.get('station_id'));
         const variableId = Number(params.get('variable_id'));
         const month = Number(params.get('month'));
         const year = Number(params.get('year'));
-        if (!stationId || !variableId || month < 1 || month > 12 || !year) return;
+
+        if (!stationId || variableId == null || month < 1 || month > 12 || !year) return;
 
         const namedVariable = this.variable_list.find(item => Number(item.variable) === variableId);
         this.currentData = {
@@ -759,7 +761,11 @@
     mounted() {
       axios.defaults.xsrfHeaderName = 'X-CSRFToken';
       axios.defaults.xsrfCookieName = 'csrftoken';
-      this.setParamsAndRunQuery();
+      
+      window.addEventListener("load", () => {
+        this.setParamsAndRunQuery();
+      });
+
       window.addEventListener('focus', this.handleWindowFocus);
     }
   });

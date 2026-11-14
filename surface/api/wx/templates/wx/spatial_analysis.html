@@ -104,7 +104,7 @@
                 <div class="sa-section-heading"><span>DATA SELECTION</span></div>
                 <div class="sa-fields">
                   <v-autocomplete v-model="variable" :items="variables" item-text="name" item-value="id" return-object
-                    label="Weather variable" @change="selectVariable"
+                    label="Variable" @change="selectVariable"
                     :rules="[v => !!v || 'Variable is required']" outlined dense hide-details="auto"></v-autocomplete>
 
                   <v-autocomplete v-model="source" :items="sources" item-text="text" item-value="value" return-object
@@ -112,7 +112,7 @@
                     :rules="[v => !!v || 'Data source is required']" outlined dense hide-details="auto"></v-autocomplete>
 
                   <div v-if="source && source.value === 'raw_data'" class="sa-field-block">
-                    <div class="sa-inline-caption">QUALITY FILTER <small>Optional</small></div>
+                    <div class="sa-inline-caption">QUALITY FILTER <small style="color: rgb(245, 104, 104);">*Optional</small></div>
 
                     <v-autocomplete v-model="selected_quality_flag" :items="quality_flags" :search-input.sync="searchFlags"
                       multiple chips small-chips deletable-chips clearable autocomplete="off" label="Quality flags"
@@ -185,7 +185,16 @@
                 <v-alert v-model="no_data" dismissible type="warning" dense class="sa-inline-alert">No station observations were found for this selection.</v-alert>
 
                 <div class="sa-action-area">
-                  <v-btn color="primary" depressed block large class="sa-interpolate text-none" @click="interpolateData" :loading="loading_overlay" :disabled="loading_overlay || !variable || !source || !aggregation || !!dateRangeError">
+                  <v-btn 
+                    color="primary" 
+                    depressed 
+                    block 
+                    large 
+                    class="sa-interpolate text-none" 
+                    @click="interpolateData" 
+                    :loading="loading_overlay"
+                    :disabled="loading_overlay || !variable || !source || !aggregation || !!dateRangeError"
+                  >
                     <v-icon left>mdi-map-search</v-icon> Generate interpolation
                   </v-btn>
                   <p><v-icon size="14">mdi-information-outline</v-icon> The interpolated surface is calculated from the selected observations.</p>
@@ -197,7 +206,7 @@
           </aside>
         </section>
 
-        <!-- Observation editing is now BELOW the full-width map, not in the controls drawer. -->
+        <!-- Observation editing table -->
         <section id="sa-observations" ref="observationsSection" class="sa-observations-section" aria-label="Interpolation station measurements">
           <div class="sa-observations-panel">
             <div class="sa-observations-head">
@@ -209,9 +218,23 @@
                 </div>
               </div>
               <div class="sa-observations-actions">
+                <!-- reinterpolate btn -->
+                <v-btn 
+                  color="primary" 
+                  class="text-none" 
+                  :loading="loading_overlay"
+                  :disabled="!img_url || !availableMarkers.length ||!markers.length || loading_overlay || !variable || !source || !aggregation || !!dateRangeError"
+                  @click="onMarkerSelectionChange"
+                >
+                  <v-icon left>mdi-sync</v-icon> Re-interpolate
+                </v-btn>
+
+                <!-- add point btn -->
                 <v-btn outlined color="primary" class="text-none" @click="add_value_dialog = true" :disabled="!markers.length">
                   <v-icon left>mdi-plus</v-icon> Add point
                 </v-btn>
+
+                <!-- export csv btn -->
                 {% if request|has_any_feature_permission:"spatial-analysis:write" %}
                 <v-btn outlined color="success" class="text-none" @click="exportData" :disabled="!availableMarkers.length">
                   <v-icon left>mdi-download-outline</v-icon> Export CSV
@@ -224,28 +247,66 @@
               <div class="sa-observations-toolbar">
                 <div class="sa-observations-status">
                   <span class="sa-count-badge">[[ selectedMarkers.length ]] of [[ markers.length ]] stations selected</span>
+                  
                   <span class="sa-observations-note">Only selected stations with valid measurements are used for interpolation.</span>
                 </div>
-                <v-text-field v-model="stationTableSearch" label="Search stations" prepend-inner-icon="mdi-magnify"
-                  outlined dense hide-details clearable class="sa-observations-search"></v-text-field>
+                
+                <div>
+                  <span style="font-size: 12px; color: rgb(245, 104, 104);">
+                    "Re-interpolate" after editing to view changes.
+                  </span>
+                </div>
+
+                <v-text-field 
+                  v-model="stationTableSearch" 
+                  label="Search stations" 
+                  prepend-inner-icon="mdi-magnify"
+                  outlined 
+                  dense 
+                  hide-details 
+                  clearable 
+                  class="sa-observations-search"
+                ></v-text-field>
               </div>
-              <v-data-table ref="data_table" v-model="selectedMarkers" :headers="table_headers" :items="markers"
-                :search="stationTableSearch" :items-per-page="10" item-key="id"
-                show-select dense class="sa-station-table" :footer-props="{'items-per-page-options': [10, 25, 50, -1]}"
-                @item-selected="onMarkerSelectionChange" @toggle-select-all="onMarkerSelectionChange">
-                <template v-slot:item.show="{ item }">
-                  <v-checkbox v-model="item.show" hide-details dense class="sa-show-checkbox"></v-checkbox>
-                </template>
+
+              <v-data-table 
+                ref="data_table" 
+                v-model="selectedMarkers" 
+                :headers="table_headers" 
+                :items="markers"
+                :search="stationTableSearch" 
+                :items-per-page="10" item-key="id"
+                show-select 
+                dense 
+                class="sa-station-table" 
+                :footer-props="{'items-per-page-options': [10, 25, 50, -1]}"
+                >
+                <!-- legacy - interpolation occured on selecting different stations -->
+                <!-- @item-selected="onMarkerSelectionChange" 
+                @toggle-select-all="onMarkerSelectionChange" -->
+                <!-- lat -->
                 <template v-slot:item.latitude="{ item }"><span class="sa-coordinate">[[ Number(item.latitude).toFixed(4) ]]</span></template>
+                
+                <!-- lng -->
                 <template v-slot:item.longitude="{ item }"><span class="sa-coordinate">[[ Number(item.longitude).toFixed(4) ]]</span></template>
+                
+                <!-- measured item -->
                 <template v-slot:item.measured="props">
-                  <v-edit-dialog :return-value="props.item.measured" @save="editTable_save">
+                  <v-edit-dialog :return-value="props.item.measured">
                     <span class="sa-editable-value">[[ Number.isFinite(Number(props.item.measured)) ? Number(props.item.measured).toFixed(2) : '—' ]]<v-icon size="12" color="primary">mdi-pencil-outline</v-icon></span>
+                    
                     <template v-slot:input><v-text-field v-model.number="props.item.measured" type="number" step="any" label="Measurement" single-line></v-text-field></template>
                   </v-edit-dialog>
                 </template>
+
+                <!-- show selector -->
+                <template v-slot:item.show="{ item }">
+                  <v-checkbox v-model="item.show" hide-details dense class="sa-show-checkbox"></v-checkbox>
+                </template>
               </v-data-table>
             </template>
+
+            <!-- if interpolation has not been generated -->
             <div v-else class="sa-observations-empty">
               <v-icon size="31" color="blue-grey lighten-2">mdi-map-marker-radius-outline</v-icon>
               <strong>No station observations yet</strong>
@@ -270,7 +331,7 @@
       </v-overlay>
 
       <!-- Advanced settings dialog -->
-      <v-dialog v-model="parameters_dialog" max-width="530" :z-index="2000" content-class="sa-dialog">
+      <v-dialog v-model="parameters_dialog" max-width="530" :z-index="2000" style="z-index: 2000 !important;" content-class="sa-dialog">
         <v-card class="sa-dialog-card">
           <div class="sa-dialog-top"><span class="sa-dialog-symbol"><v-icon color="primary">mdi-cog-outline</v-icon></span><div><h2>Interpolation parameters</h2><p>Fine-tune the spatial interpolation model.</p></div><v-spacer></v-spacer><v-btn icon @click="parameters_dialog = false"><v-icon>mdi-close</v-icon></v-btn></div>
           <v-card-text class="sa-dialog-body">
@@ -288,7 +349,7 @@
       </v-dialog>
 
       <!-- Custom observation dialog -->
-      <v-dialog v-model="add_value_dialog" max-width="620" :z-index="2000" content-class="sa-dialog sa-point-dialog" scrollable eager>
+      <v-dialog v-model="add_value_dialog" max-width="620" style="z-index: 2000 !important;" content-class="sa-dialog sa-point-dialog" scrollable eager>
         <v-card class="sa-dialog-card">
           <div class="sa-dialog-top"><span class="sa-dialog-symbol"><v-icon color="primary">mdi-map-marker-plus-outline</v-icon></span><div><h2>Add observation point</h2><p>Place a custom measurement on the interpolation map.</p></div><v-spacer></v-spacer><v-btn icon @click="closeAddValue"><v-icon>mdi-close</v-icon></v-btn></div>
           <v-card-text class="sa-dialog-body">
@@ -734,11 +795,11 @@
         show: false,
       },
       table_headers: [
-        { text: "Show Name", value: "show", align: "end", width: "15%"},
-        { text: "Station", value: "name", align: "end", width: "55%"},
-        { text: "Lat", value: "latitude", align: "end", width: "10%"},
-        { text: "Lon", value: "longitude", align: "end", width: "10%"},
-        { text: "Value", value: "measured", align: "end", width: "10%"},
+        { text: "Station", value: "name", align: "start", width: "30%"},
+        { text: "Lat", value: "latitude", align: "start", width: "15%"},
+        { text: "Lon", value: "longitude", align: "start", width: "15%"},
+        { text: "Value", value: "measured", align: "start", width: "20%"},
+        { text: "Show Name", value: "show", align: "start", width: "20%"},
       ],
       valid: true,
       date_menu: false,
@@ -2326,7 +2387,16 @@
   .sa-dialog .v-card { border-radius: 11px !important; }
   .sa-dialog-card { background: #fff !important; }
   .sa-dialog-top { display: flex; align-items: center; gap: 12px; padding: 21px 23px 18px; border-bottom: 1px solid #edf0f2; }
-  .sa-dialog-symbol { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 38px; width: 38px; height: 38px; background: #f9fafb; border: 1px solid #e7e8ec; border-radius: 8px; }
+  .sa-dialog-symbol { 
+    display: inline-flex; 
+    align-items: center; 
+    justify-content: center; 
+    flex: 0 0 38px; 
+    width: 38px; 
+    height: 38px; 
+    background: #f9fafb; 
+    border: 1px solid #e7e8ec; 
+    border-radius: 8px;}
   .sa-dialog-top h2 { font-size: 17px; font-weight: 700; color: #252e38; margin: 0; }
   .sa-dialog-top p { color: #77818e; font-size: 12px; margin: 3px 0 0; }
   .sa-dialog-body { padding: 21px 23px 8px !important; }

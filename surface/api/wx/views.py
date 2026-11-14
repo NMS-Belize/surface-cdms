@@ -712,7 +712,7 @@ class SpatialAnalysisView(WxPermissionRequiredMixin, LoginRequiredMixin, Templat
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["quality_flags"] = QualityFlag.objects.all()
+        context["quality_flags"] = QualityFlag.objects.exclude(pk=5) # exculding the 'missing' qc flag which has an id of 5
         return context
 
 

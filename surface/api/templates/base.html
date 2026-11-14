@@ -87,25 +87,12 @@
         display: none !important;
       }
 
-      /*
-        SURFACE GLOBAL STACKING ORDER
-        -------------------------------------------
-        Leaflet: isolated inside each map container
-        Floating UTC clock: 170
-        Permanent left navigation: 180
-        Vuetify menus/dialogs: framework-managed (above navigation)
-        Page-navigation loading overlay: 2400+
-        Toast notifications: 2500
-
-        Prefer local page-specific z-index adjustments over adding huge
-        global values; a high z-index in base.html affects every page.
-      */
       .leaflet-container {
         isolation: isolate;
       }
 
       #slide-out.sidenav {
-        z-index: 180;
+        z-index: 10000;
       }
 
       /*
@@ -966,12 +953,12 @@
           <li class="py-4">
             <div class="d-flex">
               <div style="max-width: 55px;" class="w-100">
-                <a href="{% url 'stations-map' %}">
+                <a>
                   <img style="padding: 0px 8px" class="img-logo" src="{% static 'images/circle_logo_small.png' %}" />
                 </a>
               </div>
               <div class="w-100" style="position: relative;">
-                <a href="{% url 'stations-map' %}">
+                <a>
                   <img class="img-logo-surface" src="{% static 'images/surface_logo_smaller.png' %}" />
                 </a>
               </div>
@@ -1235,16 +1222,16 @@
                 </span>
               </a>
 
-              {% if request.user.is_superuser %}
-                <a id="admin-area"  href="{% url 'admin:index' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Administrative Area<i class="material-icons secondary-content">business_center</i></a>
+              {% if request|has_any_feature_permission:"configuration-settings:read" %}
+                <a id="configuration-settings"  href="{% url 'configuration-settings' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Configuration<i class="material-icons secondary-content">build</i></a>
               {% endif %}
 
               {% if request|has_any_feature_permission:"manage-permissions:read" %}
                  <a id="manage-permissions"  href="{% url 'manage-permissions' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Manage Permissions<i class="material-icons secondary-content">key_vertical</i></a>
               {% endif %}
 
-              {% if request|has_any_feature_permission:"configuration-settings:read" %}
-                <a id="configuration-settings"  href="{% url 'configuration-settings' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Configuration<i class="material-icons secondary-content">build</i></a>
+              {% if request.user.is_superuser %}
+                <a id="admin-area"  href="{% url 'admin:index' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Administrative Area<i class="material-icons secondary-content">business_center</i></a>
               {% endif %}
 
               <!-- pill border at the bottom of the dropdown -->

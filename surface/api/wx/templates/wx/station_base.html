@@ -30,6 +30,7 @@
           <i class="material-icons-outlined" aria-hidden="true">place</i>
           Browse metadata
         </a>
+
         <a class="station-base-action station-base-action--neutral" href="{% url 'stations-list' %}">
           <i class="material-icons-outlined" aria-hidden="true">list</i>
           Station list
@@ -58,10 +59,11 @@
           <i class="material-icons-outlined" aria-hidden="true">travel_explore</i>
           Browse metadata
         </a>
-        <a class="station-base-action station-base-action--neutral" href="{% url 'stations-list' %}">
+        <a class="station-base-action station-base-action--primary" href="{% url 'stations-list' %}">
           <i class="material-icons-outlined" aria-hidden="true">list</i>
           Station list
         </a>
+
         {% endif %}
         {% if request|has_any_feature_permission:"stations-list:delete" %}
         <a class="station-base-action station-base-action--danger" href="{% url 'station-delete' station.id %}">
@@ -351,15 +353,28 @@
     border-color: #cecece;
   }
 
+  .station-base-page .station-base-action--primary {
+    background-color: #1976d2 !important;
+    border-color: #1976d2 !important;
+    color: #ffffff !important;
+    caret-color: #ffffff;
+  }
+
+  .station-base-page .station-base-action--primary:hover {
+    background-color: #2185e5 !important;
+    border-color: #2185e5 !important;
+  }
+
   .station-base-page .station-base-action--danger {
-    border-color: #f0cacc;
-    color: #b32633;
+    background-color: #ff5252 !important;
+    border-color: #ff5252 !important;
+    color: #ffffff !important;
+    caret-color: #ffffff;
   }
 
   .station-base-page .station-base-action--danger:hover {
-    color: #a01827;
-    background: #fff6f6;
-    border-color: #ddaeb3;
+    background-color: #ff6666 !important;
+    border-color: #ff6666 !important;
   }
 
   /*

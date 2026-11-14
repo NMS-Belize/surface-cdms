@@ -222,11 +222,11 @@
           </div>
 
           <!-- Station-only history option; never reload the map or change panel mode. -->
-          <div v-if="selected.station.id !== null && !isMaintenance(data_type)" class="station-history-toggle">
+          <!-- <div v-if="selected.station.id !== null && !isMaintenance(data_type)" class="station-history-toggle">
             <v-switch v-model="retrieveLast31Days" label="Retrieve last 31 days of data" inset color="primary" hide-details dense
               class="mt-0 pt-0" @change="getStationData(selected.station)"></v-switch>
             <span class="station-history-hint">Only refreshes this station · Relative to the reporting period</span>
-          </div>
+          </div> -->
 
 
               <div v-if="selected.station.id === null" class="sidebar-empty-state">
@@ -309,7 +309,7 @@
                       class="sm-data-table"
                     >
                       <template v-slot:item.amount="{ item }">
-                        <v-chip @click="goTo()" small class="sm-count-chip" :color="item.color" dark>
+                        <v-chip @click="goTo(selected.station.id, item.id)" small class="sm-count-chip" :color="item.color" dark>
                           [[item.amount]]
                         </v-chip>
                       </template>                               
@@ -803,7 +803,7 @@
     methods: {
       goTo(selected_station_id = null, item_var_id = null){
         if (this.data_type=="Communication"){
-          this.goToDataInventory();
+          this.goToDataInventory(selected_station_id, item_var_id, this.selected.station.offset_min);
         }
         else if (['Quality Control', 'Validation'].includes(this.data_type)){
           this.goToDataValidation(selected_station_id, item_var_id, this.selected.station.offset_min);
@@ -869,9 +869,33 @@
         window.open(url, '_blank', 'noopener');
       },
 
-      goToDataInventory(){
-        const url = `/wx/data/inventory`;
-        window.open(url, '_blank');
+      goToDataInventory(selected_station_id = null, item_var_id = null, utc_offset_min = null){
+        const stationOffset = Number.isFinite(Number(utc_offset_min)) ? Number(utc_offset_min) : 0;
+        let initial_datetime;
+        let final_datetime;
+
+        if (this.time_type === 'Last 24h') {
+          // Rolling 24-hour interval, displayed using the selected station offset.
+          final_datetime = moment.utc().utcOffset(stationOffset);
+          initial_datetime = final_datetime.clone().subtract(24, 'hours');
+        } else {
+          // Pick-a-day is a calendar day in the configured SURFACE timezone.
+          // Calculate each midnight separately to handle DST correctly.
+          const startUtc = this.localMidnightUtc(this.date);
+          const [year, month, day] = this.date.split('-').map(Number);
+          const nextDate = new Date(Date.UTC(year, month - 1, day + 1))
+            .toISOString().slice(0, 10);
+          const endUtc = this.localMidnightUtc(nextDate);
+          initial_datetime = moment.utc(startUtc).utcOffset(stationOffset);
+          final_datetime = moment.utc(endUtc).utcOffset(stationOffset);
+        }
+
+        const url = `/wx/data/inventory?` +
+          `year=${initial_datetime.format('YYYY')}` +
+          `&month=${initial_datetime.format('MM')}` +
+          `&station_id=${encodeURIComponent(selected_station_id)}` +
+          `&variable_id=${encodeURIComponent(item_var_id)}`;
+        window.open(url, '_blank', 'noopener');
       },
       
       goToEquipmentInventory(){
