@@ -329,7 +329,7 @@
           ansible.builtin.file:
             path: "{{ surface_repo_path }}LRGS-installation-script"
             state: absent
-      when: enable_lrgs in ['true', 'True', 'TRUE']
+      # when: enable_lrgs in ['true', 'True', 'TRUE'] # legacy settings
 
 
 
