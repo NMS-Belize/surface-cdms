@@ -15125,3 +15125,8 @@ class GroupPageAccessView(views.APIView):
                 WxGroupPageAccess.objects.bulk_create(objs_to_create)
 
         return Response({"message": "ok"}, status=status.HTTP_200_OK)
+
+
+
+# FTP Ingestion FXNS START
+# FTP Ingestion FXNS END

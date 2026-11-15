@@ -6,6 +6,7 @@ from rest_framework import routers
 from django.contrib.auth.decorators import login_required
 
 from wx import views
+from wx import ftp_ingestion_views as ftp_views
 
 router = routers.DefaultRouter()
 router.register(r'station_images', views.StationImageViewSet)
@@ -288,6 +289,19 @@ urlpatterns = [
     # Agrometeorology: Calculated Products Page
     path('wx/agromet/products/', views.AgroMetProductsView.as_view(), name='agromet-products'),    
     path('wx/agromet/products/get/', views.get_agromet_products_data, name='get-agromet-products-data'),
+
+    # FTP Ingestion Page
+    path('ftp-ingestion/', ftp_views.FTPDataIngestionView.as_view(), name='ftp-ingestion'),
+    path('ftp-ingestion/api/servers/', ftp_views.ftp_server_collection, name='ftp-ingestion-servers'),
+    path('ftp-ingestion/api/servers/test/', ftp_views.ftp_server_test, name='ftp-ingestion-server-test'),
+    path('ftp-ingestion/api/servers/<int:pk>/', ftp_views.ftp_server_detail, name='ftp-ingestion-server-detail'),
+    path('ftp-ingestion/api/servers/<int:pk>/delete-preview/', ftp_views.ftp_server_delete_preview, name='ftp-ingestion-server-delete-preview'),
+    path('ftp-ingestion/api/jobs/', ftp_views.ftp_job_collection, name='ftp-ingestion-jobs'),
+    path('ftp-ingestion/api/jobs/<int:pk>/', ftp_views.ftp_job_detail, name='ftp-ingestion-job-detail'),
+    path('ftp-ingestion/api/references/', ftp_views.ftp_references, name='ftp-ingestion-references'),
+    path('ftp-ingestion/api/files/', ftp_views.ftp_file_collection, name='ftp-ingestion-files'),
+    path('ftp-ingestion/api/files/<int:pk>/availability/', ftp_views.ftp_file_availability, name='ftp-ingestion-file-availability'),
+    path('ftp-ingestion/api/files/<int:pk>/download/', ftp_views.ftp_file_download, name='ftp-ingestion-file-download'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

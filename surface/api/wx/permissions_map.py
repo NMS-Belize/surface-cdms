@@ -200,6 +200,23 @@ ENDPOINT_PARENT_PAGE = {
 
 
     # -------------------------------------------------------------------------
+    # FTP Ingestion Page (ftp-ingestion)
+    # -------------------------------------------------------------------------
+    # Page:
+    #   ftp-ingestion (GET page)
+    "ftp-ingestion-servers": ("ftp-ingestion", "write"),
+    "ftp-ingestion-server-test": ("ftp-ingestion", "write"),
+    "ftp-ingestion-server-detail": ("ftp-ingestion", "delete"),
+    "ftp-ingestion-server-delete-preview": ("ftp-ingestion", "delete"),
+    "ftp-ingestion-jobs": ("ftp-ingestion", "write"),
+    "ftp-ingestion-job-detail": ("ftp-ingestion", "delete"),
+    "ftp-ingestion-references": ("ftp-ingestion", "read"),
+    "ftp-ingestion-files": ("ftp-ingestion", "read"),
+    "ftp-ingestion-file-availability": ("ftp-ingestion", "read"),
+    "ftp-ingestion-file-download": ("ftp-ingestion", "write"),
+
+
+    # -------------------------------------------------------------------------
     # Data Export Page (data-export)
     # -------------------------------------------------------------------------
     # Page:

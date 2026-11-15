@@ -310,5 +310,17 @@
             "description": "View and manage custom threshold rules for each station.",
 		    "category_id": 6
         }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 30,
+        "fields": {
+            "created_at": "2026-09-25T00:00:00Z",
+            "updated_at": "2026-09-25T00:00:00Z",
+            "name": "FTP Ingestion",
+            "url_name": "ftp-ingestion",
+            "description": "View and manage FTP connections, scheduled station ingestion, and locally stored files.",
+		    "category_id": 4
+        }
     }
 ]

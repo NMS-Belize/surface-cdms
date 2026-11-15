@@ -1,0 +1,1011 @@
+{% extends "base.html" %}
+{% load wx_filters %}
+{% load static %}
+{% block content %}
+<div class="srf-container ftp-page">
+  <form hidden id="ftp-csrf-form">{% csrf_token %}</form>
+
+  <div id="ftp-ingestion-app" v-cloak>
+    <!-- Vuetify requires an application root for dialog overlays and select menus. -->
+    <v-app class="ftp-v-app">
+      <header class="ftp-page-heading">
+        <div class="ftp-heading-copy">
+          <span class="srf-display-1 text-uppercase">FTP Data Ingestion</span>
+          <p>Manage FTP connections, scheduled station ingestion, and locally stored files.</p>
+        </div>
+        <div class="ftp-header-mark"><v-icon size="18" color="primary">mdi-cloud-download-outline</v-icon><span>DATA OPERATIONS</span></div>
+      </header>
+
+      <!-- Compact overview with real counts from loaded API data. -->
+      <div class="ftp-overview" aria-label="Ingestion overview">
+        <div class="ftp-overview-item">
+          <span class="ftp-overview-icon ftp-overview-icon--blue"><v-icon size="20">mdi-server-network</v-icon></span>
+          <div><div class="ftp-overview-value">[[ loading.servers ? '…' : servers.length ]]</div><div class="ftp-overview-label">FTP servers</div></div>
+        </div>
+        <div class="ftp-overview-item">
+          <span class="ftp-overview-icon ftp-overview-icon--green"><v-icon size="20">mdi-sync</v-icon></span>
+          <div><div class="ftp-overview-value">[[ loading.jobs ? '…' : activeJobsCount ]] <small v-if="jobs.length">/ [[ jobs.length ]]</small></div><div class="ftp-overview-label">Active ingestion jobs</div></div>
+        </div>
+        <div class="ftp-overview-item">
+          <span class="ftp-overview-icon ftp-overview-icon--purple"><v-icon size="20">mdi-file-document-multiple-outline</v-icon></span>
+          <div><div class="ftp-overview-value">[[ loading.files ? '…' : (filePage === 1 && !files.length ? '—' : fileCountLabel) ]]</div><div class="ftp-overview-label">Files on current page</div></div>
+        </div>
+      </div>
+
+      <v-tabs v-model="tab" class="ftp-tabs" show-arrows @change="onTabChange" color="primary" background-color="white">
+        <v-tabs-slider color="primary"></v-tabs-slider>
+        <v-tab><v-icon left size="18">mdi-server-network</v-icon>FTP Servers</v-tab>
+        <v-tab><v-icon left size="18">mdi-calendar-clock-outline</v-icon>Ingestion Jobs</v-tab>
+        <v-tab><v-icon left size="18">mdi-file-document-multiple-outline</v-icon>File History</v-tab>
+      </v-tabs>
+
+      <v-tabs-items v-model="tab" class="ftp-tab-panels" touchless>
+        <!-- FTP SERVER TAB -->
+        <v-tab-item>
+          <section class="ftp-section">
+            <div class="ftp-section-heading">
+              <div class="ftp-section-name"><span class="ftp-title-icon ftp-title-icon--blue"><v-icon>mdi-server-network</v-icon></span><div><h2>FTP servers</h2><p>Manage connection details and validate access to remote servers.</p></div></div>
+              
+              {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+              <v-btn 
+                color="primary" 
+                depressed class="ftp-main-btn" @click="openServerDialog()"
+              >
+                <v-icon left size="19">mdi-plus</v-icon>
+                Add FTP server
+              </v-btn>
+              {% endif %}
+            </div>
+
+            <div class="ftp-control-panel">
+              <div class="ftp-table-toolbar">
+                <div class="ftp-toolbar-title"><strong>Configured connections</strong><span class="ftp-quiet-count">[[ servers.length ]] total</span></div>
+                <div class="ftp-toolbar-controls">
+                  <v-text-field v-model="serverSearch" dense outlined clearable hide-details prepend-inner-icon="mdi-magnify" placeholder="Search servers…" class="ftp-search-field"></v-text-field>
+                  <v-btn outlined color="primary" class="ftp-refresh-btn" :loading="loading.servers" @click="loadServers"><v-icon left size="17">mdi-refresh</v-icon>Refresh</v-btn>
+                </div>
+              </div>
+              <v-data-table :headers="serverHeaders" :items="servers" :search="serverSearch" :loading="loading.servers" :items-per-page="10" class="ftp-table" mobile-breakpoint="680" loading-text="Loading FTP servers…">
+                <template v-slot:item.name="{ item }"><div class="ftp-name-with-icon"><span class="ftp-row-icon ftp-row-icon--server"><v-icon size="17">mdi-server</v-icon></span><span class="ftp-cell-primary">[[ item.name ]]</span></div></template>
+                <template v-slot:item.host="{ item }"><div class="ftp-cell-primary ftp-monospace">[[ item.host ]]</div><div class="ftp-cell-secondary">Port [[ item.port ]]</div></template>
+                <template v-slot:item.username="{ item }"><span class="ftp-cell-primary">[[ item.username ]]</span></template>
+                <template v-slot:item.is_active_mode="{ item }"><span class="ftp-pill" :class="item.is_active_mode ? 'ftp-pill--blue' : 'ftp-pill--slate'"><span class="ftp-pill-dot"></span>[[ item.is_active_mode ? 'Active mode' : 'Passive mode' ]]</span></template>
+                <template v-slot:item.jobs_count="{ item }"><span class="ftp-job-count">[[ item.jobs_count == null ? '—' : item.jobs_count ]]</span></template>
+                <template v-slot:item.actions="{ item }"><div class="ftp-row-actions">
+                  <v-btn small outlined color="success" class="ftp-action-button" :loading="testingId === item.id" :disabled="!!testingId && testingId !== item.id" @click="testExistingServer(item)"><v-icon left size="16">mdi-connection</v-icon>Test</v-btn>
+                  
+                  <!-- edit btn -->
+                  {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+                  <v-btn small text color="primary" class="ftp-action-button" @click="openServerDialog(item)"><v-icon left size="17">mdi-pencil-outline</v-icon>Edit</v-btn>
+                  {% endif %}
+
+                  <!-- delete btn -->
+                  {% if request|has_any_feature_permission:"ftp-ingestion:delete" %}
+                  <v-btn small icon color="error" title="Delete FTP server" :aria-label="'Delete ' + item.name" @click="openServerDelete(item)"><v-icon size="19">mdi-delete-outline</v-icon></v-btn>
+                  {% endif %}
+                </div></template>
+                <template v-slot:no-data><div class="ftp-empty-state"><v-icon size="38" color="grey lighten-1">mdi-server-off</v-icon><strong>No FTP servers found</strong><span>[[ serverSearch ? 'Try a different search.' : 'Add a server to begin configuring FTP ingestion.' ]]</span></div></template>
+              </v-data-table>
+            </div>
+          </section>
+        </v-tab-item>
+
+        <!-- INGESTION JOBS TAB -->
+        <v-tab-item>
+          <section class="ftp-section">
+            <div class="ftp-section-heading">
+              <div class="ftp-section-name"><span class="ftp-title-icon ftp-title-icon--green"><v-icon>mdi-calendar-clock-outline</v-icon></span><div><h2>Station ingestion jobs</h2><p>Configure station sources, file patterns, and scheduled processing.</p></div></div>
+              
+              {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+              <v-btn color="primary" depressed class="ftp-main-btn" @click="openJobDialog()"><v-icon left size="19">mdi-plus</v-icon>Add ingestion job</v-btn>
+              {% endif %}
+            </div>
+            <div class="ftp-control-panel">
+              <div class="ftp-table-toolbar">
+                <div class="ftp-toolbar-title"><strong>Scheduled ingestions</strong><span class="ftp-quiet-count">[[ activeJobsCount ]] active · [[ jobs.length ]] total</span></div>
+                <div class="ftp-toolbar-controls"><v-text-field v-model="jobSearch" dense outlined clearable hide-details prepend-inner-icon="mdi-magnify" placeholder="Search jobs…" class="ftp-search-field"></v-text-field>
+                  <v-btn outlined color="primary" class="ftp-refresh-btn" :loading="loading.jobs" @click="loadJobs"><v-icon left size="17">mdi-refresh</v-icon>Refresh</v-btn>
+                </div>
+              </div>
+              <v-data-table :headers="jobHeaders" :items="filteredJobs" :loading="loading.jobs" :items-per-page="10" class="ftp-table" mobile-breakpoint="800" loading-text="Loading ingestion jobs…">
+                <template v-slot:item.station_name="{ item }"><div class="ftp-name-with-icon"><span class="ftp-row-icon ftp-row-icon--station"><v-icon size="17">mdi-map-marker-outline</v-icon></span><span class="ftp-cell-primary">[[ item.station_name ]]</span></div></template>
+                <template v-slot:item.source="{ item }"><div class="ftp-cell-primary">[[ item.ftp_server_name ]]</div><div class="ftp-cell-secondary ftp-monospace ftp-ellipsis" :title="item.remote_folder">[[ item.remote_folder ]]</div></template>
+                <template v-slot:item.file_pattern="{ item }"><code class="ftp-code">[[ item.file_pattern ]]</code></template>
+                <template v-slot:item.decoder_name="{ item }"><span class="ftp-cell-primary">[[ item.decoder_name ]]</span></template>
+                <template v-slot:item.cron_schedule="{ item }"><code class="ftp-code">[[ item.cron_schedule ]]</code></template>
+
+                <template v-slot:item.is_active="{ item }">
+                  <div class="ftp-activity">
+                    {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+                    <v-switch 
+                      :input-value="item.is_active" inset dense hide-details 
+                      color="success" class="ftp-status-switch" 
+                      :disabled="togglingJob === item.id" :loading="togglingJob === item.id" 
+                      @change="toggleJob(item, $event)"
+                    >
+                    </v-switch>
+                    {% endif %}
+                    
+                    <span class="ftp-pill" :class="item.is_active ? 'ftp-pill--green' : 'ftp-pill--amber'">
+                      <span class="ftp-pill-dot"></span>
+                      [[ item.is_active ? 'Active' : 'Paused' ]]
+                    </span>
+                  </div>
+                </template>
+                
+                <template v-slot:item.actions="{ item }">
+                  <div class="ftp-row-actions">
+
+                    {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+                    <v-btn small text color="primary" class="ftp-action-button" @click="openJobDialog(item)">
+                      <v-icon left size="17">mdi-pencil-outline</v-icon>
+                      Edit
+                    </v-btn>
+                    {% endif %}
+
+                    {% if request|has_any_feature_permission:"ftp-ingestion:delete" %}
+                    <v-btn 
+                      small icon color="error" :title="'Delete ingestion job for ' + item.station_name" 
+                      @click="deleteJobTarget = item; jobDeleteOpen = true"
+                    >
+                      <v-icon size="19">mdi-delete-outline</v-icon>
+                    </v-btn>
+                    {% endif %}
+                  </div>
+                </template>
+                <template v-slot:no-data><div class="ftp-empty-state"><v-icon size="38" color="grey lighten-1">mdi-calendar-remove-outline</v-icon><strong>No ingestion jobs found</strong><span>[[ jobSearch ? 'Try a different search.' : 'Add a job to connect a station with an FTP source.' ]]</span></div></template>
+              </v-data-table>
+            </div>
+          </section>
+        </v-tab-item>
+
+        <!-- FILE HISTORY TAB -->
+        <v-tab-item>
+          <section class="ftp-section">
+            <div class="ftp-section-heading">
+              <div class="ftp-section-name"><span class="ftp-title-icon ftp-title-icon--purple"><v-icon>mdi-file-document-multiple-outline</v-icon></span><div><h2>Ingested file history</h2><p>Explore ingested file records and download files that are still stored locally.</p></div></div>
+              <v-btn outlined color="primary" class="ftp-refresh-btn" :loading="loading.files" @click="loadFiles(1)"><v-icon left size="17">mdi-refresh</v-icon>Refresh files</v-btn>
+            </div>
+            <div class="ftp-filter-panel">
+              <div class="ftp-filter-head"><div class="ftp-filter-title"><v-icon size="18" color="primary">mdi-filter-variant</v-icon><strong>Filter file history</strong></div><v-btn text small color="primary" @click="fileFilterExpanded = !fileFilterExpanded">[[ fileFilterExpanded ? 'Collapse' : 'Expand' ]]<v-icon right size="17">[[ fileFilterExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down' ]]</v-icon></v-btn></div>
+              <div v-show="fileFilterExpanded" class="ftp-filter-body">
+                <div class="ftp-file-filters">
+                  <v-text-field v-model="fileFilters.search" dense outlined hide-details clearable label="Filename or hash" prepend-inner-icon="mdi-magnify" @keyup.enter="loadFiles(1)"></v-text-field>
+                  <v-autocomplete v-model="fileFilters.station" :items="references.stations" item-text="name" item-value="id" :loading="loading.references" clearable dense outlined hide-details label="Station" :menu-props="{ offsetY: true, maxHeight: 300, contentClass: 'ftp-select-menu' }" no-data-text="No stations available"></v-autocomplete>
+                  <v-autocomplete v-model="fileFilters.decoder" :items="references.decoders" item-text="name" item-value="id" :loading="loading.references" clearable dense outlined hide-details label="Decoder" :menu-props="{ offsetY: true, maxHeight: 300, contentClass: 'ftp-select-menu' }" no-data-text="No decoders available"></v-autocomplete>
+                  <v-select v-model="fileFilters.status" :items="references.statuses" item-text="name" item-value="id" :loading="loading.references" clearable dense outlined hide-details label="Status" :menu-props="{ offsetY: true, maxHeight: 300, contentClass: 'ftp-select-menu' }" no-data-text="No statuses available"></v-select>
+                  <!-- From Date -->
+                  <v-menu
+                    v-model="fromDateMenu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        v-model="fileFilters.from"
+                        label="From date"
+                        placeholder="Select start date"
+                        prepend-inner-icon="mdi-calendar-outline"
+                        dense
+                        outlined
+                        clearable
+                        hide-details
+                        v-bind="attrs"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+
+                    <v-date-picker
+                      v-model="fileFilters.from"
+                      :max="fileFilters.to || undefined"
+                      @input="fromDateMenu = false"
+                      no-title
+                    ></v-date-picker>
+                  </v-menu>
+
+                  <!-- To Date -->
+                  <v-menu
+                    v-model="toDateMenu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        v-model="fileFilters.to"
+                        label="To date"
+                        placeholder="Select end date"
+                        prepend-inner-icon="mdi-calendar-outline"
+                        dense
+                        outlined
+                        clearable
+                        hide-details
+                        v-bind="attrs"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+
+                    <v-date-picker
+                      v-model="fileFilters.to"
+                      :min="fileFilters.from || undefined"
+                      @input="toDateMenu = false"
+                      no-title
+                    ></v-date-picker>
+                  </v-menu>
+                </div>
+                <div class="ftp-filter-actions"><v-btn color="primary" depressed class="ftp-main-btn" :loading="loading.files" @click="loadFiles(1)"><v-icon left size="18">mdi-magnify</v-icon>Apply filters</v-btn><v-btn outlined color="grey darken-2" class="ftp-refresh-btn" @click="resetFileFilters"><v-icon left size="17">mdi-filter-remove-outline</v-icon>Clear</v-btn><span class="ftp-muted-note">25 records per page · newest first</span></div>
+              </div>
+              <v-alert v-if="referencesError" dense type="warning" class="ma-3"><div class="d-flex align-center justify-space-between flex-wrap"><span>Dropdown options could not load: [[ referencesError ]]</span><v-btn color="primary" small text :loading="loading.references" @click="loadReferences">Retry</v-btn></div></v-alert>
+            </div>
+            <div class="ftp-control-panel ftp-file-table">
+              <div class="ftp-table-toolbar"><div class="ftp-toolbar-title"><strong>File records</strong><span class="ftp-quiet-count">Page [[ filePage ]] · [[ files.length ]] shown</span></div><span class="ftp-readonly"><v-icon size="15" left>mdi-lock-outline</v-icon>Read-only history</span></div>
+              <v-data-table :headers="fileHeaders" :items="files" :loading="loading.files" hide-default-footer :items-per-page="-1" class="ftp-table" mobile-breakpoint="720" loading-text="Loading file history…">
+                <!-- Show size and duration in their own columns for easier comparison. -->
+                <template v-slot:item.filename="{ item }"><div class="ftp-name-with-icon"><span class="ftp-row-icon ftp-row-icon--file"><v-icon size="17">mdi-file-document-outline</v-icon></span><div class="ftp-file-name"><div class="ftp-cell-primary ftp-ellipsis" :title="item.filename">[[ item.filename ]]</div></div></div></template>
+                <template v-slot:item.file_size="{ item }"><span class="ftp-cell-primary ftp-monospace">[[ formatSizeMB(item.file_size) ]]</span></template>
+                <template v-slot:item.processing_duration_seconds="{ item }"><span class="ftp-cell-primary">[[ formatProcessingDuration(item.processing_duration_seconds) ]]</span></template>
+                <template v-slot:item.station_name="{ item }"><span class="ftp-cell-primary">[[ item.station_name ]]</span></template>
+                <template v-slot:item.status_name="{ item }"><span class="ftp-pill" :class="fileStatusClass(item.status_name)"><span class="ftp-pill-dot"></span>[[ item.status_name ]]</span></template>
+                <template v-slot:item.created_at="{ item }"><span class="ftp-date-text">[[ formatDate(item.created_at) ]]</span></template>
+                
+                <template v-slot:item.actions="{ item }">
+                  <div class="ftp-row-actions">
+                    <v-btn small text color="grey darken-2" class="ftp-action-button" @click="selectedFile=item; fileDetailOpen=true">
+                      <v-icon left size="17">mdi-eye-outline</v-icon>
+                      Details
+                    </v-btn>
+                    
+                    {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+                    <v-btn small outlined color="primary" class="ftp-action-button" :loading="downloadingId === item.id" @click="downloadFile(item)">
+                      <v-icon left size="16">mdi-download</v-icon>
+                      Download
+                    </v-btn>
+                    {% endif %}
+                  </div>
+                </template>
+                
+                <template v-slot:no-data><div class="ftp-empty-state"><v-icon size="38" color="grey lighten-1">mdi-file-search-outline</v-icon><strong>No file records</strong><span>Try clearing or adjusting the filters.</span></div></template>
+              </v-data-table>
+              <div class="ftp-pagination"><span>Page <strong>[[ filePage ]]</strong></span><v-btn small outlined color="primary" :disabled="filePage <= 1 || loading.files" @click="loadFiles(filePage-1)"><v-icon left size="18">mdi-chevron-left</v-icon>Previous</v-btn><v-btn small outlined color="primary" :disabled="!hasNextFilePage || loading.files" @click="loadFiles(filePage+1)">Next<v-icon right size="18">mdi-chevron-right</v-icon></v-btn></div>
+            </div>
+          </section>
+        </v-tab-item>
+      </v-tabs-items>
+
+      <!-- SERVER FORM: dialog stays inside the v-app for correctly layered Vuetify menus. -->
+      <v-dialog v-model="serverDialog" max-width="660" scrollable persistent>
+        <v-card class="ftp-dialog">
+          <v-card-title class="ftp-dialog-title"><span class="ftp-dialog-icon ftp-dialog-icon--blue"><v-icon>mdi-server-network</v-icon></span><div><h3>[[ serverDraft.id ? 'Edit FTP server' : 'Add FTP server' ]]</h3><p>Connection settings</p></div><v-spacer></v-spacer><v-btn icon title="Close dialog" @click="serverDialog=false"><v-icon>mdi-close</v-icon></v-btn></v-card-title>
+          <v-card-text class="ftp-dialog-body">
+            <div class="ftp-form-note"><v-icon color="primary" size="17">mdi-shield-key-outline</v-icon><span>Passwords are never returned by the listing API. Leave the password blank when editing to keep the existing one.</span></div>
+            <h4 class="ftp-form-section-title">SERVER DETAILS</h4>
+            <v-text-field v-model.trim="serverDraft.name" label="Server name" dense outlined maxlength="64" :error-messages="fieldErrors.name" placeholder="Example: Regional AWS FTP"></v-text-field>
+            <v-row dense><v-col cols="12" sm="8"><v-text-field v-model.trim="serverDraft.host" label="Host / IP address" dense outlined maxlength="256" :error-messages="fieldErrors.host" placeholder="ftp.example.org"></v-text-field></v-col><v-col cols="12" sm="4"><v-text-field v-model.number="serverDraft.port" type="number" label="Port" dense outlined :error-messages="fieldErrors.port"></v-text-field></v-col></v-row>
+            <h4 class="ftp-form-section-title">AUTHENTICATION</h4>
+            <v-text-field v-model.trim="serverDraft.username" label="Username" dense outlined maxlength="128" :error-messages="fieldErrors.username" autocomplete="off"></v-text-field>
+            <v-text-field v-model="serverDraft.password" :type="showPassword ? 'text' : 'password'" dense outlined maxlength="128" autocomplete="new-password" :label="serverDraft.id ? 'Change password (optional)' : 'Password'" :hint="serverDraft.id ? 'Leave blank to keep the stored password.' : 'Required for a new FTP server.'" persistent-hint :error-messages="fieldErrors.password" :append-icon="showPassword?'mdi-eye-off-outline':'mdi-eye-outline'" @click:append="showPassword=!showPassword"></v-text-field>
+            <div class="ftp-option-line"><div><strong>Active FTP mode</strong><small>Turn off to use passive FTP mode (recommended for most servers).</small></div><v-switch v-model="serverDraft.is_active_mode" inset dense hide-details color="primary"></v-switch></div>
+            <v-alert v-if="testResult" :type="testResult.success ? 'success' : 'error'" dense class="mt-4 mb-0"><strong>Connection test:</strong> [[ testResult.message ]]</v-alert>
+          </v-card-text>
+          <v-card-actions class="ftp-dialog-actions">
+            <v-btn 
+              outlined color="success" 
+              class="ftp-dialog-secondary" :loading="testingId==='form'" 
+              :disabled="!validServerDraft || !!testingId && testingId !== 'form'" 
+              @click="testServerDraft"
+            >
+              <v-icon left size="18">mdi-connection</v-icon>
+              Check connection
+            </v-btn>
+            
+            <v-spacer></v-spacer>
+
+            <v-btn color="error" depressed dark @click="serverDialog=false">Cancel</v-btn>
+            
+            {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+            <v-btn color="primary" depressed :loading="saving" :disabled="!validServerDraft" @click="saveServer">
+              <v-icon left size="17">mdi-content-save-outline</v-icon>
+              [[ serverDraft.id ? 'Save changes' : 'Add server' ]]
+            </v-btn>
+            {% endif %}
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- SERVER DELETE CONFIRMATION: keeps the existing backend revalidation. -->
+      <v-dialog v-model="serverDeleteOpen" max-width="550" persistent><v-card class="ftp-dialog"><v-card-title class="ftp-dialog-title"><div><h3>Delete FTP server?</h3><p>Permanent action</p></div><v-spacer></v-spacer><v-btn icon @click="serverDeleteOpen=false"><v-icon>mdi-close</v-icon></v-btn></v-card-title>
+        <v-card-text class="ftp-dialog-body">
+          <p>Deleting 
+            <strong>[[ serverDeleteTarget ? serverDeleteTarget.name : '' ]]</strong> 
+            will also permanently delete its associated station ingestion jobs.
+          </p>
+          
+          <v-alert v-if="serverDeletePreview" dense type="warning">
+            <strong>[[ serverDeletePreview.jobs_count ]] associated ingestion job[[ serverDeletePreview.jobs_count === 1 ? '' : 's' ]] will be deleted.</strong>
+            <div class="mt-1">Historical file records will remain.</div>
+          </v-alert>
+          
+          <v-progress-linear v-else indeterminate color="primary"></v-progress-linear>
+          
+          <p class="ftp-form-caption">Type the exact server name to confirm deletion.</p>
+          
+          <v-text-field 
+            v-model="serverDeleteTyped" outlined dense 
+            :placeholder="serverDeleteTarget ? serverDeleteTarget.name : ''" 
+            label="Confirm server name" autocomplete="off"
+          >
+          </v-text-field>
+          
+          <div class="ftp-danger-note">
+            <v-icon color="error" size="17">mdi-alert-circle-outline</v-icon>
+            This action cannot be undone.
+          </div>
+        </v-card-text>
+        
+        <v-card-actions class="ftp-dialog-actions">
+          <v-spacer></v-spacer>
+          
+          <v-btn color="success" depressed dark @click="serverDeleteOpen=false">
+            Cancel
+          </v-btn>
+          
+          {% if request|has_any_feature_permission:"ftp-ingestion:delete" %}
+          <v-btn color="error" depressed :loading="saving" 
+            :disabled="!serverDeletePreview || !serverDeleteTarget || serverDeleteTyped !== serverDeleteTarget.name" 
+            @click="confirmServerDelete"
+          >
+            <v-icon left size="17">mdi-delete-outline</v-icon>
+            
+            Delete server & [[ serverDeletePreview ? serverDeletePreview.jobs_count : '…' ]] job(s)
+          </v-btn>
+          {% endif %}
+        </v-card-actions>
+      </v-card></v-dialog>
+
+      <!-- JOB FORM: sectioned fields plus full option labels. -->
+      <v-dialog v-model="jobDialog" max-width="810" scrollable persistent><v-card class="ftp-dialog"><v-card-title class="ftp-dialog-title"><span class="ftp-dialog-icon ftp-dialog-icon--green"><v-icon>mdi-calendar-clock-outline</v-icon></span><div><h3>[[ jobDraft.id ? 'Edit ingestion job' : 'Add ingestion job' ]]</h3><p>Station ingestion configuration</p></div><v-spacer></v-spacer><v-btn icon @click="jobDialog=false"><v-icon>mdi-close</v-icon></v-btn></v-card-title>
+        <v-card-text class="ftp-dialog-body">
+          <v-alert v-if="referencesError" dense type="warning" class="mb-4"><div class="d-flex align-center justify-space-between flex-wrap"><span>Could not load dropdown options: [[ referencesError ]]</span><v-btn small text color="primary" @click="loadReferences" :loading="loading.references">Retry</v-btn></div></v-alert>
+          <div class="ftp-form-heading"><span class="ftp-form-index ftp-form-index--blue">01</span><div><strong>Source and destination</strong><small>Choose the server, station, and decoder.</small></div></div>
+          <v-row dense>
+            <v-col cols="12" sm="6"><v-autocomplete v-model="jobDraft.ftp_server" :items="references.ftp_servers" item-text="name" item-value="id" :loading="loading.references" :menu-props="{ offsetY:true, maxHeight:300, contentClass:'ftp-select-menu' }" label="FTP server" placeholder="Select a server" no-data-text="No servers available" dense outlined clearable :error-messages="fieldErrors.ftp_server" hint="Create a server in the FTP Servers tab first." persistent-hint></v-autocomplete></v-col>
+            <v-col cols="12" sm="6"><v-autocomplete v-model="jobDraft.station" :items="references.stations" item-text="name" item-value="id" :loading="loading.references" :menu-props="{ offsetY:true, maxHeight:300, contentClass:'ftp-select-menu' }" label="Station" placeholder="Search stations" no-data-text="No stations available" dense outlined clearable :error-messages="fieldErrors.station"></v-autocomplete></v-col>
+            <v-col cols="12"><v-text-field v-model.trim="jobDraft.remote_folder" label="Remote folder" placeholder="/incoming/weather/" dense outlined maxlength="1024" :error-messages="fieldErrors.remote_folder" hint="Directory path on the selected FTP server." persistent-hint></v-text-field></v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model.trim="jobDraft.file_pattern" label="File pattern" placeholder="*.csv" dense outlined maxlength="256" :error-messages="fieldErrors.file_pattern"></v-text-field></v-col>
+            <v-col cols="12" sm="6"><v-autocomplete v-model="jobDraft.decoder" :items="references.decoders" item-text="name" item-value="id" :loading="loading.references" :menu-props="{ offsetY:true, maxHeight:300, contentClass:'ftp-select-menu' }" label="Decoder" placeholder="Select a decoder" no-data-text="No decoders available" dense outlined clearable :error-messages="fieldErrors.decoder"></v-autocomplete></v-col>
+          </v-row>
+          <div class="ftp-form-heading"><span class="ftp-form-index ftp-form-index--amber">02</span><div><strong>Schedule and time</strong><small>Use the schedule already supported by SURFACE's ingestion service.</small></div></div>
+          <v-row dense><v-col cols="12" sm="6"><v-text-field v-model.trim="jobDraft.cron_schedule" label="Cron schedule" dense outlined maxlength="64" hint="Five fields: minute, hour, day, month, weekday." persistent-hint :error-messages="fieldErrors.cron_schedule"></v-text-field></v-col><v-col cols="12" sm="6"><v-text-field v-model.number="jobDraft.utc_offset_minutes" type="number" label="UTC offset (minutes)" dense outlined hint="UTC: 0" persistent-hint :error-messages="fieldErrors.utc_offset_minutes"></v-text-field></v-col></v-row>
+          <div class="ftp-form-heading"><span class="ftp-form-index ftp-form-index--purple">03</span><div><strong>Transfer and processing</strong><small>Configure how incoming files are handled.</small></div></div>
+          <div class="ftp-option-grid">
+            <div class="ftp-option-line"><div><strong>Ingestion active</strong><small>Allow scheduled processing.</small></div><v-switch v-model="jobDraft.is_active" inset dense hide-details color="success"></v-switch></div>
+            <div class="ftp-option-line"><div><strong>Delete from FTP server</strong><small>Remove remote files after retrieval.</small></div><v-switch v-model="jobDraft.delete_from_server" inset dense hide-details color="primary"></v-switch></div>
+            <div class="ftp-option-line"><div><strong>Binary transfer</strong><small>Transfer files as binary data.</small></div><v-switch v-model="jobDraft.is_binary_transfer" inset dense hide-details color="primary"></v-switch></div>
+            <div class="ftp-option-line"><div><strong>Override on conflict</strong><small>Replace existing observations on conflict.</small></div><v-switch v-model="jobDraft.override_data_on_conflict" inset dense hide-details color="primary"></v-switch></div>
+            <div class="ftp-option-line"><div><strong>Process in chunks</strong><small>Process large files in batches.</small></div><v-switch v-model="jobDraft.process_in_chunks" inset dense hide-details color="primary" :disabled="jobDraft.is_highfrequency_data"></v-switch></div>
+            <div class="ftp-option-line"><div><strong>High-frequency data</strong><small>Use the high-frequency processing path.</small></div><v-switch v-model="jobDraft.is_highfrequency_data" inset dense hide-details color="primary" :disabled="jobDraft.process_in_chunks"></v-switch></div>
+          </div>
+          <div class="ftp-info-foot"><v-icon color="primary" size="17">mdi-information-outline</v-icon>High-frequency processing and chunk processing cannot both be enabled.</div>
+          <v-alert v-if="fieldErrors.__all__" dense type="error" class="mt-3">[[ Array.isArray(fieldErrors.__all__) ? fieldErrors.__all__.join(' ') : fieldErrors.__all__ ]]</v-alert>
+        </v-card-text>
+        <v-card-actions class="ftp-dialog-actions">
+          <span v-if="!validJobDraft" class="ftp-quiet-count ftp-required-hint">
+            Complete the required fields to save.
+          </span>
+          
+          <v-spacer></v-spacer>
+          
+          <v-btn color="error" depressed dark @click="jobDialog=false">
+            Cancel
+          </v-btn>
+          
+          {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+          <v-btn color="primary" depressed :disabled="!validJobDraft || loading.references" :loading="saving" @click="saveJob">
+            <v-icon left size="17">mdi-content-save-outline</v-icon>
+            [[ jobDraft.id ? 'Save changes' : 'Create job' ]]
+          </v-btn>
+          {% endif %}
+        </v-card-actions>
+      </v-card></v-dialog>
+
+      <v-dialog v-model="jobDeleteOpen" max-width="480">
+        <v-card class="ftp-dialog">
+          <v-card-title class="ftp-dialog-title">
+            <div>
+              <h3>Delete ingestion job?</h3>
+              <p>Permanent action</p>
+            </div>
+            
+            <v-spacer></v-spacer>
+            
+            <v-btn icon @click="jobDeleteOpen=false">
+              
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+
+          <v-card-text class="ftp-dialog-body">
+            <p>Delete the ingestion configuration for <strong>[[ deleteJobTarget ? deleteJobTarget.station_name : '' ]]</strong>?</p>
+            
+            <div class="ftp-info-foot">
+              <v-icon size="16" color="primary">mdi-information-outline</v-icon>
+              
+              Existing file history records will be retained.
+            </div>
+          </v-card-text>
+
+          <v-card-actions class="ftp-dialog-actions">
+            <v-spacer></v-spacer>
+
+            <v-btn color="success" depressed dark @click="jobDeleteOpen=false">Cancel</v-btn>
+
+            {% if request|has_any_feature_permission:"ftp-ingestion:delete" %}
+            <v-btn color="error" depressed :loading="saving" @click="confirmJobDelete">
+              <v-icon left size="17">mdi-delete-outline</v-icon>
+              Delete job
+            </v-btn>
+            {% endif %}
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- File details are read-only. Duration follows Django Admin's
+           created_at -> updated_at calculation, not a task runtime field. -->
+      <v-dialog v-model="fileDetailOpen" max-width="720" scrollable>
+        <v-card v-if="selectedFile" class="ftp-dialog">
+          <v-card-title class="ftp-dialog-title">
+            <span class="ftp-dialog-icon ftp-dialog-icon--purple"><v-icon>mdi-file-document-outline</v-icon></span>
+            <div><h3>File details</h3><p>Read-only ingestion record</p></div>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="fileDetailOpen=false"><v-icon>mdi-close</v-icon></v-btn>
+          </v-card-title>
+
+          <v-card-text class="ftp-dialog-body">
+            <div class="ftp-detail-file">
+              <v-icon color="primary">mdi-file-document-outline</v-icon>
+              <div>
+                <strong>[[ selectedFile.filename ]]</strong>
+                <span>[[ formatSizeMB(selectedFile.file_size) ]]</span>
+              </div>
+            </div>
+            <dl class="ftp-details">
+              <dt>Station</dt><dd>[[ selectedFile.station_name ]]</dd>
+              <dt>Decoder</dt><dd>[[ selectedFile.decoder_name ]]</dd>
+              <dt>Status</dt><dd><span class="ftp-pill" :class="fileStatusClass(selectedFile.status_name)">[[ selectedFile.status_name ]]</span></dd>
+              <dt>Local path</dt><dd class="ftp-monospace ftp-wrap">[[ selectedFile.filepath ]]</dd>
+              <dt>File hash</dt><dd class="ftp-monospace ftp-wrap">[[ selectedFile.file_hash ]]</dd>
+              <dt>UTC offset</dt><dd>[[ selectedFile.utc_offset_minutes ]] minutes</dd>
+              <dt>Created</dt><dd>[[ formatDate(selectedFile.created_at) ]]</dd>
+              <dt>Last updated</dt><dd>[[ formatDate(selectedFile.updated_at) ]]</dd>
+              <dt>Processing time</dt><dd>[[ formatProcessingDuration(selectedFile.processing_duration_seconds) ]]</dd>
+              <dt>File size (MB)</dt><dd>[[ formatSizeMB(selectedFile.file_size) ]]</dd>
+              <dt>Process in chunks</dt><dd>[[ selectedFile.process_in_chunks ? 'Yes' : 'No' ]]</dd>
+              <dt>High-frequency</dt><dd>[[ selectedFile.is_highfrequency_data ? 'Yes' : 'No' ]]</dd>
+              <dt>Override on conflict</dt><dd>[[ selectedFile.override_data_on_conflict ? 'Yes' : 'No' ]]</dd>
+              <dt>Observation</dt><dd class="ftp-wrap">[[ selectedFile.observation || '—' ]]</dd>
+            </dl>
+          </v-card-text>
+
+          <v-card-actions class="ftp-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="error" @click="fileDetailOpen=false">Close</v-btn>
+            <!-- Match the File History table: downloads require the page's write permission. -->
+            {% if request|has_any_feature_permission:"ftp-ingestion:write" %}
+            <v-btn color="primary" depressed :loading="downloadingId===selectedFile.id" @click="downloadFile(selectedFile)">
+              <v-icon left size="17">mdi-download</v-icon>Download file
+            </v-btn>
+            {% endif %}
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-snackbar v-model="notice.show" :color="notice.type === 'success' ? 'success' : 'error'" timeout="5000" bottom><v-icon left small color="white">[[ notice.type === 'success' ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline' ]]</v-icon>[[ notice.message ]]<template v-slot:action="{ attrs }"><v-btn v-bind="attrs" text @click="notice.show=false">Close</v-btn></template></v-snackbar>
+    </v-app>
+  </div>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+(function () {
+  'use strict';
+  const apiBase = "{% url 'ftp-ingestion' %}" + 'api/';
+  const token = document.querySelector('#ftp-csrf-form input[name="csrfmiddlewaretoken"]').value;
+  const newServer = () => ({ id: null, name: '', host: '', port: 21, username: '', password: '', is_active_mode: false });
+  const newJob = () => ({
+    id: null, ftp_server: null, remote_folder: '', station: null, file_pattern: '', decoder: null,
+    cron_schedule: '*/15 * * * *', utc_offset_minutes: 0,
+    delete_from_server: false, is_active: true, is_binary_transfer: false,
+    process_in_chunks: false, is_highfrequency_data: false, override_data_on_conflict: false
+  });
+
+  new Vue({
+    el: '#ftp-ingestion-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+    data: function () {
+      return {
+        tab: 0,
+        servers: [], jobs: [], files: [],
+        references: { stations: [], decoders: [], statuses: [], ftp_servers: [] },
+        loading: { servers: false, jobs: false, files: false, references: false },
+        referencesError: '',
+        serverSearch: '', jobSearch: '',
+        fileFilterExpanded: true,
+        serverDialog: false, serverDraft: newServer(), showPassword: false,
+        testResult: null, testingId: null, saving: false, fieldErrors: {},
+        serverDeleteOpen: false, serverDeleteTarget: null, serverDeletePreview: null, serverDeleteTyped: '',
+        jobDialog: false, jobDraft: newJob(),
+        jobDeleteOpen: false, deleteJobTarget: null, togglingJob: null,
+        fileFilters: { search: '', station: null, decoder: null, status: null, from: '', to: '' },
+        filePage: 1, hasNextFilePage: false,
+        fileDetailOpen: false, selectedFile: null, downloadingId: null,
+        notice: { show: false, message: '', type: 'success' },
+        fromDateMenu: false,
+        toDateMenu: false,
+        serverHeaders: [
+          {text:'Name', value:'name'}, {text:'Host', value:'host'}, {text:'Username', value:'username'},
+          {text:'Transfer', value:'is_active_mode'}, {text:'Jobs', value:'jobs_count'},
+          {text:'Actions', value:'actions', sortable:false, align:'end', width:230}
+        ],
+        jobHeaders: [
+          {text:'Station', value:'station_name'}, {text:'FTP source / folder', value:'source', sortable:false},
+          {text:'Pattern', value:'file_pattern'}, {text:'Decoder', value:'decoder_name'},
+          {text:'Schedule', value:'cron_schedule'}, {text:'Status', value:'is_active', sortable:false},
+          {text:'Actions', value:'actions', sortable:false, align:'end', width:180}
+        ],
+        fileHeaders: [
+          {text:'File', value:'filename'}, {text:'Station', value:'station_name'},
+          {text:'Decoder', value:'decoder_name'}, {text:'Status', value:'status_name'},
+          {text:'File Size (MB)', value:'file_size', align:'end'},
+          {text:'Processing Time', value:'processing_duration_seconds', sortable:false},
+          {text:'Created', value:'created_at'}, {text:'Actions', value:'actions', sortable:false, align:'end', width:185}
+        ]
+      };
+    },
+    computed: {
+      validServerDraft() {
+        const p = Number(this.serverDraft.port);
+        return !!(this.serverDraft.name.trim() && this.serverDraft.host.trim() &&
+          this.serverDraft.username.trim() && (this.serverDraft.id || this.serverDraft.password) &&
+          Number.isInteger(p) && p >= 1 && p <= 65535);
+      },
+      filteredJobs() {
+        const term = String(this.jobSearch || '').trim().toLowerCase();
+        if (!term) return this.jobs;
+        return this.jobs.filter(item => [
+          item.station_name, item.ftp_server_name, item.remote_folder,
+          item.file_pattern, item.decoder_name, item.cron_schedule
+        ].some(value => String(value || '').toLowerCase().includes(term)));
+      },
+      activeJobsCount() { return this.jobs.filter(job => job.is_active).length; },
+      fileCountLabel() { return this.files.length + (this.hasNextFilePage ? '+' : ''); },
+      validJobDraft() {
+        const j = this.jobDraft;
+        return !!(j.ftp_server && j.station && j.decoder && j.remote_folder.trim() &&
+          j.file_pattern.trim() && j.cron_schedule.trim() &&
+          Number.isInteger(Number(j.utc_offset_minutes)) &&
+          Number(j.utc_offset_minutes) >= -840 && Number(j.utc_offset_minutes) <= 840 &&
+          !(j.process_in_chunks && j.is_highfrequency_data));
+      }
+    },
+    mounted() {
+      this.loadServers();
+      this.loadJobs();
+      // Reference lists populate selects on both the Jobs and File History tabs.
+      this.loadReferences();
+      if (this.tab === 2) this.loadFiles(1);
+    },
+    methods: {
+      notify(message, type='success') { this.notice = {show:true, message, type}; },
+      
+      async request(path, method='GET', body=null) {
+        const headers = { 'Accept':'application/json', 'X-CSRFToken':token };
+        if (body !== null) headers['Content-Type'] = 'application/json';
+        const response = await fetch(apiBase + path, {
+          method, credentials:'same-origin', headers,
+          body: body !== null ? JSON.stringify(body) : undefined
+        });
+        let data = null;
+        try { data = await response.json(); } catch (e) { data = {}; }
+        if (!response.ok) {
+          const error = new Error(data.message || `Request failed (HTTP ${response.status}).`);
+          error.fields = data.errors || {};
+          error.status = response.status;
+          throw error;
+        }
+        return data;
+      },
+      
+      fail(e) {
+        this.fieldErrors = e.fields || {};
+        const first = Object.keys(this.fieldErrors)[0];
+        const detail = first ? this.fieldErrors[first] : null;
+        const message = Array.isArray(detail) ? detail.join(' ') : (detail ? String(detail) : '');
+        this.notify(message ? `${e.message} ${message}` : e.message, 'error');
+      },
+      
+      async loadReferences() {
+        if (this.loading.references) return;
+        this.loading.references = true;
+        this.referencesError = '';
+        try {
+          const result = await this.request('references/');
+          // Preserve array defaults: v-select / v-autocomplete require arrays.
+          this.references = {
+            stations: Array.isArray(result.stations) ? result.stations : [],
+            decoders: Array.isArray(result.decoders) ? result.decoders : [],
+            statuses: Array.isArray(result.statuses) ? result.statuses : [],
+            ftp_servers: Array.isArray(result.ftp_servers) ? result.ftp_servers : []
+          };
+        } catch (e) {
+          this.referencesError = e.message || 'Could not load dropdown options.';
+          this.notify(this.referencesError, 'error');
+        } finally {
+          this.loading.references = false;
+        }
+      },
+      
+      async loadServers() {
+        this.loading.servers = true;
+        try { this.servers = (await this.request('servers/')).results; }
+        catch (e) { this.fail(e); }
+        finally { this.loading.servers = false; }
+      },
+      
+      async loadJobs() {
+        this.loading.jobs = true;
+        try { this.jobs = (await this.request('jobs/')).results; }
+        catch (e) { this.fail(e); }
+        finally { this.loading.jobs = false; }
+      },
+      
+      onTabChange(index) {
+        if ((index === 1 || index === 2) && this.referencesError) this.loadReferences();
+        if (index === 2) this.loadFiles(1);
+      },
+      
+      openServerDialog(item=null) {
+        this.serverDraft = item ? Object.assign(newServer(), item, {password:''}) : newServer();
+        this.fieldErrors = {}; this.testResult = null; this.showPassword = false;
+        this.serverDialog = true;
+      },
+      
+      async saveServer() {
+        if (!this.validServerDraft || this.saving) return;
+        this.saving = true; this.fieldErrors = {};
+        const item = this.serverDraft;
+        try {
+          await this.request(item.id ? `servers/${item.id}/` : 'servers/', item.id ? 'PATCH' : 'POST', item);
+          this.serverDialog = false;
+          this.notify(item.id ? 'FTP server updated.' : 'FTP server added.');
+          await this.loadServers();
+          await this.loadReferences();
+        } catch (e) { this.fail(e); }
+        finally { this.saving = false; }
+      },
+      
+      async testServerDraft() {
+        if (this.testingId) return;
+        this.testingId = 'form'; this.testResult = null;
+        try {
+          const result = await this.request('servers/test/', 'POST', this.serverDraft);
+          this.testResult = result;
+        } catch (e) { this.testResult = {success:false, message:e.message}; }
+        finally { this.testingId = null; }
+      },
+      
+      async testExistingServer(item) {
+        this.testingId = item.id;
+        try {
+          const result = await this.request('servers/test/', 'POST', {id:item.id});
+          this.notify(`${item.name}: ${result.message || 'Connection test finished.'}`, result.success ? 'success' : 'error');
+        } catch (e) { this.fail(e); }
+        finally { this.testingId = null; }
+      },
+      
+      async openServerDelete(item) {
+        this.serverDeleteTarget = item; this.serverDeleteTyped = ''; this.serverDeletePreview = null;
+        this.serverDeleteOpen = true;
+        try { this.serverDeletePreview = await this.request(`servers/${item.id}/delete-preview/`); }
+        catch (e) { this.fail(e); this.serverDeleteOpen = false; }
+      },
+      
+      async confirmServerDelete() {
+        const preview = this.serverDeletePreview, row = this.serverDeleteTarget;
+        if (!preview || !row || this.serverDeleteTyped !== row.name) return;
+        this.saving = true;
+        try {
+          const result = await this.request(`servers/${row.id}/`, 'DELETE', {
+            confirm_name: this.serverDeleteTyped, expected_job_count: preview.jobs_count
+          });
+          this.serverDeleteOpen = false;
+          this.notify(`FTP server deleted along with ${result.deleted_jobs} ingestion job(s).`);
+          await Promise.all([this.loadServers(), this.loadJobs()]);
+          await this.loadReferences();
+        } catch (e) {
+          this.fail(e);
+          if (e.status === 409) await this.openServerDelete(row);
+        } finally { this.saving = false; }
+      },
+      
+      openJobDialog(item=null) {
+        this.jobDraft = item ? Object.assign(newJob(), item) : newJob();
+        this.fieldErrors = {};
+        this.jobDialog = true;
+        // Re-fetch on demand if this dialog opens before reference options arrive.
+        if (!this.loading.references && (this.referencesError ||
+            !this.references.stations.length || !this.references.decoders.length)) {
+          this.loadReferences();
+        }
+      },
+      
+      async saveJob() {
+        if (!this.validJobDraft || this.saving) return;
+        this.saving = true; this.fieldErrors = {};
+        const item = this.jobDraft;
+        try {
+          await this.request(item.id ? `jobs/${item.id}/` : 'jobs/', item.id ? 'PATCH' : 'POST', item);
+          this.jobDialog = false;
+          this.notify(item.id ? 'Ingestion job updated.' : 'Ingestion job created.');
+          await this.loadJobs();
+          await this.loadServers();
+        } catch (e) { this.fail(e); }
+        finally { this.saving = false; }
+      },
+      
+      async toggleJob(item, value) {
+        this.togglingJob = item.id;
+        try {
+          await this.request(`jobs/${item.id}/`, 'PATCH', {is_active: !!value});
+          item.is_active = !!value;
+          this.notify(item.is_active ? 'Ingestion job enabled.' : 'Ingestion job paused.');
+        } catch (e) { this.fail(e); await this.loadJobs(); }
+        finally { this.togglingJob = null; }
+      },
+      
+      async confirmJobDelete() {
+        if (!this.deleteJobTarget) return;
+        this.saving = true;
+        try {
+          await this.request(`jobs/${this.deleteJobTarget.id}/`, 'DELETE');
+          this.jobDeleteOpen = false; this.deleteJobTarget = null;
+          this.notify('Ingestion job deleted.');
+          await this.loadJobs();
+          await this.loadServers();
+        } catch (e) { this.fail(e); }
+        finally { this.saving = false; }
+      },
+      
+      async loadFiles(page=1) {
+        this.loading.files = true;
+        const query = new URLSearchParams({page:String(page), page_size:'25'});
+        Object.keys(this.fileFilters).forEach(key => {
+          const value = this.fileFilters[key];
+          if (value !== null && value !== undefined && value !== '') query.append(key, String(value));
+        });
+        try {
+          const data = await this.request(`files/?${query.toString()}`);
+          this.files = data.results; this.filePage = data.page; this.hasNextFilePage = data.has_next;
+        } catch (e) { this.fail(e); }
+        finally { this.loading.files = false; }
+      },
+      
+      resetFileFilters() {
+        this.fileFilters = {search:'', station:null, decoder:null, status:null, from:'', to:''};
+        this.loadFiles(1);
+      },
+      
+      async downloadFile(item) {
+        this.downloadingId = item.id;
+        try {
+          await this.request(`files/${item.id}/availability/`);
+          // Browser handles streamed FileResponse (no large JS Blob allocation).
+          const link = document.createElement('a');
+          link.href = apiBase + `files/${item.id}/download/`;
+          link.style.display = 'none'; document.body.appendChild(link); link.click(); link.remove();
+        } catch (e) { this.notify(e.status === 404 ? 'File unavailable: ' + e.message : e.message, 'error'); }
+        finally { this.downloadingId = null; }
+      },
+      
+      fileStatusClass(value) {
+        const status = String(value || '').toLowerCase();
+        if (/error/.test(status)) return 'ftp-pill--red';
+        if (/not processed/.test(status)) return 'ftp-pill--amber';
+        if (/reprocess|being processed/.test(status)) return 'ftp-pill--blue';
+        if (/processed/.test(status)) return 'ftp-pill--green';
+        return 'ftp-pill--slate';
+      },
+      
+      // StationDataFile.file_size is stored in bytes. Display all values in
+      // MB (1 MB = 1024 * 1024 bytes here), without altering the stored value.
+      formatSizeMB(bytes) {
+        if (bytes === null || bytes === undefined || bytes === '') return '—';
+        const n = Number(bytes);
+        if (!Number.isFinite(n) || n < 0) return '—';
+        return (n / (1024 * 1024)).toFixed(2) + ' MB';
+      },
+
+      // The backend computes the elapsed seconds using the same timestamps as
+      // Django Admin. Formatting here keeps the table and details consistent.
+      formatProcessingDuration(seconds) {
+        if (seconds === null || seconds === undefined || seconds === '') return '—';
+        const n = Number(seconds);
+        if (!Number.isFinite(n) || n < 0) return '—';
+        const wholeSeconds = Math.floor(n);
+        const minutes = Math.floor(wholeSeconds / 60);
+        const remainingSeconds = wholeSeconds % 60;
+        return `${minutes} min ${String(remainingSeconds).padStart(2, '0')} sec`;
+      },
+      
+      formatDate(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+      }
+    }
+  });
+})();
+</script>
+<style>
+/* FTP Data Ingestion: SURFACE neutral-white visual style, isolated from base.html. */
+.ftp-page {width:100%;max-width:none;min-width:0;background:#fff;color:#292929;padding-bottom:32px;}
+.ftp-page [v-cloak]{display:none!important;}
+.ftp-page .ftp-v-app{background:#fff!important;color:#292929!important;min-height:auto!important;}
+.ftp-page .ftp-v-app .v-application--wrap{min-height:0!important;background:#fff;}
+.ftp-page .ftp-page-heading{padding:20px 24px 15px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.ftp-page .ftp-page-heading .srf-display-1{display:inline-block;color:#242424;}
+.ftp-page .ftp-page-heading p{font-size:13px;color:#767676;margin:6px 0 0;line-height:1.55;}
+.ftp-page .ftp-header-mark{display:flex;align-items:center;gap:8px;letter-spacing:.07em;color:#667085;border:1px solid #e7e9ee;border-radius:6px;padding:7px 10px;font-size:10px;font-weight:700;background:#fff;}
+.ftp-page .ftp-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #e9eaed;border-radius:9px;margin:0 24px 18px;background:#fff;overflow:hidden;}
+.ftp-page .ftp-overview-item{min-width:0;display:flex;align-items:center;gap:12px;padding:15px 17px;border-right:1px solid #eceef0;}
+.ftp-page .ftp-overview-item:last-child{border-right:0;}
+.ftp-page .ftp-overview-icon,.ftp-page .ftp-title-icon,.ftp-page .ftp-row-icon,.ftp-page .ftp-dialog-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ftp-page .ftp-overview-icon{height:40px;width:40px;border-radius:9px;}
+.ftp-page .ftp-overview-icon--blue{background:#edf5ff;color:#2171c8;}
+.ftp-page .ftp-overview-icon--green{background:#eaf7ef;color:#228754;}
+.ftp-page .ftp-overview-icon--purple{background:#f3efff;color:#7956b9;}
+.ftp-page .ftp-overview-icon .v-icon,.ftp-page .ftp-title-icon .v-icon,.ftp-page .ftp-row-icon .v-icon,.ftp-page .ftp-dialog-icon .v-icon{color:inherit!important;}
+.ftp-page .ftp-overview-value{font-size:22px;font-weight:750;line-height:1.12;color:#252525;font-variant-numeric:tabular-nums;}
+.ftp-page .ftp-overview-value small{font-size:13px;font-weight:500;color:#9298a2;}
+.ftp-page .ftp-overview-label{margin-top:4px;font-size:11px;color:#747b84;font-weight:550;}
+/* The existing SURFACE tab treatment: white backgrounds, small typography, blue active indicator. */
+.ftp-page .ftp-tabs{background:#fff!important; padding:0 10px;}
+.ftp-page .ftp-tabs .v-tabs-bar{height:48px;background:#fff!important;}
+.ftp-page .ftp-tabs .v-tab{min-width:0;padding:0 17px;font-size:12px;font-weight:650;text-transform:none;letter-spacing:0;color:#727780!important;background:transparent!important;}
+.ftp-page .ftp-tabs .v-tab .v-icon{color:inherit!important;margin-right:7px;}
+.ftp-page .ftp-tabs .v-tab.v-tab--active,.ftp-page .ftp-tabs .v-tab.v-tab--active .v-icon{color:#1976d2!important;}
+.ftp-page .ftp-tabs .v-tab::before{background:transparent!important;}
+.ftp-page .ftp-tab-panels,.ftp-page .ftp-tab-panels>.v-window__container{background:#fff!important;}
+.ftp-page .ftp-section{padding:23px 24px 28px;min-width:0;}
+.ftp-page .ftp-section-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.ftp-page .ftp-section-name{display:flex;align-items:center;gap:12px;min-width:0;}
+.ftp-page .ftp-title-icon{width:42px;height:42px;border-radius:9px;}
+.ftp-page .ftp-title-icon--blue{background:#edf5ff;color:#2370c4;}
+.ftp-page .ftp-title-icon--green{background:#eaf7ef;color:#267d4b;}
+.ftp-page .ftp-title-icon--purple{background:#f4efff;color:#7854bb;}
+.ftp-page .ftp-section-name h2{font-size:16px;font-weight:750;line-height:1.35;color:#272727;margin:0 0 4px;}
+.ftp-page .ftp-section-name p{font-size:12px;line-height:1.5;color:#7a7f87;margin:0;}
+.ftp-page .ftp-main-btn{min-height:36px!important;text-transform:none!important;letter-spacing:0!important;font-size:12px!important;font-weight:650!important;border-radius:6px!important;}
+.ftp-page .ftp-refresh-btn{min-height:36px!important;text-transform:none!important;letter-spacing:0!important;font-size:12px!important;font-weight:600!important;border-radius:6px!important;}
+.ftp-page .ftp-control-panel,.ftp-page .ftp-filter-panel{border:1px solid #e5e8ec;border-radius:9px;background:#fff;overflow:hidden;box-shadow:0 2px 7px rgba(0,0,0,.025);}
+.ftp-page .ftp-table-toolbar{min-height:64px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:11px 16px;gap:10px 18px;border-bottom:1px solid #edf0f2;}
+.ftp-page .ftp-toolbar-title{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.ftp-page .ftp-toolbar-title strong{font-size:13px;font-weight:750;color:#31343a;}
+.ftp-page .ftp-quiet-count{font-size:11px;color:#8b929a;}
+.ftp-page .ftp-toolbar-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-left:auto;}
+.ftp-page .ftp-search-field{width:310px;max-width:100%;flex-grow:0;}
+.ftp-page .ftp-table-toolbar .v-text-field .v-input__control{min-height:36px;}
+.ftp-page .ftp-table-toolbar .v-text-field .v-input__slot{min-height:36px!important;margin:0!important;}
+.ftp-page .ftp-table-toolbar .v-text-field input{font-size:12px;}
+.ftp-page .ftp-table{box-shadow:none!important;border:0!important;}
+.ftp-page .ftp-table .v-data-table__wrapper{overflow-x:auto;}
+.ftp-page .ftp-table .v-data-table-header th{background:#fafbfc;font-size:11px!important;font-weight:750!important;letter-spacing:.01em;color:#636c76!important;white-space:nowrap;height:42px;}
+.ftp-page .ftp-table tbody td{height:60px!important;padding-top:8px!important;padding-bottom:8px!important;font-size:12px!important;color:#393e45;vertical-align:middle;border-bottom:1px solid #eef0f2!important;}
+.ftp-page .ftp-table tbody tr:hover{background:#fcfcfd!important;}
+.ftp-page .ftp-name-with-icon{display:flex;align-items:center;gap:9px;min-width:0;}
+.ftp-page .ftp-cell-primary{font-size:12px;color:#32383f;font-weight:650;line-height:1.35;}
+.ftp-page .ftp-cell-secondary{font-size:11px;color:#8a9098;margin-top:4px;line-height:1.35;}
+.ftp-page .ftp-monospace,.ftp-page .ftp-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;}
+.ftp-page .ftp-code{display:inline-block;border:1px solid #e8e9ec;background:#f6f7f9;color:#4f5966;border-radius:5px;padding:5px 8px;white-space:nowrap;}
+.ftp-page .ftp-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;}
+.ftp-page .ftp-file-name{min-width:0;}
+.ftp-page .ftp-file-name .ftp-ellipsis{max-width:290px;}
+.ftp-page .ftp-row-icon{height:30px;width:30px;border-radius:7px;}
+.ftp-page .ftp-row-icon--server{background:#edf4ff;color:#2c70bd;}
+.ftp-page .ftp-row-icon--station{background:#eaf7f0;color:#2b8b63;}
+.ftp-page .ftp-row-icon--file{background:#f2efff;color:#7856b8;}
+.ftp-page .ftp-job-count{display:inline-flex;align-items:center;justify-content:center;min-width:27px;height:26px;background:#f6f7f8;border:1px solid #e9eaec;border-radius:6px;color:#505862;font-weight:700;font-size:11px;}
+.ftp-page .ftp-pill{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:650;line-height:1.25;border:1px solid transparent;border-radius:20px;padding:5px 9px;white-space:nowrap;}
+.ftp-page .ftp-pill-dot{height:6px;width:6px;background:currentColor;border-radius:50%;flex:none;}
+.ftp-page .ftp-pill--green{color:#23794c;border-color:#cdebd9;background:#eaf8ef;}
+.ftp-page .ftp-pill--blue{color:#246db9;border-color:#d0e3fa;background:#eef6ff;}
+.ftp-page .ftp-pill--slate{color:#626b77;border-color:#dfe3e8;background:#f6f7f9;}
+.ftp-page .ftp-pill--amber{color:#986c22;border-color:#f2e2bf;background:#fff8e8;}
+.ftp-page .ftp-pill--red{color:#ae3d4a;border-color:#efd1d4;background:#fff1f2;}
+.ftp-page .ftp-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:4px;white-space:nowrap;}
+.ftp-page .ftp-row-actions .v-btn{text-transform:none!important;font-size:11px!important;font-weight:650!important;letter-spacing:0!important;}
+.ftp-page .ftp-row-actions .ftp-action-button{min-width:0!important;padding:0 9px!important;}
+.ftp-page .ftp-empty-state{display:flex;align-items:center;justify-content:center;flex-direction:column;padding:36px 16px;gap:7px;text-align:center;}
+.ftp-page .ftp-empty-state strong{color:#4e5660;font-size:13px;}
+.ftp-page .ftp-empty-state span{color:#9199a3;font-size:12px;}
+.ftp-page .ftp-activity{display:flex;align-items:center;gap:5px;}
+.ftp-page .ftp-status-switch{display:inline-flex!important;flex:none;margin:0!important;padding:0!important;}
+.ftp-page .ftp-status-switch .v-input__slot{margin:0!important;}
+.ftp-page .ftp-status-switch .v-input--selection-controls__input{margin:0 3px 0 0!important;}
+.ftp-page .ftp-date-text{font-size:11px;color:#65707a;white-space:nowrap;}
+.ftp-page .ftp-readonly{display:inline-flex;align-items:center;font-size:11px;color:#7e8791;border:1px solid #ebedf0;border-radius:6px;padding:6px 9px;}
+.ftp-page .ftp-filter-panel{margin-bottom:15px;}
+.ftp-page .ftp-filter-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid #edf0f2;}
+.ftp-page .ftp-filter-title{display:flex;align-items:center;gap:8px;font-size:12px;color:#3c454e;}
+.ftp-page .ftp-filter-title strong{font-weight:750;}
+.ftp-page .ftp-filter-head .v-btn{text-transform:none;font-size:11px;font-weight:650;}
+.ftp-page .ftp-filter-body{padding:18px 16px 15px;}
+.ftp-page .ftp-file-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px 13px;}
+.ftp-page .ftp-file-filters .v-input{min-width:0;}
+.ftp-page .ftp-file-filters .v-label{font-size:12px;}
+.ftp-page .ftp-filter-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:12px;}
+.ftp-page .ftp-muted-note{margin-left:auto;font-size:11px;color:#8d949d;}
+.ftp-page .ftp-pagination{display:flex;align-items:center;justify-content:flex-end;gap:9px;border-top:1px solid #edf0f2;padding:12px 16px;font-size:12px;color:#747d86;}
+.ftp-page .ftp-pagination .v-btn{text-transform:none!important;font-size:11px!important;}
+.ftp-page .ftp-wrap{overflow-wrap:anywhere;white-space:pre-wrap;}
+/* Dialogs and select menus live under the local <v-app>, not an unmounted root. */
+.ftp-page .ftp-dialog{border-radius:9px!important;overflow:hidden;}
+.ftp-page .ftp-dialog-title{display:flex;gap:12px;align-items:center;padding:17px 20px!important;border-bottom:1px solid #e9edf0;flex-wrap:nowrap!important;}
+.ftp-page .ftp-dialog-title h3{font-size:16px;line-height:1.3;font-weight:750;color:#2e343a;margin:0;}
+.ftp-page .ftp-dialog-title p{margin:4px 0 0;font-size:11px;color:#8b929a;line-height:1.4;}
+.ftp-page .ftp-dialog-icon{width:38px;height:38px;border-radius:8px;}
+.ftp-page .ftp-dialog-icon--blue{background:#eef5ff;color:#256cb9;}
+.ftp-page .ftp-dialog-icon--green{background:#eaf8ef;color:#29855c;}
+.ftp-page .ftp-dialog-icon--purple{background:#f3efff;color:#7654b6;}
+.ftp-page .ftp-dialog-icon--red{background:#fff0f1;color:#be4150;}
+.ftp-page .ftp-dialog-body{padding:20px!important;color:#3b4047!important;}
+.ftp-page .ftp-dialog-body .v-input{font-size:13px;}
+.ftp-page .ftp-dialog-body .v-label{font-size:13px;}
+.ftp-page .ftp-dialog-body .v-text-field--outlined>.v-input__control>.v-input__slot{min-height:40px!important;}
+.ftp-page .ftp-dialog-body p{font-size:12px;line-height:1.55;color:#626c74;}
+.ftp-page .ftp-form-note,.ftp-page .ftp-info-foot{display:flex;align-items:flex-start;gap:9px;background:#f8fafc;border:1px solid #e7edf2;border-radius:7px;padding:11px 12px;font-size:12px;line-height:1.5;color:#5d6974;margin-bottom:16px;}
+.ftp-page .ftp-form-note .v-icon,.ftp-page .ftp-info-foot .v-icon{margin-top:1px;flex:none;}
+.ftp-page .ftp-info-foot{margin:12px 0 0;background:#fafafa;}
+.ftp-page .ftp-form-section-title{font-size:11px;letter-spacing:.05em;font-weight:750;color:#65717c;margin:4px 0 14px;}
+.ftp-page .ftp-form-section-title:not(:first-child){margin-top:18px;padding-top:16px;border-top:1px solid #edf0f2;}
+.ftp-page .ftp-form-caption{font-size:12px;margin-bottom:8px;color:#626c74;}
+.ftp-page .ftp-form-heading{display:flex;align-items:center;gap:12px;border-bottom:1px solid #edf0f2;margin:12px 0 16px;padding-bottom:11px;}
+.ftp-page .ftp-form-heading:first-child{margin-top:0;}
+.ftp-page .ftp-form-heading strong{font-size:13px;font-weight:750;color:#38414a;display:block;}
+.ftp-page .ftp-form-heading small{font-size:11px;color:#8a929a;display:block;margin-top:3px;}
+.ftp-page .ftp-form-index{font-size:11px;font-weight:750;min-width:32px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:6px;}
+.ftp-page .ftp-form-index--blue{color:#2176c9;background:#edf5ff;}
+.ftp-page .ftp-form-index--amber{color:#aa792b;background:#fff5e5;}
+.ftp-page .ftp-form-index--purple{color:#8061b2;background:#f3efff;}
+.ftp-page .ftp-option-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.ftp-page .ftp-option-line{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid #e9ebee;background:#fff;padding:11px 12px;border-radius:7px;min-height:65px;}
+.ftp-page .ftp-option-line strong{display:block;font-size:12px;line-height:1.3;color:#444d57;font-weight:700;}
+.ftp-page .ftp-option-line small{display:block;font-size:10.5px;line-height:1.4;color:#8a939e;margin-top:4px;}
+.ftp-page .ftp-option-line .v-input{flex:0 0 auto;margin:0!important;padding:0!important;}
+.ftp-page .ftp-option-line .v-input__slot{margin:0!important;}
+.ftp-page .ftp-option-line .v-messages{display:none!important;}
+.ftp-page .ftp-dialog-actions{padding:13px 20px!important;border-top:1px solid #e9edf0;gap:7px;flex-wrap:wrap;}
+.ftp-page .ftp-dialog-actions .v-btn{text-transform:none!important;letter-spacing:0!important;font-size:12px!important;font-weight:650!important;border-radius:6px!important;}
+.ftp-page .ftp-dialog-secondary{color:#248252!important;}
+.ftp-page .ftp-required-hint{max-width:210px;}
+.ftp-page .ftp-danger-note{display:flex;align-items:center;gap:7px;font-size:11px;color:#b54652;}
+.ftp-page .ftp-detail-file{display:flex;gap:12px;align-items:center;background:#fafbfc;border:1px solid #eceef0;border-radius:7px;padding:12px;margin-bottom:18px;}
+.ftp-page .ftp-detail-file strong{display:block;font-size:13px;color:#424a54;overflow-wrap:anywhere;}
+.ftp-page .ftp-detail-file span{display:block;margin-top:4px;font-size:11px;color:#8d949d;}
+.ftp-page .ftp-details{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px 18px;font-size:12px;margin:0;}
+.ftp-page .ftp-details dt{font-weight:700;color:#7a818b;}
+.ftp-page .ftp-details dd{margin:0;min-width:0;color:#414a54;}
+/* Dropdown content is teleported by Vuetify. Give it a readable, non-clipped menu surface. */
+.ftp-select-menu{border:1px solid #e6e9ee!important;border-radius:7px!important;box-shadow:0 9px 24px rgba(15,23,42,.15)!important;background:#fff!important;}
+.ftp-select-menu .v-list-item{min-height:36px!important;}
+.ftp-select-menu .v-list-item__title{font-size:12px!important;white-space:normal!important;overflow-wrap:anywhere;}
+@media(max-width:1000px){.ftp-page .ftp-overview{margin:0 16px 15px;}.ftp-page .ftp-page-heading{padding:18px 16px 15px;}.ftp-page .ftp-section{padding:19px 16px 25px;}}
+@media(max-width:740px){.ftp-page .ftp-overview{grid-template-columns:repeat(3,minmax(0,1fr));}.ftp-page .ftp-overview-item{padding:12px 10px;gap:8px;}.ftp-page .ftp-overview-icon{width:32px;height:32px;}.ftp-page .ftp-overview-value{font-size:18px;}.ftp-page .ftp-file-filters{grid-template-columns:repeat(2,minmax(0,1fr));}.ftp-page .ftp-section-heading{align-items:flex-start;}.ftp-page .ftp-table-toolbar{padding:10px 12px;}.ftp-page .ftp-toolbar-controls{width:100%;margin-left:0;}.ftp-page .ftp-search-field{flex:1;width:auto;min-width:160px;}.ftp-page .ftp-option-grid{grid-template-columns:1fr;}.ftp-page .ftp-dialog-actions{padding:11px 13px!important;}}
+@media(max-width:460px){.ftp-page .ftp-header-mark{display:none;}.ftp-page .ftp-overview{margin:0 12px 12px;}.ftp-page .ftp-overview-item{padding:10px 7px;gap:5px;}.ftp-page .ftp-overview-label{font-size:10px;}.ftp-page .ftp-overview-icon{width:27px;height:27px;}.ftp-page .ftp-overview-icon .v-icon{font-size:16px!important;}.ftp-page .ftp-section{padding:14px 12px 22px;}.ftp-page .ftp-page-heading{padding:14px 12px;}.ftp-page .ftp-section-heading>.v-btn{width:100%;}.ftp-page .ftp-file-filters{grid-template-columns:1fr;}.ftp-page .ftp-muted-note{margin-left:0;}.ftp-page .ftp-details{grid-template-columns:110px minmax(0,1fr);}.ftp-page .ftp-overview-value{font-size:17px;}}
+</style>
+
+{% endblock %}

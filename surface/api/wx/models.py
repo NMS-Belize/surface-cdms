@@ -1248,9 +1248,9 @@ class FTPServer(BaseModel):
 
 
 class StationFileIngestion(BaseModel):
-    ftp_server = models.ForeignKey(FTPServer, on_delete=models.DO_NOTHING)
+    ftp_server = models.ForeignKey(FTPServer, on_delete=models.CASCADE)
     remote_folder = models.CharField(max_length=1024)
-    station = models.ForeignKey(Station, on_delete=models.DO_NOTHING)
+    station = models.ForeignKey(Station, on_delete=models.CASCADE)
     file_pattern = models.CharField(max_length=256)
     decoder = models.ForeignKey(Decoder, on_delete=models.DO_NOTHING)
     cron_schedule = models.CharField(max_length=64, default='15/15 * * * *')

@@ -134,10 +134,10 @@ class NoaaTransmissionTypeAdmin(admin.ModelAdmin):
     search_fields = ("acronym", "description",)
 
 
-@admin.register(models.NoaaTransmissionRate)
-class NoaaTransmissionRateAdmin(admin.ModelAdmin):
-    list_display = ("rate",)
-    search_fields = ("rate",)
+# @admin.register(models.NoaaTransmissionRate)
+# class NoaaTransmissionRateAdmin(admin.ModelAdmin):
+#     list_display = ("rate",)
+#     search_fields = ("rate",)
 
 
 @admin.register(models.NoaaDcp)
@@ -199,89 +199,89 @@ class FlashAdmin(admin.ModelAdmin):
     list_display = ("datetime", "latitude", "longitude", "type", "peak_current", "ic_height", "num_sensors",)
     search_fields = ("type",)
 
-@admin.register(models.FTPServer)
-class FTPServerAdmin(admin.ModelAdmin):
-    search_fields = ("name", "host",)
-    list_display = ("name", "host", "port", "username",)
-    form = forms.FTPServerForm
+# @admin.register(models.FTPServer)
+# class FTPServerAdmin(admin.ModelAdmin):
+#     search_fields = ("name", "host",)
+#     list_display = ("name", "host", "port", "username",)
+#     form = forms.FTPServerForm
 
-    change_form_template = "admin/ftpserver_change_form.html"  # Custom template
+#     change_form_template = "admin/ftpserver_change_form.html"  # Custom template
 
-    # Custom view to handle the FTP connection test
-    def test_ftp_connection(self, request):
-        if request.method == "POST":
-            # Retrieve form data from the AJAX request
-            host = request.POST.get('host')
-            port = request.POST.get('port')
-            username = request.POST.get('username')
-            password = request.POST.get('password')
+#     # Custom view to handle the FTP connection test
+#     def test_ftp_connection(self, request):
+#         if request.method == "POST":
+#             # Retrieve form data from the AJAX request
+#             host = request.POST.get('host')
+#             port = request.POST.get('port')
+#             username = request.POST.get('username')
+#             password = request.POST.get('password')
 
-            # Validate and handle empty or invalid port values
-            try:
-                port = int(port)
-            except ValueError:
-                return JsonResponse({"status": "error", "message": "Invalid port value"})
+#             # Validate and handle empty or invalid port values
+#             try:
+#                 port = int(port)
+#             except ValueError:
+#                 return JsonResponse({"status": "error", "message": "Invalid port value"})
 
-            # Try to establish an FTP connection
-            try:
-                ftp = FTP()
-                ftp.connect(host, port, timeout=10)
-                ftp.login(user=username, passwd=password)
-                ftp.quit()
-                return JsonResponse({"status": "success", "message": "Connection successful!"})
-            except Exception as e:
-                return JsonResponse({"status": "error", "message": str(e)})
+#             # Try to establish an FTP connection
+#             try:
+#                 ftp = FTP()
+#                 ftp.connect(host, port, timeout=10)
+#                 ftp.login(user=username, passwd=password)
+#                 ftp.quit()
+#                 return JsonResponse({"status": "success", "message": "Connection successful!"})
+#             except Exception as e:
+#                 return JsonResponse({"status": "error", "message": str(e)})
 
-        return JsonResponse({"status": "error", "message": "Invalid request method"})
+#         return JsonResponse({"status": "error", "message": "Invalid request method"})
 
-    # Add custom URL for the AJAX request
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('test-ftp-connection/', self.admin_site.admin_view(self.test_ftp_connection), name='test-ftp-connection'),
-        ]
-        return custom_urls + urls
-
-
-@admin.register(models.StationFileIngestion)
-class StationFileIngestionAdmin(admin.ModelAdmin):
-    search_fields = ('station__name',)
-    list_display = ("ftp_server", "station", "decoder", "cron_schedule", "is_active", "is_binary_transfer",)
+#     # Add custom URL for the AJAX request
+#     def get_urls(self):
+#         urls = super().get_urls()
+#         custom_urls = [
+#             path('test-ftp-connection/', self.admin_site.admin_view(self.test_ftp_connection), name='test-ftp-connection'),
+#         ]
+#         return custom_urls + urls
 
 
-@admin.register(models.StationDataFile)
-class StationDataFileAdmin(admin.ModelAdmin):
-    search_fields = ('station__name', 'status__name',)
-    # list_display = ("created_at", "updated_at", "station", "decoder", "status", "file_size", "utc_offset_minutes", "filepath_url",)
-    list_display = ("created_at", "updated_at", "duration_display", "station", "decoder", "status", "file_size_kb", "utc_offset_minutes",)
-    exclude = ('filepath',)
-    readonly_fields = ('filepath_url',)
+# @admin.register(models.StationFileIngestion)
+# class StationFileIngestionAdmin(admin.ModelAdmin):
+#     search_fields = ('station__name',)
+#     list_display = ("ftp_server", "station", "decoder", "cron_schedule", "is_active", "is_binary_transfer",)
 
-    def filepath_url(self, obj):
-        if obj.filepath is None:
-            return format_html('Not available')
-        return format_html('<a href={0}>{0}</a>', obj.filepath.replace(' ', '%20'))
+
+# @admin.register(models.StationDataFile)
+# class StationDataFileAdmin(admin.ModelAdmin):
+#     search_fields = ('station__name', 'status__name',)
+#     # list_display = ("created_at", "updated_at", "station", "decoder", "status", "file_size", "utc_offset_minutes", "filepath_url",)
+#     list_display = ("created_at", "updated_at", "duration_display", "station", "decoder", "status", "file_size_kb", "utc_offset_minutes",)
+#     exclude = ('filepath',)
+#     readonly_fields = ('filepath_url',)
+
+#     def filepath_url(self, obj):
+#         if obj.filepath is None:
+#             return format_html('Not available')
+#         return format_html('<a href={0}>{0}</a>', obj.filepath.replace(' ', '%20'))
     
-    @admin.display(description='Processing Time', ordering='updated_at')
-    def duration_display(self, obj):
-        if obj.created_at and obj.updated_at:
-            diff = obj.updated_at - obj.created_at
-            total_seconds = int(diff.total_seconds())
+#     @admin.display(description='Processing Time', ordering='updated_at')
+#     def duration_display(self, obj):
+#         if obj.created_at and obj.updated_at:
+#             diff = obj.updated_at - obj.created_at
+#             total_seconds = int(diff.total_seconds())
             
-            # minutes gets the whole number, seconds gets the remainder
-            minutes, seconds = divmod(total_seconds, 60)
+#             # minutes gets the whole number, seconds gets the remainder
+#             minutes, seconds = divmod(total_seconds, 60)
             
-            return f"{minutes} min {seconds:02d} sec"
-        return "-"
+#             return f"{minutes} min {seconds:02d} sec"
+#         return "-"
     
-    @admin.display(description='File Size (in KB)', ordering='file_size')
-    def file_size_kb(self, obj):
-        if obj.file_size:
-            # Round to 2 decimal places for readability
-            return f"{obj.file_size / 1024:.2f} KB"
-        return "0 KB"
+#     @admin.display(description='File Size (in KB)', ordering='file_size')
+#     def file_size_kb(self, obj):
+#         if obj.file_size:
+#             # Round to 2 decimal places for readability
+#             return f"{obj.file_size / 1024:.2f} KB"
+#         return "0 KB"
 
-    filepath_url.short_description = 'File path'
+#     filepath_url.short_description = 'File path'
 
 
 @admin.register(models.StationDataFileStatus)

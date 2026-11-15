@@ -1049,7 +1049,7 @@
             {% endif %}
 
             <!-- data tab -->
-            {% if request|has_any_feature_permission:"monthly-form:read, data-export:read, manual-data-import:read, synop-capture-form:read, data-inventory:read" %}
+            {% if request|has_any_feature_permission:"monthly-form:read, data-export:read, ftp-ingestion:read, manual-data-import:read, synop-capture-form:read, data-inventory:read" %}
             <li id="data-group" class="hover-item nav-dropdown-toggle">
 
               <!-- tab name -->
@@ -1063,20 +1063,24 @@
                 </span>
               </a>
 
+              {% if request|has_any_feature_permission:"data-inventory:read" %}
+              <a id="data-inventory" href="{% url 'data-inventory' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Inventory<i class="material-icons secondary-content">inventory</i></a>
+              {% endif %}
+              
+              {% if request|has_any_feature_permission:"ftp-ingestion:read" %}
+              <a id="ftp-ingestion-config"  href="{% url 'ftp-ingestion' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">FTP Ingestion<i class="material-icons secondary-content">dns</i></a>
+              {% endif %}
+
+              {% if request|has_any_feature_permission:"manual-data-import:read" %}
+                <a id="manual-data-import" href="{% url 'manual-data-import' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Import<i class="material-icons-outlined secondary-content">cloud_upload</i></a>
+              {% endif %}
+
               {% if request|has_any_feature_permission:"monthly-form:read" %}
                 <a id="monthly-form" href="{% url 'monthly-form' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Monthly Capture<i class="material-icons secondary-content">filter_center_focus</i></a>
               {% endif %}
                           
               {% if request|has_any_feature_permission:"synop-capture-form:read" %}
                 <a id="synop-capture-form" href="{% url 'synop-capture-form' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Synop Capture<i class="material-icons secondary-content">keyboard</i></a>
-              {% endif %}
-              
-              {% if request|has_any_feature_permission:"data-inventory:read" %}
-                <a id="data-inventory" href="{% url 'data-inventory' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Inventory<i class="material-icons secondary-content">web</i></a>
-              {% endif %}
-
-              {% if request|has_any_feature_permission:"manual-data-import:read" %}
-                <a id="manual-data-import" href="{% url 'manual-data-import' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Import<i class="material-icons-outlined secondary-content">cloud_upload</i></a>
               {% endif %}
 
               {% if request|has_any_feature_permission:"data-export:read" %}
@@ -1225,6 +1229,7 @@
               {% if request|has_any_feature_permission:"configuration-settings:read" %}
                 <a id="configuration-settings"  href="{% url 'configuration-settings' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Configuration<i class="material-icons secondary-content">build</i></a>
               {% endif %}
+
 
               {% if request|has_any_feature_permission:"manage-permissions:read" %}
                  <a id="manage-permissions"  href="{% url 'manage-permissions' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Manage Permissions<i class="material-icons secondary-content">key_vertical</i></a>
