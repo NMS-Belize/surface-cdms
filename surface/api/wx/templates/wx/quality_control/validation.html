@@ -70,7 +70,7 @@
               <div class="dv-period-group">
                 <span class="dv-period-heading">From</span>
                 <v-menu v-model="menu1" :close-on-content-click="false"
-                        transition="scale-transition" offset-y>
+                        transition="scale-transition" offset-y min-width="290px" max-width="290px">
                   <template v-slot:activator="{ on }">
                     <v-text-field v-model="currentSelection.startDate" label="Start date"
                       prepend-inner-icon="mdi-calendar-outline" v-on="on" outlined dense
@@ -79,7 +79,7 @@
                   <v-date-picker v-model="currentSelection.startDate" @input="menu1 = false"></v-date-picker>
                 </v-menu>
                 <v-menu v-model="menu3" :close-on-content-click="false"
-                        transition="scale-transition" offset-y>
+                        transition="scale-transition" offset-y min-width="290px" max-width="290px">
                   <template v-slot:activator="{ on }">
                     <v-text-field v-model="currentSelection.startTime" label="Start time"
                       prepend-inner-icon="mdi-clock-outline" v-on="on" outlined dense
@@ -92,7 +92,7 @@
               <div class="dv-period-group">
                 <span class="dv-period-heading">To</span>
                 <v-menu v-model="menu2" :close-on-content-click="false"
-                        transition="scale-transition" offset-y>
+                        transition="scale-transition" offset-y min-width="290px" max-width="290px">
                   <template v-slot:activator="{ on }">
                     <v-text-field v-model="currentSelection.endDate" label="End date"
                       prepend-inner-icon="mdi-calendar-outline" v-on="on" outlined dense
@@ -101,7 +101,7 @@
                   <v-date-picker v-model="currentSelection.endDate" @input="menu2 = false"></v-date-picker>
                 </v-menu>
                 <v-menu v-model="menu4" :close-on-content-click="false"
-                        transition="scale-transition" offset-y>
+                        transition="scale-transition" offset-y min-width="290px" max-width="290px">
                   <template v-slot:activator="{ on }">
                     <v-text-field v-model="currentSelection.endTime" label="End time"
                       prepend-inner-icon="mdi-clock-outline" v-on="on" outlined dense

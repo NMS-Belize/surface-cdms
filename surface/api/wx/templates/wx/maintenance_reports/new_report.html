@@ -74,12 +74,23 @@
                 </v-col>
 
                 <v-col cols="12" sm="6" md="4">
-                  <v-menu v-model="maintenance_report.initial_time_menu" :close-on-content-click="false"
-                          transition="scale-transition" offset-y>
+                  <v-menu 
+                    v-model="maintenance_report.initial_time_menu" 
+                    :close-on-content-click="false"
+                    transition="scale-transition" offset-y
+                    min-width="290px" max-width="290px"
+                  >
                     <template v-slot:activator="{ on }">
-                      <v-text-field v-model="maintenance_report.initial_time" label="Initial time"
-                                    readonly v-on="on" :disabled="disableForm || loading" outlined dense
-                                    prepend-inner-icon="mdi-clock-outline" hide-details="auto"></v-text-field>
+                      <v-text-field 
+                        v-model="maintenance_report.initial_time" 
+                        label="Initial time"
+                        readonly v-on="on" 
+                        :disabled="disableForm || loading" 
+                        outlined 
+                        dense
+                        prepend-inner-icon="mdi-clock-outline" 
+                        hide-details="auto"
+                      ></v-text-field>
                     </template>
                     <v-time-picker v-model="maintenance_report.initial_time" format="24hr"
                                    @click:minute="maintenance_report.initial_time_menu = false"></v-time-picker>

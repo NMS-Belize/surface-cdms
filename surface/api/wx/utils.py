@@ -520,9 +520,9 @@ def get_station_raw_data(search_type, search_values, search_value2, search_date_
         return response
 
     max_days = {
-        'raw_data': 7,
-        'hourly_summary': 30,
-        'daily_summary': 365,
+        'raw_data': 9,
+        'hourly_summary': 33,
+        'daily_summary': 370,
         'monthly_summary': None,
         'yearly_summary': None,
     }[source]

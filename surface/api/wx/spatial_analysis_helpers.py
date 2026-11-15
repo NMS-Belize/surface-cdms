@@ -115,9 +115,9 @@ def parse_analysis_request(query):
         end_dt = dt.date.fromisoformat(end)
 
     default_limits = {
-        "raw_data": 7,
-        "hourly": 31,
-        "daily": 366,
+        "raw_data": 9,
+        "hourly": 33,
+        "daily": 370,
         "monthly": 365 * 50,
         "yearly": 365 * 100,
     }

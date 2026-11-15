@@ -144,12 +144,12 @@
                     [[ aggregation && aggregation.value === 'instant' ? 'Observation date' : 'From' ]]
                   </div>
                   <div class="sa-period-fields" :class="{'sa-period-single': !(source && ['raw_data', 'hourly'].includes(source.value))}">
-                    <v-menu ref="date_menu" v-model="date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px">
+                    <v-menu ref="date_menu" v-model="date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px" max-width="290px">
                       <template v-slot:activator="{ on }"><v-text-field v-model="start_date" v-on="on" readonly label="Date" prepend-inner-icon="mdi-calendar-outline" outlined dense hide-details="auto" required></v-text-field></template>
                       <v-date-picker v-model="start_date" no-title scrollable :type="getDatepickFormat()" :allowed-dates="allowedDates"
                         @input="date_menu = false"></v-date-picker>
                     </v-menu>
-                    <v-menu v-if="source && source.value === 'raw_data'" ref="time_menu" v-model="time_menu" :close-on-content-click="false" :return-value.sync="start_time" transition="scale-transition" offset-y min-width="290px">
+                    <v-menu v-if="source && source.value === 'raw_data'" ref="time_menu" v-model="time_menu" :close-on-content-click="false" :return-value.sync="start_time" transition="scale-transition" offset-y min-width="290px" max-width="290px">
                       <template v-slot:activator="{ on }"><v-text-field v-model="start_time" v-on="on" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-text-field></template>
                       <v-time-picker v-if="time_menu" v-model="start_time" full-width no-title scrollable @click:minute="$refs.time_menu.save(start_time)"></v-time-picker>
                     </v-menu>
@@ -159,11 +159,11 @@
                 <div class="sa-period-card" v-if="aggregation && aggregation.value !== 'instant'">
                   <div class="sa-period-card-title"><span class="sa-period-dot sa-period-dot-end"></span>To</div>
                   <div class="sa-period-fields" :class="{'sa-period-single': !(source && ['raw_data', 'hourly'].includes(source.value))}">
-                    <v-menu ref="end_date_menu" v-model="end_date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px">
+                    <v-menu ref="end_date_menu" v-model="end_date_menu" :close-on-content-click="false" transition="scale-transition" offset-y min-width="290px" max-width="290px">
                       <template v-slot:activator="{ on }"><v-text-field v-model="end_date" v-on="on" readonly label="Date" prepend-inner-icon="mdi-calendar-outline" outlined dense hide-details="auto" required></v-text-field></template>
                       <v-date-picker v-model="end_date" no-title scrollable :type="getDatepickFormat()" :allowed-dates="allowedEndDates" @input="end_date_menu = false"></v-date-picker>
                     </v-menu>
-                    <v-menu v-if="source && source.value === 'raw_data'" ref="end_time_menu" v-model="end_time_menu" :close-on-content-click="false" :return-value.sync="end_time" transition="scale-transition" offset-y min-width="290px">
+                    <v-menu v-if="source && source.value === 'raw_data'" ref="end_time_menu" v-model="end_time_menu" :close-on-content-click="false" :return-value.sync="end_time" transition="scale-transition" offset-y min-width="290px" max-width="290px">
                       <template v-slot:activator="{ on }"><v-text-field v-model="end_time" v-on="on" label="Time" prepend-inner-icon="mdi-clock-outline" outlined dense hide-details="auto"></v-text-field></template>
                       <v-time-picker v-if="end_time_menu" v-model="end_time" full-width no-title scrollable @click:minute="$refs.end_time_menu.save(end_time)"></v-time-picker>
                     </v-menu>
@@ -497,9 +497,9 @@
       // These match spatial_analysis_helpers.parse_analysis_request().
       // Optional SpatialAnalysisView context values mirror any settings.py overrides.
       periodLimits: {
-        raw_data: {{ spatial_max_raw_days|default:7 }},
-        hourly: {{ spatial_max_hourly_days|default:31 }},
-        daily: {{ spatial_max_daily_days|default:366 }},
+        raw_data: {{ spatial_max_raw_days|default:9 }},
+        hourly: {{ spatial_max_hourly_days|default:33 }},
+        daily: {{ spatial_max_daily_days|default:370 }},
         monthly: {{ spatial_max_monthly_days|default:18250 }},
         yearly: {{ spatial_max_yearly_days|default:36500 }}
       },

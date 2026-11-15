@@ -1420,9 +1420,9 @@ def raw_data_list(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    if end_date - start_date > datetime.timedelta(days=7):
+    if end_date - start_date > datetime.timedelta(days=10):
         return JsonResponse(
-            {'message': 'Interval between start and end date cannot exceed seven days.'},
+            {'message': 'Interval between start and end date cannot exceed 9 days.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -2487,9 +2487,9 @@ def get_qc_list(request):
             return JsonResponse({"message": "'Automatic' must be 'true' or 'false'."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Automatic stations (AWS) → max 7 days
-        # Manual stations → max 31 days
-        limit_days = 7 if is_automatic == "true" else 31
+        # Automatic stations (AWS) → max 9 days
+        # Manual stations → max 33 days
+        limit_days = 9 if is_automatic == "true" else 33
 
         station_type = "Automatic" if is_automatic == "true" else "Manual"
 
@@ -2537,7 +2537,7 @@ def get_qc_list(request):
 
             # End date must not be before start date
             if end_dt < start_dt:
-                return JsonResponse({"message": "end date must be >= start date."},
+                return JsonResponse({"message": "end date must be greater than or equal to the start date."},
                                     status=status.HTTP_400_BAD_REQUEST)
 
             # Inclusive day count (e.g. Feb 1 → Feb 7 = 7 days, not 6)

@@ -152,7 +152,7 @@
                   v-model="equipment.funding_source_id" label="Funding source *"
                   autocomplete="off" outlined dense hide-details="auto"></v-autocomplete>
                   <v-menu v-model="equipment.acquisition_date_menu" :close-on-content-click="false"
-                          transition="scale-transition" offset-y>
+                          transition="scale-transition" offset-y min-width="290px" max-width="290px">
                     <template v-slot:activator="{ on }">
                       <v-text-field v-model="equipment.acquisition_date" label="Acquisition date *"
                           prepend-inner-icon="mdi-calendar-outline" outlined dense
@@ -178,7 +178,7 @@
               </div>
               <div class="ei-form-grid">
                   <v-menu v-model="equipment.first_deploy_date_menu" :close-on-content-click="false"
-                          transition="scale-transition" offset-y>
+                          transition="scale-transition" offset-y min-width="290px" max-width="290px">
                     <template v-slot:activator="{ on }">
                       <v-text-field v-model="equipment.first_deploy_date" label="First deployment"
                           prepend-inner-icon="mdi-calendar-outline" outlined dense
@@ -188,7 +188,7 @@
                         @input="equipment.first_deploy_date_menu = false"></v-date-picker>
                   </v-menu>
                   <v-menu v-model="equipment.last_deploy_date_menu" :close-on-content-click="false"
-                          transition="scale-transition" offset-y>
+                          transition="scale-transition" offset-y min-width="290px" max-width="290px">
                     <template v-slot:activator="{ on }">
                       <v-text-field v-model="equipment.last_deploy_date" label="Last deployment"
                           prepend-inner-icon="mdi-calendar-outline" outlined dense
@@ -198,7 +198,7 @@
                         @input="equipment.last_deploy_date_menu = false"></v-date-picker>
                   </v-menu>
                   <v-menu v-model="equipment.decommission_date_menu" :close-on-content-click="false"
-                          transition="scale-transition" offset-y>
+                          transition="scale-transition" offset-y min-width="290px" max-width="290px">
                     <template v-slot:activator="{ on }">
                       <v-text-field v-model="equipment.decommission_date" label="Decommission date"
                           prepend-inner-icon="mdi-calendar-outline" outlined dense

@@ -80,6 +80,7 @@
                     :close-on-content-click="false"
                     transition="scale-transition"
                     offset-y
+                    min-width="290px" max-width="290px"
                   >
                     <template v-slot:activator="{ on }">
                       <v-text-field
@@ -112,6 +113,7 @@
                     :close-on-content-click="false"
                     transition="scale-transition"
                     offset-y
+                    min-width="290px" max-width="290px"
                   >
                     <template v-slot:activator="{ on }">
                       <v-text-field
@@ -139,6 +141,7 @@
                     :close-on-content-click="false"
                     transition="scale-transition"
                     offset-y
+                    min-width="290px" max-width="290px"
                   >
                     <template v-slot:activator="{ on }">
                       <v-text-field
@@ -171,6 +174,7 @@
                     :close-on-content-click="false"
                     transition="scale-transition"
                     offset-y
+                    min-width="290px" max-width="290px"
                   >
                     <template v-slot:activator="{ on }">
                       <v-text-field
@@ -455,7 +459,7 @@
         { value: 4, text: 'Yearly summary' },
       ],
       // Limits inherited from the original Variable Report for raw/hourly/daily.
-      day_limits: [7, 30, 365],
+      day_limits: [9, 33, 370],
       initial_date_menu: false,
       initial_date: moment().format('YYYY-MM-DD'),
       initial_time_menu: false,
