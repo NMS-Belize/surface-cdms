@@ -17,7 +17,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Monthly Data Capture",
+            "name": "Daily Capture",
             "url_name": "monthly-form",
             "description": "Capture and update monthly observation forms for stations.",
             "category_id": 4
@@ -29,7 +29,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "SYNOP Capture",
+            "name": "Hourly SYNOP",
             "url_name": "synop-capture-form",
             "description": "Capture and update SYNOP reports and related calculations.",
             "category_id": 4
@@ -53,7 +53,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Maintenance Reports",
+            "name": "Maint. Reports",
             "url_name": "maintenance-reports",
             "description": "Create, update, approve, view, and manage station maintenance reports.",
 		    "category_id": 3
@@ -65,7 +65,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Equipment Inventory",
+            "name": "Equip. Inventory",
             "url_name": "equipment-inventory",
             "description": "View and manage equipment inventory records used in maintenance workflows.",
 		    "category_id": 3
@@ -89,7 +89,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Stations Monitoring",
+            "name": "Monitoring",
             "url_name": "stations-monitoring",
             "description": "Monitor station status and view monitoring map and charts.",
 		    "category_id": 2
@@ -113,7 +113,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Quality Control Validation",
+            "name": "Data Validation",
             "url_name": "quality-control",
             "description": "Validate observations and apply quality control updates.",
 		    "category_id": 6
@@ -125,7 +125,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Yearly Average Report",
+            "name": "Yearly Average",
             "url_name": "yearly-average",
             "description": "View yearly average summaries and supporting data outputs.",
 		    "category_id": 7
@@ -161,7 +161,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Agromet Summaries",
+            "name": "Summaries",
             "url_name": "agromet-summaries",
             "description": "View agrometeorology monthly and seasonal summaries and their data sources.",
 		    "category_id": 8
@@ -173,7 +173,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Agromet Products",
+            "name": "Products",
             "url_name": "agromet-products",
             "description": "View agrometeorology calculated products and retrieve related datasets.",
 		    "category_id": 8
@@ -185,7 +185,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Manage Permissions",
+            "name": "Permissions",
             "url_name": "manage-permissions",
             "description": "Manage groups, user group membership, and group page access permissions.",
 		    "category_id": 9
@@ -197,7 +197,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Data Inventory",
+            "name": "Inventory",
             "url_name": "data-inventory",
             "description": "Browse and explore the data inventory available in the system.",
             "category_id": 4
@@ -209,7 +209,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Station OSCAR Export",
+            "name": "OSCAR Export",
             "url_name": "station-oscar-export",
             "description": "Export station metadata to OSCAR compatible formats.",
 		    "category_id": 2
@@ -257,7 +257,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Extremes and Means",
+            "name": "Extremes & Means",
             "url_name": "extremes-means",
             "description": "View calculated climate extremes and mean statistics.",
 		    "category_id": 7
@@ -269,7 +269,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Configuration Settings",
+            "name": "Configuration",
             "url_name": "configuration-settings",
             "description": "Manage system configuration settings and environment options.",
 		    "category_id": 9
@@ -281,7 +281,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Reference Station",
+            "name": "Reference Threshold",
             "url_name": "reference-station",
             "description": "Manage reference stations used in data validation.",
 		    "category_id": 6
@@ -293,7 +293,7 @@
         "fields": {
             "created_at": "2026-09-24T00:00:00Z",
             "updated_at": "2026-09-24T00:00:00Z",
-            "name": "Global Thresholds",
+            "name": "Global Threshold",
             "url_name": "global-threshold",
             "description": "View and manage global threshold rules for each variable.",
 		    "category_id": 6
@@ -305,7 +305,7 @@
         "fields": {
             "created_at": "2026-09-25T00:00:00Z",
             "updated_at": "2026-09-25T00:00:00Z",
-            "name": "Custom Thresholds",
+            "name": "Custom Threshold",
             "url_name": "custom-threshold",
             "description": "View and manage custom threshold rules for each station.",
 		    "category_id": 6

@@ -1063,6 +1063,22 @@
                 </span>
               </a>
 
+              {% if request|has_any_feature_permission:"manual-data-import:read" %}
+                <a id="manual-data-import" href="{% url 'manual-data-import' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Import<i class="material-icons-outlined secondary-content">cloud_upload</i></a>
+              {% endif %}
+                          
+              {% if request|has_any_feature_permission:"synop-capture-form:read" %}
+                <a id="synop-capture-form" href="{% url 'synop-capture-form' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Hourly Synop<i class="material-icons secondary-content">keyboard</i></a>
+              {% endif %}
+
+              {% if request|has_any_feature_permission:"monthly-form:read" %}
+                <a id="monthly-form" href="{% url 'monthly-form' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Daily Capture<i class="material-icons secondary-content">filter_center_focus</i></a>
+              {% endif %}
+
+              {% if request|has_any_feature_permission:"data-export:read" %}
+                <a id="data-export" href="{% url 'data-export' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Export<i class="material-icons secondary-content">cloud_download</i></a>
+              {% endif %}
+
               {% if request|has_any_feature_permission:"data-inventory:read" %}
               <a id="data-inventory" href="{% url 'data-inventory' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Inventory<i class="material-icons secondary-content">inventory</i></a>
               {% endif %}
@@ -1079,22 +1095,6 @@
                   LRGS Ingestion
                   <i class="material-icons secondary-content">satellite_alt</i>
               </a>
-              {% endif %}
-
-              {% if request|has_any_feature_permission:"manual-data-import:read" %}
-                <a id="manual-data-import" href="{% url 'manual-data-import' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Import<i class="material-icons-outlined secondary-content">cloud_upload</i></a>
-              {% endif %}
-
-              {% if request|has_any_feature_permission:"monthly-form:read" %}
-                <a id="monthly-form" href="{% url 'monthly-form' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Monthly Capture<i class="material-icons secondary-content">filter_center_focus</i></a>
-              {% endif %}
-                          
-              {% if request|has_any_feature_permission:"synop-capture-form:read" %}
-                <a id="synop-capture-form" href="{% url 'synop-capture-form' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Synop Capture<i class="material-icons secondary-content">keyboard</i></a>
-              {% endif %}
-
-              {% if request|has_any_feature_permission:"data-export:read" %}
-                <a id="data-export" href="{% url 'data-export' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Export<i class="material-icons secondary-content">cloud_download</i></a>
               {% endif %}
 
               <!-- pill border at the bottom of the dropdown -->
@@ -1169,7 +1169,7 @@
               {% endif %}
 
               {% if request|has_any_feature_permission:"product-compare:read" %}
-                <a id="product-compare" href="{% url 'product-compare' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Station Compare<i class="material-icons secondary-content">compare_arrows</i></a>
+                <a id="product-compare" href="{% url 'product-compare' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Product Compare<i class="material-icons secondary-content">compare_arrows</i></a>
               {% endif %}
 
               {% if request|has_any_feature_permission:"spatial-analysis:read" %}
@@ -1242,7 +1242,7 @@
 
 
               {% if request|has_any_feature_permission:"manage-permissions:read" %}
-                 <a id="manage-permissions"  href="{% url 'manage-permissions' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Manage Permissions<i class="material-icons secondary-content">key_vertical</i></a>
+                 <a id="manage-permissions"  href="{% url 'manage-permissions' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Permissions<i class="material-icons secondary-content">key_vertical</i></a>
               {% endif %}
 
               {% if request.user.is_superuser %}
