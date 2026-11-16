@@ -272,6 +272,9 @@ CELERY_TASK_ROUTES = {
     'wx.tasks.ftp_ingest_highfrequency_station_files': {
         'queue': 'ingest',
     },
+    'wx.tasks.lrgs_pull_now_task': {
+        'queue': 'ingest', # Manual LRGS pulls run on the ingestion queue so long-running, historical retrievals do not occupy the maintenance worker.
+    },
 
     # -----------------------------------------------------------------------
     # Maintenance Queue
@@ -368,6 +371,8 @@ CACHES = {
 }
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+LRGS_PULL_TIMEOUT_SECONDS = 180
 LRGS_EXECUTABLE_PATH = os.getenv('LRGS_EXECUTABLE_PATH')
 LRGS_SERVER_HOST = os.getenv('LRGS_SERVER_HOST')
 LRGS_SERVER_PORT = os.getenv('LRGS_SERVER_PORT')

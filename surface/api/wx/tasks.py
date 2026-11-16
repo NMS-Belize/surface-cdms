@@ -1786,45 +1786,13 @@ def dcp_tasks_scheduler():
 
 
 def retrieve_dcp_messages(noaa_dict):
-    current_noaa_dcp = noaa_dict["noaa_object"]
-    last_execution = noaa_dict["last_execution"]
+    """Preserve the scheduler entrypoint but use the new safe LRGS pipeline.
 
-    logger.info('Inside retrieve_dcp_messages ' + current_noaa_dcp.dcp_address)
-
-    related_stations = current_noaa_dcp.noaadcpsstation_set
-    related_stations_count = related_stations.count()
-    if related_stations_count == 0:
-        raise Exception(f"The noaa dcp '{current_noaa_dcp}' is not related to any Station.")
-    elif related_stations_count != 1:
-        raise Exception(f"The noaa dcp '{current_noaa_dcp}' is related to more than one Station.")
-
-    noaa_dcp_station = related_stations.first()
-    station_id = noaa_dcp_station.station_id
-    decoder = noaa_dcp_station.decoder.name
-
-    available_decoders = {
-        'NESA': read_data_nesa,
-        'SAT_TX325': read_data_sat_tx325,  
-        # 'SURTRON': read_data_surtron,
-    }
-
-    set_search_criteria(current_noaa_dcp, last_execution)
-
-    command = subprocess.Popen([settings.LRGS_EXECUTABLE_PATH,
-                                '-h', settings.LRGS_SERVER_HOST,
-                                '-p', settings.LRGS_SERVER_PORT,
-                                '-u', settings.LRGS_USER,
-                                '-P', settings.LRGS_PASSWORD,
-                                '-f', settings.LRGS_CS_FILE_PATH
-                                ], shell=False, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-
-    output, err_message = command.communicate()
-    response = output.decode('ascii')
-
-    try:
-        available_decoders[decoder](station_id, current_noaa_dcp.dcp_address, current_noaa_dcp.config_data, response, err_message)
-    except Exception as err:
-        logger.error(f'Error on retrieve_dcp_messages for dcp address "{current_noaa_dcp.dcp_address}". {repr(err)}')
+    now finds every active association, retrieves the DCP only once, and
+    routes by message receive time; every pull gets its own criteria file.
+    """
+    from wx.lrgs_tasks import retrieve_dcp_messages_updated
+    return retrieve_dcp_messages_updated(noaa_dict)
 
 
 def set_search_criteria(dcp, last_execution):
@@ -6756,3 +6724,18 @@ def fill_missing_data(
         "missing_count": len(missing),
         "inserted_count": inserted_count,
     }
+
+
+
+# -----------------------------------------------------------------------
+# LRGS Ingestion Tasks
+# -----------------------------------------------------------------------
+# Import the LRGS tasks so Celery autodiscovery registers them.
+#
+# The implementation lives in wx/lrgs_tasks.py to keep LRGS retrieval
+# logic separate from the existing large tasks.py module.
+#
+# Placing this import at the end minimizes circular-import problems,
+# since the LRGS retrieval adapter also uses existing decoder functions.
+# -----------------------------------------------------------------------
+from wx.lrgs_tasks import lrgs_pull_now_task

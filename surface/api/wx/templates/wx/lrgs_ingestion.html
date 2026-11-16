@@ -1,0 +1,3625 @@
+{% extends "base.html" %}
+{% load static wx_filters %}
+
+{% block content %}
+<div class="srf-container lrgs-page">
+  <form id="lrgs-csrf" hidden>
+    {% csrf_token %}
+  </form>
+  <div id="lrgs-app" v-cloak>
+
+    <!-- A dedicated v-app ensures v-dialog and v-menu overlays position correctly. -->
+    <v-app class="lrgs-v-app">
+
+      <header class="lrgs-page-header">
+        <div>
+          <span class="srf-display-1 text-uppercase">LRGS Data Ingestion</span>
+          <p>Manage GOES DCPs, station routing, incoming messages, and LRGS access.</p>
+        </div>
+        <span class="lrgs-header-mark">
+          <v-icon size="19" color="primary">mdi-satellite-uplink</v-icon>
+          SATELLITE DATA
+        </span>
+      </header>
+
+      <div class="lrgs-overview">
+        <div class="lrgs-stat">
+          <span class="lrgs-stat-icon lrgs-stat-blue">
+            <v-icon size="22">mdi-radio-tower</v-icon>
+          </span>
+          <div>
+            <strong>[[ dcps.length ]]</strong>
+            <span>Configured DCPs</span>
+          </div>
+        </div>
+        <div class="lrgs-stat">
+          <span class="lrgs-stat-icon lrgs-stat-teal">
+            <v-icon size="22">mdi-source-branch</v-icon>
+          </span>
+          <div>
+            <strong>[[ associations.length ]]</strong>
+            <span>Station associations</span>
+          </div>
+        </div>
+        <div class="lrgs-stat">
+          <span class="lrgs-stat-icon lrgs-stat-purple">
+            <v-icon size="22">mdi-file-document-multiple-outline</v-icon>
+          </span>
+          <div>
+            <strong>[[ messages.length ? messages.length : '—' ]]</strong>
+            <span>Messages on page</span>
+          </div>
+        </div>
+      </div>
+      <v-tabs
+        v-model="tab"
+        color="primary"
+        background-color="white"
+        class="lrgs-tabs"
+        show-arrows
+      >
+        <v-tab>
+          <v-icon left size="18">mdi-radio-tower</v-icon>
+          DCP Configuration
+        </v-tab>
+        <v-tab>
+          <v-icon left size="18">mdi-source-branch</v-icon>
+          Station Associations
+        </v-tab>
+        <v-tab>
+          <v-icon left size="18">mdi-text-box-multiple-outline</v-icon>
+          Message History
+        </v-tab>
+        <v-tab>
+          <v-icon left size="18">mdi-cog-outline</v-icon>
+          LRGS Settings
+        </v-tab>
+      </v-tabs>
+
+      <v-tabs-items v-model="tab" class="lrgs-tab-panels" touchless>
+
+        <!-- DCP CONFIGURATION -->
+        <v-tab-item>
+          <section class="lrgs-section">
+            <div class="lrgs-section-heading">
+              <div class="lrgs-section-name">
+                <span class="lrgs-title-icon lrgs-stat-blue">
+                  <v-icon>mdi-radio-tower</v-icon>
+                </span>
+                <div>
+                  <h2>Data collection platforms</h2>
+                  <p>Transmission channels, schedules and SSF configurations.</p>
+                </div>
+              </div>
+              {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}
+                <v-btn
+                  color="primary"
+                  depressed
+                  class="lrgs-main-btn"
+                  @click="openDcp()"
+                >
+                  <v-icon left>mdi-plus</v-icon>
+                  Add DCP
+                </v-btn>
+              {% endif %}
+            </div>
+            <div class="lrgs-panel">
+              <div class="lrgs-toolbar">
+                <div>
+                  <strong>Configured DCPs</strong>
+                  <span class="lrgs-count">[[ dcps.length ]] total</span>
+                </div>
+                <div class="lrgs-toolbar-tools">
+                  <v-text-field
+                    v-model="search.dcp"
+                    dense
+                    outlined
+                    clearable
+                    hide-details
+                    class="lrgs-search"
+                    prepend-inner-icon="mdi-magnify"
+                    placeholder="Search DCP addresses…"
+                  >
+                  </v-text-field>
+                  <v-btn
+                    outlined
+                    color="primary"
+                    @click="loadDcps"
+                    :loading="loading.dcps"
+                  >
+                    <v-icon left size="17">mdi-refresh</v-icon>
+                    Refresh
+                  </v-btn>
+                </div>
+              </div>
+              <v-data-table
+                :items="dcps"
+                :headers="dcpHeaders"
+                :search="search.dcp"
+                :items-per-page="10"
+                :loading="loading.dcps"
+                class="lrgs-table"
+                mobile-breakpoint="800"
+              >
+                <template v-slot:item.dcp_address="{item}">
+                  <div class="lrgs-item-name">
+                    <v-icon size="17" color="primary">mdi-satellite-uplink</v-icon>
+                    <strong class="lrgs-mono">[[ item.dcp_address ]]</strong>
+                  </div>
+                </template>
+                <template v-slot:item.channels="{item}">
+                  <span class="lrgs-tag">
+                    [[ item.first_channel == null ? 'Any channel' : 'CH '+item.first_channel ]]
+                  </span>
+                  <span v-if="item.second_channel != null" class="lrgs-tag ml-1">CH [[ item.second_channel ]]</span>
+                </template>
+                <template v-slot:item.first_transmission_time="{item}">
+                  <span class="lrgs-mono">[[ item.first_transmission_time ]]</span>
+                </template>
+                <template v-slot:item.last_datetime="{item}">
+                  <span class="lrgs-muted">[[ displayDate(item.last_datetime) ]]</span>
+                </template>
+                <template v-slot:item.has_config="{item}">
+                  <span class="lrgs-pill" :class="item.has_config ? 'lrgs-pill-green' : 'lrgs-pill-slate'">
+                    [[ item.has_config ? 'SSF configured' : 'No SSF' ]]
+                  </span>
+                </template>
+                <template v-slot:item.actions="{item}">
+                  <div class="lrgs-actions">
+                    {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}
+                      <v-btn
+                        outlined
+                        small
+                        color="success"
+                        @click="openPull(item)"
+                      >
+                        <v-icon left size="16">mdi-cloud-download-outline</v-icon>
+                        Pull now
+                      </v-btn>
+                      <v-btn
+                        text
+                        small
+                        color="primary"
+                        @click="openDcp(item)"
+                      >
+                        <v-icon left size="16">mdi-pencil</v-icon>
+                        Edit
+                      </v-btn>
+                      <v-btn
+                        v-if="item.has_config"
+                        text
+                        small
+                        color="primary"
+                        @click="openDcpConfig(item)"
+                      >
+                        <v-icon left size="16">mdi-file-code-outline</v-icon>
+                        View SSF
+                      </v-btn>
+                    {% endif %}
+                    {% if request|has_any_feature_permission:"lrgs-ingestion:delete" %}
+                      <v-btn
+                        icon
+                        small
+                        color="error"
+                        :title="'Delete '+item.dcp_address"
+                        @click="confirmDelete('dcp', item)"
+                      >
+                        <v-icon size="18">mdi-delete-outline</v-icon>
+                      </v-btn>
+                    {% endif %}
+                  </div>
+                </template>
+                <template v-slot:no-data>
+                  <div class="lrgs-empty">No DCPs configured. Add a DCP to begin.</div>
+                </template>
+              </v-data-table>
+            </div>
+          </section>
+        </v-tab-item>
+
+        <!-- ASSOCIATIONS -->
+        <v-tab-item>
+          <section class="lrgs-section">
+            <div class="lrgs-section-heading">
+              <div class="lrgs-section-name">
+                <span class="lrgs-title-icon lrgs-stat-teal">
+                  <v-icon>mdi-source-branch</v-icon>
+                </span>
+                <div>
+                  <h2>Station associations</h2>
+                  <p>One DCP can deliver messages to multiple stations using each station's decoder.</p>
+                </div>
+              </div>
+              {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}
+                <v-btn
+                  color="primary"
+                  depressed
+                  class="lrgs-main-btn"
+                  @click="openAssociation()"
+                >
+                  <v-icon left>mdi-plus</v-icon>
+                  Add association
+                </v-btn>
+              {% endif %}
+            </div>
+            <div class="lrgs-note">
+              <v-icon color="primary" size="18">mdi-information-outline</v-icon>
+              <div>
+                An association is eligible to receive DCP messages starting on its start date and stopping at its end date.
+                <strong>Leave End date empty</strong>
+              </div>
+            </div>
+            <div class="lrgs-panel">
+              <div class="lrgs-toolbar">
+                <div>
+                  <strong>DCP-to-station routing</strong>
+                  <span class="lrgs-count">[[ associations.length ]] associations</span>
+                </div>
+                <div class="lrgs-toolbar-tools">
+                  <v-text-field
+                    v-model="search.association"
+                    dense
+                    outlined
+                    clearable
+                    hide-details
+                    prepend-inner-icon="mdi-magnify"
+                    placeholder="Search station or DCP…"
+                    class="lrgs-search"
+                  >
+                  </v-text-field>
+                  <v-btn
+                    outlined
+                    color="primary"
+                    @click="loadAssociations"
+                    :loading="loading.associations"
+                  >
+                    <v-icon left size="17">mdi-refresh</v-icon>
+                    Refresh
+                  </v-btn>
+                </div>
+              </div>
+              <v-data-table
+                :items="filteredAssociations"
+                :headers="associationHeaders"
+                :items-per-page="10"
+                :loading="loading.associations"
+                class="lrgs-table"
+                mobile-breakpoint="760"
+              >
+                <template v-slot:item.dcp_address="{item}">
+                  <strong class="lrgs-mono">[[ item.dcp_address ]]</strong>
+                </template>
+                <template v-slot:item.station_name="{item}">
+                  <strong>[[ item.station_name ]]</strong>
+                </template>
+                <template v-slot:item.period="{item}">
+                  <div>[[ displayDate(item.start_date) ]]</div>
+                  <div class="lrgs-muted">
+                    [[ item.end_date ? 'Until '+displayDate(item.end_date) : 'No end date' ]]
+                  </div>
+                </template>
+                <template v-slot:item.state="{item}">
+                  <span
+                    class="lrgs-pill"
+                    :class="associationState(item)==='Active'?'lrgs-pill-green':associationState(item)==='Upcoming'?'lrgs-pill-blue':'lrgs-pill-amber'"
+                  >
+                    [[ associationState(item) ]]
+                  </span>
+                </template>
+                <template v-slot:item.actions="{item}">
+                  <div class="lrgs-actions">
+                    {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}
+                      <v-btn
+                        text
+                        small
+                        color="primary"
+                        @click="openAssociation(item)"
+                      >
+                        <v-icon left size="16">mdi-pencil</v-icon>
+                        Edit
+                      </v-btn>
+                    {% endif %}
+                    {% if request|has_any_feature_permission:"lrgs-ingestion:delete" %}
+                      <v-btn
+                        icon
+                        small
+                        color="error"
+                        @click="confirmDelete('association', item)"
+                      >
+                        <v-icon size="18">mdi-delete-outline</v-icon>
+                      </v-btn>
+                    {% endif %}
+                  </div>
+                </template>
+                <template v-slot:no-data>
+                  <div class="lrgs-empty">No station associations found.</div>
+                </template>
+              </v-data-table>
+            </div>
+          </section>
+        </v-tab-item>
+
+        <!-- MESSAGE HISTORY: two independent views, not two stacked tables. -->
+        <v-tab-item>
+          <section class="lrgs-section lrgs-history-section">
+
+            <!-- Shared heading and context-sensitive refresh action. -->
+            <div class="lrgs-section-heading">
+              <div class="lrgs-section-name">
+                <span class="lrgs-title-icon lrgs-stat-purple">
+                  <v-icon>mdi-text-box-multiple-outline</v-icon>
+                </span>
+                <div>
+                  <h2>Message history</h2>
+                  <p>Explore messages received from LRGS and review retrieval activity.</p>
+                </div>
+              </div>
+
+              <v-btn
+                outlined
+                color="primary"
+                :loading="historyView === 'messages' ? loading.messages : loading.runs"
+                @click="refreshHistoryView"
+              >
+                <v-icon left size="17">mdi-refresh</v-icon>
+                Refresh view
+              </v-btn>
+            </div>
+
+            <!-- Both datasets are first-class destinations. Selection persists
+                 while navigating to the other sections of LRGS Ingestion. -->
+            <div
+              class="lrgs-history-switcher"
+              role="tablist"
+              aria-label="Message history views"
+            >
+              <button
+                type="button"
+                role="tab"
+                class="lrgs-history-choice"
+                :class="{'lrgs-history-choice--active': historyView === 'messages'}"
+                :aria-selected="historyView === 'messages' ? 'true' : 'false'"
+                @click="switchHistoryView('messages')"
+              >
+                <span class="lrgs-history-choice-icon lrgs-history-choice-icon--messages">
+                  <v-icon size="22">mdi-email-multiple-outline</v-icon>
+                </span>
+
+                <span class="lrgs-history-choice-copy">
+                  <strong>Received Messages</strong>
+                  <span>Search transmissions and inspect message payloads</span>
+                </span>
+
+                <span class="lrgs-history-choice-count">
+                  [[ messages.length ]] on page
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                class="lrgs-history-choice"
+                :class="{'lrgs-history-choice--active': historyView === 'activity'}"
+                :aria-selected="historyView === 'activity' ? 'true' : 'false'"
+                @click="switchHistoryView('activity')"
+              >
+                <span class="lrgs-history-choice-icon lrgs-history-choice-icon--activity">
+                  <v-icon size="22">mdi-history</v-icon>
+                </span>
+
+                <span class="lrgs-history-choice-copy">
+                  <strong>Retrieval Activity</strong>
+                  <span>Monitor Pull Now requests, outcomes, and errors</span>
+                </span>
+
+                <span class="lrgs-history-choice-count">
+                  [[ runs.length ]] recent runs
+                </span>
+              </button>
+            </div>
+
+            <!-- VIEW A: RECEIVED MESSAGES -->
+            <div v-show="historyView === 'messages'" class="lrgs-history-view" role="tabpanel">
+
+              <div class="lrgs-history-view-heading">
+                <div>
+                  <h3>Received messages</h3>
+                  <p>Browse transmissions stored in SURFACE, filtered by DCP and receive time.</p>
+                </div>
+                <span class="lrgs-history-timezone">
+                  <v-icon size="15">mdi-clock-outline</v-icon>
+                  [[ timezoneName ]]
+                </span>
+              </div>
+
+              <!-- When opening messages from a particular run, make it clear
+                   that this is a time-window filter, not an insertion audit. -->
+              <v-alert
+                v-if="messageRunContext"
+                dense
+                outlined
+                type="info"
+                class="lrgs-history-context"
+              >
+                Showing stored messages matching retrieval # [[ messageRunContext ]].
+                These may include transmissions saved before that retrieval.
+                <v-btn small text color="primary" @click="clearMessageFilters">
+                  Clear run filter
+                </v-btn>
+              </v-alert>
+
+              <!-- Message filters stay entirely separate from run filters. -->
+              <div class="lrgs-panel lrgs-filters lrgs-history-filters">
+                <div class="lrgs-history-filter-heading">
+                  <strong>
+                    <v-icon size="18" color="primary">mdi-filter-variant</v-icon>
+                    Filter messages
+                  </strong>
+                  <span>Filters apply to stored DCP messages</span>
+                </div>
+
+                <div class="lrgs-filter-grid lrgs-history-filter-grid">
+                  <v-autocomplete
+                    v-model="messageFilters.dcp"
+                    :items="dcpOptions"
+                    item-text="name"
+                    item-value="id"
+                    dense
+                    outlined
+                    clearable
+                    hide-details
+                    label="Select DCP"
+                    :menu-props="{offsetY:true,maxHeight:260}"
+                  ></v-autocomplete>
+
+                  <v-text-field
+                    v-model="messageFilters.search"
+                    dense
+                    outlined
+                    clearable
+                    hide-details
+                    label="Search DCP address"
+                    prepend-inner-icon="mdi-magnify"
+                    @keyup.enter="loadMessages(1)"
+                  ></v-text-field>
+
+                  <!-- From date + time; the backend interprets the combined
+                       local datetime using settings.TIMEZONE_NAME. -->
+                  <div class="lrgs-date-group">
+                    <v-menu
+                      v-model="messageFromMenu"
+                      offset-y
+                      :close-on-content-click="false"
+                      min-width="290px"
+                    >
+                      <template v-slot:activator="{on,attrs}">
+                        <v-text-field
+                          :value="messageFilters.from.slice(0,10)"
+                          readonly
+                          clearable
+                          @click:clear="messageFilters.from=''"
+                          dense
+                          outlined
+                          hide-details
+                          label="From date"
+                          prepend-inner-icon="mdi-calendar"
+                          v-bind="attrs"
+                          v-on="on"
+                        ></v-text-field>
+                      </template>
+
+                      <v-date-picker
+                        :value="messageFilters.from.slice(0,10)"
+                        no-title
+                        @input="setMessageDate('from',$event);messageFromMenu=false"
+                      ></v-date-picker>
+                    </v-menu>
+
+                    <div class="lrgs-time-control lrgs-time-control--compact">
+                      <v-menu
+                        v-model="timeMenus.messageFrom"
+                        :close-on-content-click="false"
+                        offset-y
+                        min-width="290px"
+                        max-width="290px"
+                      >
+                        <template v-slot:activator="{on,attrs}">
+                          <v-text-field
+                            :value="messageFilters.from.slice(11)"
+                            dense
+                            outlined
+                            readonly
+                            label="Time"
+                            prepend-inner-icon="mdi-clock-outline"
+                            class="lrgs-time-field"
+                            :disabled="!messageFilters.from"
+                            v-bind="attrs"
+                            v-on="on"
+                          ></v-text-field>
+                        </template>
+
+                        <v-time-picker
+                          :value="messageFilters.from.slice(11)"
+                          format="24hr"
+                          color="primary"
+                          @input="setMessageTime('from',$event)"
+                          @click:minute="timeMenus.messageFrom=false"
+                        ></v-time-picker>
+                      </v-menu>
+                    </div>
+                  </div>
+
+                  <!-- To bound is exclusive, matching the existing API filter. -->
+                  <div class="lrgs-date-group">
+                    <v-menu
+                      v-model="messageToMenu"
+                      offset-y
+                      :close-on-content-click="false"
+                      min-width="290px"
+                    >
+                      <template v-slot:activator="{on,attrs}">
+                        <v-text-field
+                          :value="messageFilters.to.slice(0,10)"
+                          readonly
+                          clearable
+                          @click:clear="messageFilters.to=''"
+                          dense
+                          outlined
+                          hide-details
+                          label="To date"
+                          prepend-inner-icon="mdi-calendar"
+                          v-bind="attrs"
+                          v-on="on"
+                        ></v-text-field>
+                      </template>
+
+                      <v-date-picker
+                        :value="messageFilters.to.slice(0,10)"
+                        no-title
+                        @input="setMessageDate('to',$event);messageToMenu=false"
+                      ></v-date-picker>
+                    </v-menu>
+
+                    <div class="lrgs-time-control lrgs-time-control--compact">
+                      <v-menu
+                        v-model="timeMenus.messageTo"
+                        :close-on-content-click="false"
+                        offset-y
+                        min-width="290px"
+                        max-width="290px"
+                      >
+                        <template v-slot:activator="{on,attrs}">
+                          <v-text-field
+                            :value="messageFilters.to.slice(11)"
+                            dense
+                            outlined
+                            readonly
+                            label="Time"
+                            prepend-inner-icon="mdi-clock-outline"
+                            class="lrgs-time-field"
+                            :disabled="!messageFilters.to"
+                            v-bind="attrs"
+                            v-on="on"
+                          ></v-text-field>
+                        </template>
+
+                        <v-time-picker
+                          :value="messageFilters.to.slice(11)"
+                          format="24hr"
+                          color="primary"
+                          @input="setMessageTime('to',$event)"
+                          @click:minute="timeMenus.messageTo=false"
+                        ></v-time-picker>
+                      </v-menu>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="lrgs-filter-actions">
+                  <v-btn
+                    color="primary"
+                    depressed
+                    :loading="loading.messages"
+                    @click="loadMessages(1)"
+                  >
+                    <v-icon left size="17">mdi-magnify</v-icon>
+                    Search messages
+                  </v-btn>
+
+                  <v-btn outlined color="grey darken-2" @click="clearMessageFilters">
+                    Clear filters
+                  </v-btn>
+
+                  <span class="lrgs-muted">
+                    Date/time filters use [[ timezoneName ]]
+                  </span>
+                </div>
+              </div>
+
+              <!-- These statistics describe only the current server-paginated
+                   page. They are NOT total messages or recovered history. -->
+              <div class="lrgs-history-metrics lrgs-history-metrics--messages">
+                <div class="lrgs-history-metric">
+                  <span>Messages on this page</span>
+                  <strong>[[ messages.length ]]</strong>
+                </div>
+
+                <div class="lrgs-history-metric">
+                  <span>Newest received on page</span>
+                  <strong class="lrgs-history-metric-date">
+                    [[ displayDate(pageNewestMessage) ]]
+                  </strong>
+                </div>
+
+                <div class="lrgs-history-metric">
+                  <span>Oldest received on page</span>
+                  <strong class="lrgs-history-metric-date">
+                    [[ displayDate(pageOldestMessage) ]]
+                  </strong>
+                </div>
+              </div>
+
+              <div class="lrgs-panel lrgs-history-results">
+                <div class="lrgs-toolbar">
+                  <div>
+                    <strong>Received transmissions</strong>
+                    <span class="lrgs-count">Page [[ messagePage ]] · up to 25 per page</span>
+                  </div>
+
+                  <v-btn
+                    small
+                    text
+                    color="primary"
+                    :loading="loading.messages"
+                    @click="loadMessages(messagePage)"
+                  >
+                    <v-icon left size="17">mdi-refresh</v-icon>
+                    Refresh messages
+                  </v-btn>
+                </div>
+
+                <v-data-table
+                  :items="messages"
+                  :headers="messageHeaders"
+                  :items-per-page="-1"
+                  hide-default-footer
+                  :loading="loading.messages"
+                  class="lrgs-table"
+                >
+                  <template v-slot:item.dcp_address="{item}">
+                    <strong class="lrgs-mono">[[ item.dcp_address ]]</strong>
+                  </template>
+
+                  <template v-slot:item.datetime="{item}">
+                    <span>[[ displayDate(item.datetime) ]]</span>
+                  </template>
+
+                  <template v-slot:item.failure_code="{item}">
+                    <span
+                      class="lrgs-pill"
+                      :class="item.failure_code==='G'?'lrgs-pill-green':'lrgs-pill-amber'"
+                    >
+                      [[ item.failure_code ]]
+                    </span>
+                  </template>
+
+                  <template v-slot:item.actions="{item}">
+                    <v-btn small text color="primary" @click="openMessage(item)">
+                      <v-icon left size="16">mdi-eye-outline</v-icon>
+                      Details
+                    </v-btn>
+                  </template>
+
+                  <template v-slot:no-data>
+                    <div class="lrgs-empty">
+                      No stored messages match the selected filters.
+                    </div>
+                  </template>
+                </v-data-table>
+
+                <div class="lrgs-pagination">
+                  <span>Page [[ messagePage ]] · [[ messages.length ]] messages shown</span>
+
+                  <v-btn
+                    small
+                    outlined
+                    color="primary"
+                    :disabled="messagePage===1 || loading.messages"
+                    @click="loadMessages(messagePage-1)"
+                  >
+                    <v-icon left size="17">mdi-chevron-left</v-icon>
+                    Previous
+                  </v-btn>
+
+                  <v-btn
+                    small
+                    outlined
+                    color="primary"
+                    :disabled="!messageHasNext || loading.messages"
+                    @click="loadMessages(messagePage+1)"
+                  >
+                    Next
+                    <v-icon right size="17">mdi-chevron-right</v-icon>
+                  </v-btn>
+                </div>
+              </div>
+            </div>
+
+            <!-- VIEW B: RETRIEVAL ACTIVITY -->
+            <div v-show="historyView === 'activity'" class="lrgs-history-view" role="tabpanel">
+
+              <div class="lrgs-panel lrgs-history-results">
+                <div class="lrgs-toolbar">
+                  <div>
+                    <strong>Retrieval runs</strong>
+                    <span class="lrgs-count">Filter the most recent 50 recorded runs</span>
+                  </div>
+
+                  <v-btn
+                    small
+                    text
+                    color="primary"
+                    :loading="loading.runs"
+                    @click="loadRuns"
+                  >
+                    <v-icon left size="17">mdi-refresh</v-icon>
+                    Refresh activity
+                  </v-btn>
+                </div>
+
+                <!-- Filtering is local because the existing endpoint already
+                     returns a bounded collection of the latest 50 runs. -->
+                <div class="lrgs-history-run-filters">
+                  <v-autocomplete
+                    v-model="runDcpFilter"
+                    :items="dcpOptions"
+                    item-text="name"
+                    item-value="id"
+                    label="Filter by DCP"
+                    dense
+                    outlined
+                    hide-details
+                    clearable
+                  ></v-autocomplete>
+
+                  <v-select
+                    v-model="runStatusFilter"
+                    :items="runStatusOptions"
+                    item-text="text"
+                    item-value="value"
+                    label="Run status"
+                    dense
+                    outlined
+                    hide-details
+                  ></v-select>
+
+                  <v-btn
+                    outlined
+                    color="grey darken-2"
+                    @click="clearRunFilters"
+                  >
+                    Clear
+                  </v-btn>
+                </div>
+
+                <v-data-table
+                  :items="filteredRuns"
+                  :headers="runHeaders"
+                  :items-per-page="10"
+                  :loading="loading.runs"
+                  class="lrgs-table"
+                >
+                  <template v-slot:item.dcp_address="{item}">
+                    <strong class="lrgs-mono">[[ item.dcp_address ]]</strong>
+                  </template>
+
+                  <template v-slot:item.status="{item}">
+                    <span class="lrgs-pill" :class="runClass(item.status)">
+                      [[ item.status ]]
+                    </span>
+                  </template>
+
+                  <template v-slot:item.created_at="{item}">
+                    [[ displayDate(item.created_at) ]]
+                  </template>
+
+                  <template v-slot:item.messages_received="{item}">
+                    <div class="lrgs-run-deliveries">
+                      <strong>[[ item.messages_received ]]</strong>
+                      <span>[[ item.station_deliveries ]] deliveries</span>
+                    </div>
+                  </template>
+
+                  <template v-slot:item.actions="{item}">
+                    <div class="lrgs-history-row-actions">
+                      <v-btn
+                        small
+                        text
+                        color="primary"
+                        @click="showRun(item)"
+                      >
+                        <v-icon left size="16">mdi-eye-outline</v-icon>
+                        Details
+                      </v-btn>
+
+                      <v-btn
+                        small
+                        outlined
+                        color="primary"
+                        @click="viewRunMessages(item)"
+                      >
+                        <v-icon left size="16">mdi-email-search-outline</v-icon>
+                        View messages
+                      </v-btn>
+                    </div>
+                  </template>
+
+                  <template v-slot:no-data>
+                    <div class="lrgs-empty">
+                      No recent retrieval runs match these filters.
+                    </div>
+                  </template>
+                </v-data-table>
+
+                <div class="lrgs-history-footnote">
+                  <v-icon size="17" color="primary">mdi-information-outline</v-icon>
+                  <span>
+                    Messages returned and station deliveries describe retrieval processing,
+                    not the number of new database records or weather observations inserted.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          </section>
+        </v-tab-item>
+
+        <!-- LRGS SETTINGS -->
+        <v-tab-item>
+          <section class="lrgs-section">
+            <div class="lrgs-section-heading">
+              <div class="lrgs-section-name">
+                <span class="lrgs-title-icon lrgs-stat-blue">
+                  <v-icon>mdi-cog-outline</v-icon>
+                </span>
+                <div>
+                  <h2>LRGS connection settings</h2>
+                  <p>Connection credentials and advanced retrieval parameters for the entire SURFACE installation.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="lrgs-settings-layout">
+              <div class="lrgs-panel lrgs-settings-form">
+                <div class="lrgs-panel-heading">
+                  <v-icon color="success" size="20">mdi-account-key-outline</v-icon>
+                  <div>
+                    <strong>Connection credentials</strong>
+                    <span>Change these when LRGS access credentials are rotated.</span>
+                  </div>
+                </div>
+                <v-text-field
+                  v-model.trim="settingDraft.username"
+                  dense
+                  outlined
+                  label="LRGS username"
+                  :disabled="!canEdit"
+                  autocomplete="off"
+                >
+                </v-text-field>
+                <v-text-field
+                  v-model="settingDraft.password"
+                  dense
+                  outlined
+                  :type="showLrgsPassword?'text':'password'"
+                  label="New LRGS password (optional)"
+                  hint="Leave blank to preserve the configured password, unless changing the server host or port."
+                  persistent-hint
+                  autocomplete="new-password"
+                  :disabled="!canEdit"
+                  :append-icon="showLrgsPassword?'mdi-eye-off-outline':'mdi-eye-outline'"
+                  @click:append="showLrgsPassword=!showLrgsPassword"
+                >
+                </v-text-field>
+                <v-divider class="my-4"></v-divider>
+                <div class="lrgs-panel-heading">
+                  <v-icon color="warning" size="20">mdi-shield-alert-outline</v-icon>
+                  <div>
+                    <strong>Advanced server settings</strong>
+                    <span>Normally leave these at their defaults.</span>
+                  </div>
+                </div>
+                <v-alert dense type="warning">
+                  Changing the LRGS host, port, or lookback limit can interrupt ingestion. Only modify these when directed by your LRGS administrator.
+                </v-alert>
+                {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}
+                  <v-checkbox
+                    v-model="advancedUnlocked"
+                    @change="onAdvancedToggle"
+                    dense
+                    hide-details
+                    class="mt-0 mb-4"
+                    label="I need to edit advanced settings"
+                  >
+                  </v-checkbox>
+                {% endif %}
+                <v-text-field
+                  v-model.trim="settingDraft.server_host"
+                  dense
+                  outlined
+                  label="LRGS server hostname"
+                  :disabled="!canEdit || !advancedUnlocked"
+                >
+                </v-text-field>
+                <v-row dense>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model.number="settingDraft.server_port"
+                      dense
+                      outlined
+                      type="number"
+                      label="LRGS server port"
+                      :disabled="!canEdit || !advancedUnlocked"
+                    >
+                    </v-text-field>
+                  </v-col>
+                  <v-col cols="12" sm="6">
+                    <v-text-field
+                      v-model.number="settingDraft.max_interval_hours"
+                      dense
+                      outlined
+                      type="number"
+                      label="Maximum automatic lookback (hours)"
+                      :disabled="!canEdit || !advancedUnlocked"
+                    >
+                    </v-text-field>
+                  </v-col>
+                </v-row>
+                <v-text-field
+                  v-if="advancedChanged"
+                  v-model.trim="advancedConfirm"
+                  dense
+                  outlined
+                  label="Type CHANGE LRGS SERVER to confirm"
+                  placeholder="CHANGE LRGS SERVER"
+                >
+                </v-text-field>
+                <div class="lrgs-settings-footer">
+                  <span class="lrgs-muted">
+                    [[ settingsSaved ? 'Database configuration saved' : 'Using values from Django settings' ]]
+                  </span>
+                  {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}
+                    <v-btn
+                      color="primary"
+                      depressed
+                      :loading="saving"
+                      :disabled="advancedChanged && advancedConfirm!=='CHANGE LRGS SERVER'"
+                      @click="saveSettings"
+                    >
+                      <v-icon left>mdi-content-save-outline</v-icon>
+                      Save settings
+                    </v-btn>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="lrgs-help">
+                <div class="lrgs-panel lrgs-help-block">
+                  <div class="lrgs-panel-heading">
+                    <v-icon color="primary">mdi-clock-outline</v-icon>
+                    <div>
+                      <strong>How much historical data can we retrieve?</strong>
+                      <span>Understanding the automatic lookback and server retention.</span>
+                    </div>
+                  </div>
+                  <div class="lrgs-lookback">
+                    <strong>[[ settingDraft.max_interval_hours ]] hours</strong>
+                    <span>Current automatic lookback cap · [[ humanHours(settingDraft.max_interval_hours) ]]</span>
+                  </div>
+                  <p>
+                    Archived history depends on the LRGS server. A custom
+                    <strong>Pull Now</strong>
+                    can request older dates, but the server may no longer retain those messages.
+                  </p>
+                  <p>
+                    Historical requests are limited to
+                    <strong>30 days per request</strong>
+                    and processed in windows of up to 24 hours to avoid oversized retrievals.
+                  </p>
+                  <div class="lrgs-muted" style="color: rgb(245, 104, 104);">
+                    Times entered in this page use
+                    <strong>[[ timezoneName ]]</strong>
+                    (SURFACE's configured timezone; TIMEZONE_OFFSET setting: [[ timezoneOffset == null ? 'not configured' : timezoneOffset ]]). LRGS search criteria are converted to UTC.
+                  </div>
+                </div>
+                <div class="lrgs-panel lrgs-help-block">
+                  <div class="lrgs-panel-heading">
+                    <v-icon color="success">mdi-cloud-check-outline</v-icon>
+                    <div>
+                      <strong>Retrieval scheduling</strong>
+                    </div>
+                  </div>
+                  <p>
+                    <strong>First transmission time</strong>
+                    is when the latest DCP transmission should already be available on LRGS. The automatic scheduler decides whether a DCP is due; Pull Now bypasses that waiting period.
+                  </p>
+                  <p>
+                    Run History distinguishes queued, completed, partial, and failed retrievals. A DCP's legacy
+                    <code>last_datetime</code>
+                    remains its most recent scheduled attempt.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </v-tab-item>
+
+      </v-tabs-items>
+
+      <!-- DCP ADD / EDIT -->
+      <v-dialog
+        v-model="dcpDialog"
+        max-width="760"
+        scrollable
+        persistent
+      >
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <v-icon color="primary" left>mdi-radio-tower</v-icon>
+            <strong>[[ dcpDraft.id ? 'Edit DCP' : 'Add DCP' ]]</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="dcpDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text class="lrgs-dialog-content">
+            <h3>DCP identification</h3>
+            <v-text-field
+              v-model.trim="dcpDraft.dcp_address"
+              dense
+              outlined
+              label="DCP address (8 hexadecimal characters)"
+              maxlength="8"
+              :error-messages="fieldErrors.dcp_address"
+            >
+            </v-text-field>
+            <h3>GOES channels</h3>
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.number="dcpDraft.first_channel"
+                  dense
+                  outlined
+                  type="number"
+                  label="First channel"
+                  :error-messages="fieldErrors.first_channel"
+                >
+                </v-text-field>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="dcpDraft.first_channel_type"
+                  dense
+                  outlined
+                  clearable
+                  :items="refs.types"
+                  item-text="name"
+                  item-value="id"
+                  label="First transmission type"
+                >
+                </v-autocomplete>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.number="dcpDraft.second_channel"
+                  dense
+                  outlined
+                  type="number"
+                  label="Second channel"
+                >
+                </v-text-field>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="dcpDraft.second_channel_type"
+                  dense
+                  outlined
+                  clearable
+                  :items="refs.types"
+                  item-text="name"
+                  item-value="id"
+                  label="Second transmission type"
+                >
+                </v-autocomplete>
+              </v-col>
+            </v-row>
+            <h3>Transmission timing (UTC)</h3>
+            <v-row dense>
+              <v-col cols="12" sm="4">
+                <!-- DCP timing retains seconds (HH:mm:ss) for the existing TimeFields. -->
+                <div class="lrgs-time-control">
+                  <v-menu
+                    v-model="timeMenus.dcpFirst"
+                    :close-on-content-click="false"
+                    offset-y
+                    min-width="290px"
+                    max-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        :value="dcpDraft.first_transmission_time"
+                        dense
+                        outlined
+                        readonly
+                        label="First transmission time"
+                        prepend-inner-icon="mdi-clock-outline"
+                        class="lrgs-time-field"
+                        hint="When newest data is available"
+                        persistent-hint
+                        v-bind="attrs"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+
+                    <v-time-picker
+                      v-model="dcpDraft.first_transmission_time"
+                      format="24hr"
+                      use-seconds
+                      color="primary"
+                      @click:second="timeMenus.dcpFirst = false"
+                    ></v-time-picker>
+                  </v-menu>
+                </div>
+              </v-col>
+              <v-col cols="12" sm="4">
+                <div class="lrgs-time-control">
+                  <v-menu
+                    v-model="timeMenus.dcpWindow"
+                    :close-on-content-click="false"
+                    offset-y
+                    min-width="290px"
+                    max-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        :value="dcpDraft.transmission_window"
+                        dense
+                        outlined
+                        readonly
+                        label="Transmission window"
+                        prepend-inner-icon="mdi-clock-outline"
+                        class="lrgs-time-field"
+                        v-bind="attrs"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+
+                    <v-time-picker
+                      v-model="dcpDraft.transmission_window"
+                      format="24hr"
+                      use-seconds
+                      color="primary"
+                      @click:second="timeMenus.dcpWindow = false"
+                    ></v-time-picker>
+                  </v-menu>
+                </div>
+              </v-col>
+              <v-col cols="12" sm="4">
+                <div class="lrgs-time-control">
+                  <v-menu
+                    v-model="timeMenus.dcpPeriod"
+                    :close-on-content-click="false"
+                    offset-y
+                    min-width="290px"
+                    max-width="290px"
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-text-field
+                        :value="dcpDraft.transmission_period"
+                        dense
+                        outlined
+                        readonly
+                        label="Transmission period"
+                        prepend-inner-icon="mdi-clock-outline"
+                        class="lrgs-time-field"
+                        v-bind="attrs"
+                        v-on="on"
+                      ></v-text-field>
+                    </template>
+
+                    <v-time-picker
+                      v-model="dcpDraft.transmission_period"
+                      format="24hr"
+                      use-seconds
+                      color="primary"
+                      @click:second="timeMenus.dcpPeriod = false"
+                    ></v-time-picker>
+                  </v-menu>
+                </div>
+              </v-col>
+            </v-row>
+
+            <!-- Sutron Station Setup File -->
+            <h3>Station Setup File (SSF)</h3>
+
+            <p class="lrgs-muted mb-3">
+              Upload the station's Sutron setup file (.ssf), if required
+              by its decoder. This file contains the data logger's
+              configuration and may help SURFACE interpret incoming
+              satellite messages. <span style="color: rgb(245, 104, 104);">This field is optional.</span>
+            </p>
+
+            <v-file-input
+              v-model="ssfUpload"
+              dense
+              outlined
+              accept=".ssf"
+              show-size
+              clearable
+              label="Upload SSF file (optional)"
+              hint="Only upload a new file when you need to update the existing configuration."
+              persistent-hint
+              prepend-icon="mdi-file-code-outline"
+            >
+            </v-file-input>
+
+            <v-alert v-if="fieldErrors.__all__" type="error" dense>[[ fieldErrors.__all__.join(' ') ]]</v-alert>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="error" @click="dcpDialog=false">Cancel</v-btn>
+            <v-btn
+              color="primary"
+              depressed
+              :loading="saving"
+              @click="saveDcp"
+            >
+              <v-icon left>mdi-content-save-outline</v-icon>
+              Save DCP
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Read existing SSF text only on demand; keep large configurations out of list JSON. -->
+      <v-dialog v-model="configDialog" max-width="760" scrollable>
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <strong>SSF configuration · [[ configDcpAddress ]]</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="configDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text class="lrgs-dialog-content">
+            <pre class="lrgs-message-payload">[[ configText || 'No SSF configuration saved.' ]]</pre>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="error" @click="configDialog=false">Close</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- ASSOCIATION ADD / EDIT -->
+      <v-dialog
+        v-model="associationDialog"
+        max-width="800"
+        scrollable
+        persistent
+      >
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <v-icon color="success" left>mdi-source-branch</v-icon>
+            <strong>[[ associationDraft.id ? 'Edit association' : 'Add association' ]]</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="associationDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text class="lrgs-dialog-content">
+            <div class="lrgs-note">
+              <v-icon size="17" color="primary">mdi-information-outline</v-icon>
+              Each matching message is sent to every active association, with that station's decoder.
+            </div>
+            <h3>DCP and station</h3>
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="associationDraft.noaa_dcp"
+                  dense
+                  outlined
+                  clearable
+                  :items="dcpOptions"
+                  item-text="name"
+                  item-value="id"
+                  label="DCP address"
+                  :error-messages="fieldErrors.noaa_dcp"
+                >
+                </v-autocomplete>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="associationDraft.station"
+                  dense
+                  outlined
+                  clearable
+                  :items="refs.stations"
+                  item-text="name"
+                  item-value="id"
+                  label="Station"
+                  :error-messages="fieldErrors.station"
+                >
+                </v-autocomplete>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="associationDraft.decoder"
+                  dense
+                  outlined
+                  clearable
+                  :items="refs.decoders"
+                  item-text="name"
+                  item-value="id"
+                  label="Decoder"
+                  :error-messages="fieldErrors.decoder"
+                >
+                </v-autocomplete>
+              </v-col>
+            </v-row>
+            <h3>Association effective dates</h3>
+            <div class="lrgs-muted mb-3">
+              Select dates in [[ timezoneName ]]. Leave the end date blank for ongoing collection. Messages are routed using their UTC receive times.
+            </div>
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <div class="lrgs-date-group">
+                  <v-menu
+                    v-model="associationStartMenu"
+                    :close-on-content-click="false"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{on,attrs}">
+                      <v-text-field
+                        v-model="associationDraft.startDay"
+                        label="Start date"
+                        dense
+                        outlined
+                        readonly
+                        clearable
+                        prepend-inner-icon="mdi-calendar"
+                        v-bind="attrs"
+                        v-on="on"
+                        :error-messages="fieldErrors.start_date"
+                      >
+                      </v-text-field>
+                    </template>
+                    <v-date-picker v-model="associationDraft.startDay" no-title @input="associationStartMenu=false"></v-date-picker>
+                  </v-menu>
+                  <!-- Association times use HH:mm; Django converts using the configured timezone. -->
+                  <div class="lrgs-time-control lrgs-time-control--compact">
+                    <v-menu
+                      v-model="timeMenus.associationStart"
+                      :close-on-content-click="false"
+                      offset-y
+                      min-width="290px"
+                      max-width="290px"
+                    >
+                      <template v-slot:activator="{ on, attrs }">
+                        <v-text-field
+                          :value="associationDraft.startTime"
+                          dense
+                          outlined
+                          readonly
+                          label="Start time"
+                          prepend-inner-icon="mdi-clock-outline"
+                          class="lrgs-time-field"
+                          v-bind="attrs"
+                          v-on="on"
+                        ></v-text-field>
+                      </template>
+
+                      <v-time-picker
+                        v-model="associationDraft.startTime"
+                        format="24hr"
+                        color="primary"
+                        @click:minute="timeMenus.associationStart = false"
+                      ></v-time-picker>
+                    </v-menu>
+                  </div>
+                </div>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <div class="lrgs-date-group">
+                  <v-menu
+                    v-model="associationEndMenu"
+                    :close-on-content-click="false"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{on,attrs}">
+                      <v-text-field
+                        v-model="associationDraft.endDay"
+                        label="End date (optional)"
+                        dense
+                        outlined
+                        readonly
+                        clearable
+                        prepend-inner-icon="mdi-calendar"
+                        v-bind="attrs"
+                        v-on="on"
+                        :error-messages="fieldErrors.end_date"
+                      >
+                      </v-text-field>
+                    </template>
+                    <v-date-picker
+                      v-model="associationDraft.endDay"
+                      no-title
+                      :min="associationDraft.startDay || undefined"
+                      @input="associationEndMenu=false"
+                    >
+                    </v-date-picker>
+                  </v-menu>
+                  <div class="lrgs-time-control lrgs-time-control--compact">
+                    <v-menu
+                      v-model="timeMenus.associationEnd"
+                      :close-on-content-click="false"
+                      offset-y
+                      min-width="290px"
+                      max-width="290px"
+                    >
+                      <template v-slot:activator="{ on, attrs }">
+                        <v-text-field
+                          :value="associationDraft.endTime"
+                          dense
+                          outlined
+                          readonly
+                          label="End time"
+                          prepend-inner-icon="mdi-clock-outline"
+                          class="lrgs-time-field"
+                          :disabled="!associationDraft.endDay"
+                          v-bind="attrs"
+                          v-on="on"
+                        ></v-text-field>
+                      </template>
+
+                      <v-time-picker
+                        v-model="associationDraft.endTime"
+                        format="24hr"
+                        color="primary"
+                        @click:minute="timeMenus.associationEnd = false"
+                      ></v-time-picker>
+                    </v-menu>
+                  </div>
+                </div>
+              </v-col>
+            </v-row>
+            <h3>Legacy station metadata</h3>
+            <div class="lrgs-muted mb-3">
+              Interval and Format are still required by your current NoaaDcpsStation model. They are preserved until existing code references can be audited before removing those fields.
+            </div>
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="associationDraft.interval"
+                  dense
+                  outlined
+                  :items="refs.intervals"
+                  item-text="name"
+                  item-value="id"
+                  label="Interval"
+                  :error-messages="fieldErrors.interval"
+                >
+                </v-autocomplete>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-autocomplete
+                  v-model="associationDraft.format"
+                  dense
+                  outlined
+                  :items="refs.formats"
+                  item-text="name"
+                  item-value="id"
+                  label="Format"
+                  :error-messages="fieldErrors.format"
+                >
+                </v-autocomplete>
+              </v-col>
+            </v-row>
+            <v-alert v-if="fieldErrors.__all__" type="error" dense>[[ fieldErrors.__all__.join(' ') ]]</v-alert>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="error" @click="associationDialog=false">Cancel</v-btn>
+            <v-btn
+              color="primary"
+              depressed
+              :loading="saving"
+              @click="saveAssociation"
+            >
+              <v-icon left>mdi-content-save-outline</v-icon>
+              Save association
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- PULL NOW -->
+      <v-dialog
+        v-model="pullDialog"
+        max-width="670"
+        persistent
+        scrollable
+      >
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <v-icon color="primary" left>mdi-cloud-download-outline</v-icon>
+            <strong>Pull DCP messages</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="pullDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text class="lrgs-dialog-content">
+            <div class="lrgs-pull-target">
+              <span>Selected DCP</span>
+              <strong class="lrgs-mono">[[ pullDcp ? pullDcp.dcp_address : '—' ]]</strong>
+            </div>
+            <v-radio-group v-model="pullMode" row class="mt-2">
+              <v-radio label="Recent messages" value="recent"></v-radio>
+              <v-radio label="Custom historical period" value="historical"></v-radio>
+            </v-radio-group>
+            <div v-if="pullMode==='recent'">
+              <v-select
+                v-model="pullHours"
+                dense
+                outlined
+                :items="lookbackOptions"
+                item-text="text"
+                item-value="value"
+                label="Lookback period"
+              >
+              </v-select>
+              <div class="lrgs-muted">
+                Up to [[ settingDraft.max_interval_hours ]] hours per automatic or recent pull.
+              </div>
+            </div>
+            <div v-else>
+              <div class="lrgs-muted mb-3">
+                Custom date/time values are entered in [[ timezoneName ]] and converted to UTC on the server.
+              </div>
+              <v-row dense>
+                <v-col cols="12" sm="6">
+                  <div class="lrgs-date-group">
+                    <v-menu
+                      v-model="pullFromMenu"
+                      offset-y
+                      :close-on-content-click="false"
+                      min-width="290px"
+                    >
+                      <template v-slot:activator="{on,attrs}">
+                        <v-text-field
+                          :value="pullFrom.slice(0,10)"
+                          dense
+                          outlined
+                          readonly
+                          label="From date"
+                          prepend-inner-icon="mdi-calendar"
+                          v-bind="attrs"
+                          v-on="on"
+                        >
+                        </v-text-field>
+                      </template>
+                      <v-date-picker
+                        :value="pullFrom.slice(0,10)"
+                        no-title
+                        @input="setPullDate('from',$event);pullFromMenu=false"
+                      >
+                      </v-date-picker>
+                    </v-menu>
+                    <!-- Historical pull times use the same timezone as their selected dates. -->
+                    <div class="lrgs-time-control lrgs-time-control--compact">
+                      <v-menu
+                        v-model="timeMenus.pullFrom"
+                        :close-on-content-click="false"
+                        offset-y
+                        min-width="290px"
+                        max-width="290px"
+                      >
+                        <template v-slot:activator="{ on, attrs }">
+                          <v-text-field
+                            :value="pullFrom.slice(11)"
+                            dense
+                            outlined
+                            readonly
+                            label="Time"
+                            prepend-inner-icon="mdi-clock-outline"
+                            class="lrgs-time-field"
+                            v-bind="attrs"
+                            v-on="on"
+                          ></v-text-field>
+                        </template>
+
+                        <v-time-picker
+                          :value="pullFrom.slice(11)"
+                          format="24hr"
+                          @input="setPullTime('from', $event)"
+                          color="primary"
+                          @click:minute="timeMenus.pullFrom = false"
+                        ></v-time-picker>
+                      </v-menu>
+                    </div>
+                  </div>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <div class="lrgs-date-group">
+                    <v-menu
+                      v-model="pullToMenu"
+                      offset-y
+                      :close-on-content-click="false"
+                      min-width="290px"
+                    >
+                      <template v-slot:activator="{on,attrs}">
+                        <v-text-field
+                          :value="pullTo.slice(0,10)"
+                          dense
+                          outlined
+                          readonly
+                          label="To date"
+                          prepend-inner-icon="mdi-calendar"
+                          v-bind="attrs"
+                          v-on="on"
+                        >
+                        </v-text-field>
+                      </template>
+                      <v-date-picker
+                        :value="pullTo.slice(0,10)"
+                        no-title
+                        @input="setPullDate('to',$event);pullToMenu=false"
+                      >
+                      </v-date-picker>
+                    </v-menu>
+                    <div class="lrgs-time-control lrgs-time-control--compact">
+                      <v-menu
+                        v-model="timeMenus.pullTo"
+                        :close-on-content-click="false"
+                        offset-y
+                        min-width="290px"
+                        max-width="290px"
+                      >
+                        <template v-slot:activator="{ on, attrs }">
+                          <v-text-field
+                            :value="pullTo.slice(11)"
+                            dense
+                            outlined
+                            readonly
+                            label="Time"
+                            prepend-inner-icon="mdi-clock-outline"
+                            class="lrgs-time-field"
+                            v-bind="attrs"
+                            v-on="on"
+                          ></v-text-field>
+                        </template>
+
+                        <v-time-picker
+                          :value="pullTo.slice(11)"
+                          format="24hr"
+                          @input="setPullTime('to', $event)"
+                          color="primary"
+                          @click:minute="timeMenus.pullTo = false"
+                        ></v-time-picker>
+                      </v-menu>
+                    </div>
+                  </div>
+                </v-col>
+              </v-row>
+              <v-alert dense type="info">
+                A single historical request can cover up to 30 days. The server may not retain messages that old.
+              </v-alert>
+            </div>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="error" @click="pullDialog=false">Cancel</v-btn>
+            <v-btn
+              color="primary"
+              depressed
+              :loading="saving"
+              @click="queuePull"
+            >
+              <v-icon left>mdi-cloud-download-outline</v-icon>
+              Start pull
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- RUN DETAILS -->
+      <v-dialog v-model="runDialog" max-width="660">
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <strong>Retrieval details</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="runDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text v-if="selectedRun" class="lrgs-dialog-content">
+            <dl class="lrgs-details">
+              <dt>DCP</dt>
+              <dd>[[ selectedRun.dcp_address ]]</dd>
+              <dt>Status</dt>
+              <dd>
+                <span class="lrgs-pill" :class="runClass(selectedRun.status)">[[ selectedRun.status ]]</span>
+              </dd>
+              <dt>Mode</dt>
+              <dd>[[ selectedRun.mode ]]</dd>
+              <dt>Requested</dt>
+              <dd>[[ displayDate(selectedRun.created_at) ]]</dd>
+              <dt>From (UTC)</dt>
+              <dd>[[ selectedRun.since_utc ]]</dd>
+              <dt>To (UTC)</dt>
+              <dd>[[ selectedRun.until_utc ]]</dd>
+              <dt>Messages retrieved</dt>
+              <dd>[[ selectedRun.messages_received ]]</dd>
+              <dt>Station-message deliveries</dt>
+              <dd>[[ selectedRun.station_deliveries ]]</dd>
+              <dt>Result</dt>
+              <dd>[[ selectedRun.error_message || '—' ]]</dd>
+            </dl>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <!-- view messages -->
+            <v-btn
+              outlined
+              color="primary"
+              @click="viewRunMessages(selectedRun);runDialog=false"
+            >
+              <v-icon left size="17">mdi-email-search-outline</v-icon>
+              View matching messages
+            </v-btn>
+
+            <!-- refresh status -->
+            <v-btn
+              color="primary"
+              @click="refreshSelectedRun"
+              :loading="loading.runs"
+            >
+              <v-icon left>mdi-refresh</v-icon>
+              Refresh status
+            </v-btn>
+
+            <!-- close button -->
+            <v-btn dark color="error" @click="runDialog=false">Close</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- MESSAGE DETAILS -->
+      <v-dialog v-model="messageDialog" max-width="760" scrollable>
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <strong>Received message</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="messageDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text v-if="selectedMessage" class="lrgs-dialog-content">
+            <dl class="lrgs-details">
+              <dt>DCP address</dt>
+              <dd>[[ selectedMessage.dcp_address ]]</dd>
+              <dt>Received</dt>
+              <dd>[[ displayDate(selectedMessage.datetime) ]]</dd>
+              <dt>Channel</dt>
+              <dd>[[ selectedMessage.channel ]]</dd>
+              <dt>Failure code</dt>
+              <dd>[[ selectedMessage.failure_code ]]</dd>
+              <dt>Signal strength</dt>
+              <dd>[[ selectedMessage.signal_strength ]]</dd>
+              <dt>Frequency offset</dt>
+              <dd>[[ selectedMessage.frequency_offset ]]</dd>
+              <dt>Modulation index</dt>
+              <dd>[[ selectedMessage.modulation_index ]]</dd>
+              <dt>Data quality</dt>
+              <dd>[[ selectedMessage.data_quality ]]</dd>
+              <dt>Spacecraft</dt>
+              <dd>[[ selectedMessage.spacecraft_indicator ]]</dd>
+              <dt>Source</dt>
+              <dd>[[ selectedMessage.data_source ]]</dd>
+              <dt>Length</dt>
+              <dd>[[ selectedMessage.message_data_length ]] bytes</dd>
+            </dl>
+            <h3>Message payload</h3>
+            <pre class="lrgs-message-payload">[[ selectedMessage.payload || 'No payload' ]]</pre>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="error" @click="messageDialog=false">Close</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- DELETE CONFIRMATION -->
+      <v-dialog v-model="deleteDialog" max-width="530" persistent>
+        <v-card class="lrgs-dialog">
+          <v-card-title class="lrgs-dialog-heading">
+            <strong>Confirm deletion</strong>
+            <v-spacer></v-spacer>
+            <v-btn icon @click="deleteDialog=false">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-card-text class="lrgs-dialog-content">
+            <p>
+              Delete
+              <strong>
+                [[ deleteTarget ? (deleteType==='dcp'?deleteTarget.dcp_address:deleteTarget.station_name+' / '+deleteTarget.dcp_address) : '' ]]
+              </strong>
+              ?
+            </p>
+            <v-alert dense type="warning">
+              DCPs with linked associations, raw messages, or run history cannot be deleted. Associations may be deleted individually.
+            </v-alert>
+          </v-card-text>
+          <v-card-actions class="lrgs-dialog-actions">
+            <v-spacer></v-spacer>
+            <v-btn dark color="success" @click="deleteDialog=false">Cancel</v-btn>
+            <v-btn
+              color="error"
+              depressed
+              :loading="saving"
+              @click="doDelete"
+            >
+              Delete
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-snackbar
+        v-model="notice.show"
+        :color="notice.type==='success'?'success':'error'"
+        :timeout="6000"
+        bottom
+      >
+        [[ notice.message ]]
+        <template v-slot:action="{attrs}">
+          <v-btn v-bind="attrs" text @click="notice.show=false">Close</v-btn>
+        </template>
+      </v-snackbar>
+    </v-app>
+  </div>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+(function () {
+    'use strict';
+    const base = "{% url 'lrgs-ingestion' %}" + 'api/';
+    const csrf = document.querySelector('#lrgs-csrf input[name="csrfmiddlewaretoken"]').value;
+    const canEdit = {% if request|has_any_feature_permission:"lrgs-ingestion:write" %}true{% else %}false{% endif %};
+    const newDcp = () => ({
+        id: null,
+        dcp_address: '',
+        first_channel: null,
+        first_channel_type: null,
+        second_channel: null,
+        second_channel_type: null,
+        first_transmission_time: '00:00:00',
+        transmission_window: '00:15:00',
+        transmission_period: '01:00:00'
+    });
+    const newAssociation = () => ({
+        id: null,
+        noaa_dcp: null,
+        station: null,
+        decoder: null,
+        interval: null,
+        format: null,
+        startDay: '',
+        startTime: '00:00',
+        endDay: '',
+        endTime: '00:00'
+    });
+    new Vue({
+        el: '#lrgs-app',
+        vuetify: new Vuetify(),
+        delimiters: ['[[', ']]'],
+        data: function () {
+            return {
+                tab: 0,
+                canEdit: canEdit,
+                loading: {
+                    dcps: false,
+                    associations: false,
+                    messages: false,
+                    runs: false,
+                    refs: false,
+                    settings: false
+                },
+                saving: false,
+                fieldErrors: {},
+                dcps: [],
+                associations: [],
+                messages: [],
+                runs: [],
+                refs: {
+                    stations: [],
+                    decoders: [],
+                    intervals: [],
+                    formats: [],
+                    types: []
+                },
+                search: {
+                    dcp: '',
+                    association: ''
+                },
+                messageFilters: {
+                    dcp: null,
+                    search: '',
+                    from: '',
+                    to: ''
+                },
+                // The two history tables are independent views, not stacked sections.
+                historyView: 'messages',
+                runDcpFilter: null,
+                runStatusFilter: 'all',
+                messageRunContext: null,
+                runStatusOptions: [
+                    { text: 'All statuses', value: 'all' },
+                    { text: 'Queued', value: 'queued' },
+                    { text: 'Running', value: 'running' },
+                    { text: 'Successful', value: 'success' },
+                    { text: 'Partial', value: 'partial' },
+                    { text: 'Failed', value: 'failed' },
+                    { text: 'Skipped', value: 'skipped' }
+                ],
+                messagePage: 1,
+                messageHasNext: false,
+                messageFromMenu: false,
+                messageToMenu: false,
+
+                // Independent menu state for all Vuetify time pickers.
+                // DCP fields include seconds; date/time filters use minutes.
+                timeMenus: {
+                    dcpFirst: false,
+                    dcpWindow: false,
+                    dcpPeriod: false,
+                    associationStart: false,
+                    associationEnd: false,
+                    messageFrom: false,
+                    messageTo: false,
+                    pullFrom: false,
+                    pullTo: false
+                },
+                runPoller: null,
+                settingsSaved: false,
+                timezoneName: 'UTC',
+                timezoneOffset: null,
+                settingDraft: {
+                    server_host: '',
+                    server_port: null,
+                    max_interval_hours: null,
+                    username: '',
+                    password: ''
+                },
+                savedSettings: {},
+                showLrgsPassword: false,
+                advancedUnlocked: false,
+                advancedConfirm: '',
+                notice: {
+                    show: false,
+                    message: '',
+                    type: 'success'
+                },
+                dcpDialog: false,
+                dcpDraft: newDcp(),
+                ssfUpload: null,
+                configDialog: false,
+                configText: '',
+                configDcpAddress: '',
+                associationDialog: false,
+                associationDraft: newAssociation(),
+                associationStartMenu: false,
+                associationEndMenu: false,
+                pullDialog: false,
+                pullFromMenu: false,
+                pullToMenu: false,
+                pullDcp: null,
+                pullMode: 'recent',
+                pullHours: 3,
+                pullFrom: '',
+                pullTo: '',
+                runDialog: false,
+                selectedRun: null,
+                messageDialog: false,
+                selectedMessage: null,
+                deleteDialog: false,
+                deleteTarget: null,
+                deleteType: '',
+                dcpHeaders: [
+                    { text: 'DCP address', value: 'dcp_address' },
+                    { text: 'Channels', value: 'channels', sortable: false },
+                    { text: 'First available (UTC)', value: 'first_transmission_time' },
+                    { text: 'Last attempt', value: 'last_datetime' },
+                    { text: 'SSF', value: 'has_config' },
+                    {
+                        text: 'Actions',
+                        value: 'actions',
+                        sortable: false,
+                        align: 'end'
+                    }
+                ],
+                associationHeaders: [
+                    { text: 'DCP', value: 'dcp_address' },
+                    { text: 'Station', value: 'station_name' },
+                    { text: 'Decoder', value: 'decoder_name' },
+                    { text: 'Effective dates', value: 'period', sortable: false },
+                    { text: 'Status', value: 'state', sortable: false },
+                    {
+                        text: 'Actions',
+                        value: 'actions',
+                        sortable: false,
+                        align: 'end'
+                    }
+                ],
+                messageHeaders: [
+                    { text: 'Received', value: 'datetime' },
+                    { text: 'DCP', value: 'dcp_address' },
+                    { text: 'Channel', value: 'channel' },
+                    { text: 'Failure', value: 'failure_code' },
+                    { text: 'Quality', value: 'data_quality' },
+                    { text: 'Signal', value: 'signal_strength' },
+                    { text: 'Length', value: 'message_data_length' },
+                    { text: '', value: 'actions', sortable: false }
+                ],
+                runHeaders: [
+                    { text: 'Requested', value: 'created_at' },
+                    { text: 'DCP', value: 'dcp_address' },
+                    { text: 'Mode', value: 'mode' },
+                    { text: 'Status', value: 'status' },
+                    {
+                        text: 'Messages returned',
+                        value: 'messages_received',
+                        sortable: false
+                    },
+                    { text: '', value: 'actions', sortable: false }
+                ],
+            };
+        },
+
+        computed: {
+
+            dcpOptions() {
+                return this.dcps.map(x => ({ id: x.id, name: x.dcp_address }));
+            },
+
+            filteredAssociations() {
+                const q = (this.search.association || '').toLowerCase();
+                return this.associations.filter(x => [x.dcp_address, x.station_name, x.decoder_name].join(' ').toLowerCase().includes(q));
+            },
+
+            advancedChanged() {
+                return ['server_host', 'server_port', 'max_interval_hours'].some(k => String(this.settingDraft[k]) !== String(this.savedSettings[k]));
+            },
+
+            filteredRuns() {
+                return this.runs.filter(run => {
+                    const matchesDcp = this.runDcpFilter == null ||
+                        String(run.noaa_dcp) === String(this.runDcpFilter);
+                    const matchesStatus = this.runStatusFilter === 'all' ||
+                        run.status === this.runStatusFilter;
+                    return matchesDcp && matchesStatus;
+                });
+            },
+
+            pageNewestMessage() {
+                return this.messages.length ? this.messages[0].datetime : null;
+            },
+
+            pageOldestMessage() {
+                return this.messages.length
+                    ? this.messages[this.messages.length - 1].datetime
+                    : null;
+            },
+
+            lookbackOptions() {
+                const cap = Number(this.settingDraft.max_interval_hours);
+
+                if (!Number.isFinite(cap) || cap <= 0) {
+                    return [];
+                }
+                const opts = [3, 6, 12, 24, 48, 72, 168, 336, 719].filter(x => x <= cap);
+                if (!opts.includes(cap))
+                    opts.push(cap);
+                return opts.sort((a, b) => a - b).map(x => ({ text: this.humanHours(x) + ' (' + x + ' h)', value: x }));
+            }
+        },
+
+        watch: {
+            tab: function (next) {
+                if (next === 2) {
+                    this.loadMessages(1);
+                    this.loadRuns();
+                }
+                if (next === 3) {
+                    this.loadSettings();
+                }
+            }
+        },
+
+        mounted: function () {
+            this.loadDcps();
+            this.loadAssociations();
+            this.loadReferences();
+            this.loadSettings();
+            // Poll ONLY while the user views pending runs; do not hammer endpoints
+            // when the page is idle or the browser tab is on another section.
+            this.runPoller = setInterval(() => {
+                if (this.tab === 2 && !this.loading.runs && this.runs.some(r => r.status === 'queued' || r.status === 'running'))
+                    this.loadRuns();
+            }, 6000);
+        },
+
+        beforeDestroy: function () {
+            if (this.runPoller)
+                clearInterval(this.runPoller);
+        },
+
+        methods: {
+
+            notify(message, type = 'success') {
+                this.notice = { show: true, message, type };
+            },
+
+            async request(path, method = 'GET', body) {
+                const headers = { 'Accept': 'application/json', 'X-CSRFToken': csrf };
+                if (body !== undefined)
+                    headers['Content-Type'] = 'application/json';
+                const resp = await fetch(base + path, {
+                    method,
+                    credentials: 'same-origin',
+                    headers,
+                    body: body === undefined ? undefined : JSON.stringify(body)
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    const e = new Error(data.message || ('Request failed (HTTP ' + resp.status + ').'));
+                    e.fields = data.errors || {};
+                    throw e;
+                }
+                return data;
+            },
+
+            fail(e) {
+                this.fieldErrors = e.fields || {};
+                const k = Object.keys(this.fieldErrors)[0];
+                const extra = k ? (Array.isArray(this.fieldErrors[k]) ? this.fieldErrors[k].join(' ') : this.fieldErrors[k]) : '';
+                this.notify((e.message || 'Request failed.') + (extra ? ' ' + extra : ''), 'error');
+            },
+
+            async loadReferences() {
+                this.loading.refs = true;
+                try {
+                    this.refs = await this.request('references/');
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.refs = false;
+                }
+            },
+
+            async loadDcps() {
+                this.loading.dcps = true;
+                try {
+                    this.dcps = (await this.request('dcps/')).results;
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.dcps = false;
+                }
+            },
+
+            async loadAssociations() {
+                this.loading.associations = true;
+                try {
+                    this.associations = (await this.request('associations/')).results;
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.associations = false;
+                }
+            },
+
+            async loadMessages(page = 1) {
+                this.loading.messages = true;
+                const params = new URLSearchParams({ page: String(page) });
+                Object.keys(this.messageFilters).forEach(k => {
+                    const value = this.messageFilters[k];
+                    if (value !== null && value !== undefined && value !== '')
+                        params.append(k, String(value));
+                });
+                try {
+                    const data = await this.request('messages/?' + params);
+                    this.messages = data.results;
+                    this.messagePage = data.page;
+                    this.messageHasNext = data.has_next;
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.messages = false;
+                }
+            },
+            // Keep a date and a time as one local ISO string; the backend resolves it
+            // using settings.TIMEZONE_NAME, including DST validation.
+
+            withDateTime(previous, part, value) {
+                const day = part === 'day' ? value : (previous || '').slice(0, 10), time = part === 'time' ? value : (previous || '').slice(11);
+                return day ? (day + 'T' + (time || '00:00')) : '';
+            },
+
+            setMessageDate(key, value) {
+                this.messageFilters[key] = this.withDateTime(this.messageFilters[key], 'day', value);
+            },
+
+            setMessageTime(key, value) {
+                this.messageFilters[key] = this.withDateTime(this.messageFilters[key], 'time', value);
+            },
+
+            setPullDate(which, value) {
+                const key = which === 'from' ? 'pullFrom' : 'pullTo';
+                this[key] = this.withDateTime(this[key], 'day', value);
+            },
+
+            setPullTime(which, value) {
+                const key = which === 'from' ? 'pullFrom' : 'pullTo';
+                this[key] = this.withDateTime(this[key], 'time', value);
+            },
+
+            switchHistoryView(view) {
+                if (view !== 'messages' && view !== 'activity')
+                    return;
+
+                this.historyView = view;
+
+                // Reload whenever the operator switches views. A historical pull
+                // may have completed while Retrieval Activity was displayed;
+                // cached message rows would otherwise conceal the new data.
+                if (view === 'messages' && !this.loading.messages)
+                    this.loadMessages(this.messagePage);
+                if (view === 'activity' && !this.loading.runs)
+                    this.loadRuns();
+            },
+
+            refreshHistoryView() {
+                if (this.historyView === 'messages')
+                    return this.loadMessages(this.messagePage);
+                return this.loadRuns();
+            },
+
+            clearRunFilters() {
+                this.runDcpFilter = null;
+                this.runStatusFilter = 'all';
+            },
+
+            viewRunMessages(run) {
+                if (!run)
+                    return;
+
+                // This filters the existing messages endpoint by the run's DCP
+                // and requested UTC period. It does not claim those messages
+                // were newly inserted by that particular retrieval run.
+                this.messageFilters = {
+                    dcp: run.noaa_dcp,
+                    search: '',
+                    from: this.localDateTime(run.since_utc),
+                    to: this.localDateTime(run.until_utc)
+                };
+                this.messageRunContext = run.id;
+                this.historyView = 'messages';
+                this.loadMessages(1);
+            },
+
+            clearMessageFilters() {
+                this.messageRunContext = null;
+                this.messageFilters = {
+                    dcp: null,
+                    search: '',
+                    from: '',
+                    to: ''
+                };
+                this.loadMessages(1);
+            },
+
+            async loadRuns() {
+                this.loading.runs = true;
+                try {
+                    const previousStatuses = new Map(
+                        this.runs.map(run => [run.id, run.status])
+                    );
+                    const incoming = (await this.request('runs/')).results;
+
+                    const hasFinishedRun = incoming.some(run => {
+                        const before = previousStatuses.get(run.id);
+                        const wasPending = before === 'queued' || before === 'running';
+                        const isFinished = run.status !== 'queued' && run.status !== 'running';
+                        return wasPending && isFinished;
+                    });
+
+                    this.runs = incoming;
+
+                    // A completed run can create older historical messages.
+                    // Refresh current filters, not just the unfiltered newest page.
+                    if (hasFinishedRun && this.tab === 2 &&
+                        this.historyView === 'messages' && !this.loading.messages) {
+                        await this.loadMessages(this.messagePage);
+                    }
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.runs = false;
+                }
+            },
+
+            async loadSettings() {
+                this.loading.settings = true;
+                try {
+                    const data = await this.request('settings/');
+                    this.settingsSaved = data.is_saved;
+                    this.timezoneName = data.timezone_name;
+                    this.timezoneOffset = data.timezone_offset;
+                    this.settingDraft = {
+                        server_host: data.server_host,
+                        server_port: data.server_port,
+                        max_interval_hours: data.max_interval_hours,
+                        username: data.username,
+                        password: ''
+                    };
+                    this.savedSettings = {
+                        server_host: data.server_host,
+                        server_port: data.server_port,
+                        max_interval_hours: data.max_interval_hours
+                    };
+                    this.advancedConfirm = '';
+                    this.advancedUnlocked = false;
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.settings = false;
+                }
+            },
+
+            humanHours(value) {
+                const h = Number(value) || 0;
+                const days = Math.floor(h / 24), hours = h % 24;
+                return (days ? days + ' day' + (days === 1 ? '' : 's') : '') + (days && hours ? ' ' : '') + (hours ? hours + ' hour' + (hours === 1 ? '' : 's') : '') || '0 hours';
+            },
+
+            displayDate(v) {
+                if (!v)
+                    return '—';
+                const d = new Date(v);
+                return Number.isNaN(d.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB', {
+                    timeZone: this.timezoneName,
+                    year: 'numeric',
+                    month: 'short',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }).format(d);
+            },
+            // Convert absolute timestamps for an HTML datetime-local input using the
+            // *server-configured* timezone, never the workstation's or Belize's.
+
+            localDateTime(v) {
+                if (!v)
+                    return '';
+                const fmt = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: this.timezoneName,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hourCycle: 'h23'
+                });
+                const parts = {};
+                fmt.formatToParts(new Date(v)).forEach(p => parts[p.type] = p.value);
+                return parts.year + '-' + parts.month + '-' + parts.day + 'T' + parts.hour + ':' + parts.minute;
+            },
+
+            splitLocal(v) {
+                const s = this.localDateTime(v);
+                return s ? { day: s.slice(0, 10), time: s.slice(11) } : { day: '', time: '00:00' };
+            },
+
+            asLocalDateTime(day, time) {
+                return day ? day + 'T' + (time || '00:00') : '';
+            },
+
+            associationState(x) {
+                const now = Date.now(), start = Date.parse(x.start_date), end = x.end_date ? Date.parse(x.end_date) : Infinity;
+                return now < start ? 'Upcoming' : now >= end ? 'Ended' : 'Active';
+            },
+
+            runClass(s) {
+                return s === 'success' ? 'lrgs-pill-green' : s === 'failed' ? 'lrgs-pill-red' : s === 'queued' || s === 'running' ? 'lrgs-pill-blue' : 'lrgs-pill-amber';
+            },
+
+            resetTimeMenus() {
+                // A previously opened dialog may be closed while its clock is open.
+                // Reset before opening a form so stale overlays do not reappear.
+                Object.keys(this.timeMenus).forEach(key => {
+                    this.timeMenus[key] = false;
+                });
+            },
+
+            openDcp(x) {
+                this.resetTimeMenus();
+                this.fieldErrors = {};
+                this.ssfUpload = null;
+                this.dcpDraft = x ? Object.assign(newDcp(), x) : newDcp();
+                this.dcpDialog = true;
+            },
+
+            async saveDcp() {
+                if (this.saving)
+                    return;
+                this.saving = true;
+                this.fieldErrors = {};
+                try {
+                    const x = this.dcpDraft;
+                    const uri = x.id ? 'dcps/' + x.id + '/update/' : 'dcps/create/';
+                    const data = await this.request(uri, x.id ? 'PATCH' : 'POST', x);
+                    // Record the created ID before uploading: if the optional SSF upload
+                    // fails, the user can retry without creating a duplicate DCP.
+                    this.dcpDraft.id = data.result.id;
+                    // Upload SSF only after DCP exists so file contents are tied to its ID.
+                    if (this.ssfUpload) {
+                        const form = new FormData();
+                        form.append('file', this.ssfUpload);
+                        const resp = await fetch(base + 'dcps/' + data.result.id + '/ssf/', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'X-CSRFToken': csrf },
+                            body: form
+                        });
+                        const result = await resp.json().catch(() => ({}));
+                        if (!resp.ok)
+                            throw new Error('DCP saved, but SSF upload failed: ' + (result.message || resp.status));
+                    }
+                    this.dcpDialog = false;
+                    this.notify('DCP saved.');
+                    await this.loadDcps();
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.saving = false;
+                }
+            },
+
+            async openDcpConfig(item) {
+                try {
+                    const data = await this.request('dcps/' + item.id + '/config/');
+                    this.configText = data.config_data || '';
+                    this.configDcpAddress = item.dcp_address;
+                    this.configDialog = true;
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+            },
+
+            openAssociation(x) {
+                this.resetTimeMenus();
+                this.fieldErrors = {};
+                if (x) {
+                    const a = this.splitLocal(x.start_date), b = this.splitLocal(x.end_date);
+                    this.associationDraft = Object.assign(newAssociation(), x, {
+                        startDay: a.day,
+                        startTime: a.time,
+                        endDay: b.day,
+                        endTime: b.time
+                    });
+                }
+                else {
+                    const a = this.splitLocal(new Date().toISOString());
+                    this.associationDraft = Object.assign(newAssociation(), { startDay: a.day, startTime: a.time });
+                }
+                this.associationDialog = true;
+            },
+
+            async saveAssociation() {
+                if (this.saving)
+                    return;
+                this.saving = true;
+                this.fieldErrors = {};
+                try {
+                    const x = this.associationDraft;
+                    const data = {
+                        noaa_dcp: x.noaa_dcp,
+                        station: x.station,
+                        decoder: x.decoder,
+                        interval: x.interval,
+                        format: x.format,
+                        start_date: this.asLocalDateTime(x.startDay, x.startTime),
+                        end_date: this.asLocalDateTime(x.endDay, x.endTime)
+                    };
+                    await this.request(x.id ? 'associations/' + x.id + '/update/' : 'associations/create/', x.id ? 'PATCH' : 'POST', data);
+                    this.associationDialog = false;
+                    this.notify('Station association saved.');
+                    await this.loadAssociations();
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.saving = false;
+                }
+            },
+
+            confirmDelete(type, item) {
+                this.deleteType = type;
+                this.deleteTarget = item;
+                this.deleteDialog = true;
+            },
+
+            async doDelete() {
+                if (this.saving || !this.deleteTarget)
+                    return;
+                this.saving = true;
+                try {
+                    const type = this.deleteType, pk = this.deleteTarget.id;
+                    await this.request(type === 'dcp' ? 'dcps/' + pk + '/delete/' : 'associations/' + pk + '/delete/', 'DELETE');
+                    this.deleteDialog = false;
+                    this.notify('Record deleted.');
+                    if (type === 'dcp')
+                        await this.loadDcps();
+                    else
+                        await this.loadAssociations();
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.saving = false;
+                }
+            },
+
+            openPull(item) {
+                this.resetTimeMenus();
+                this.pullDcp = item;
+                this.pullMode = 'recent';
+                this.pullHours = this.lookbackOptions.some(x => x.value === 3) ? 3 : this.lookbackOptions[0].value;
+                const now = new Date(), before = new Date(now.getTime() - 24 * 3600 * 1000);
+                this.pullFrom = this.localDateTime(before.toISOString());
+                this.pullTo = this.localDateTime(now.toISOString());
+                this.pullDialog = true;
+            },
+
+            async queuePull() {
+                if (this.saving || !this.pullDcp)
+                    return;
+                this.saving = true;
+                try {
+                    const body = { noaa_dcp: this.pullDcp.id, mode: this.pullMode };
+                    if (this.pullMode === 'recent')
+                        body.hours = this.pullHours;
+                    else {
+                        body.from = this.pullFrom;
+                        body.to = this.pullTo;
+                    }
+                    const data = await this.request('pull/', 'POST', body);
+                    this.pullDialog = false;
+                    this.notify('Pull queued (run #' + data.run_id + '). Its status is shown in Retrieval Activity.');
+                    this.historyView = 'activity';
+                    this.tab = 2;
+                    await this.loadRuns();
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.saving = false;
+                }
+            },
+
+            async openMessage(item) {
+                try {
+                    this.selectedMessage = (await this.request('messages/' + item.id + '/')).result;
+                    this.messageDialog = true;
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+            },
+
+            showRun(item) {
+                this.selectedRun = item;
+                this.runDialog = true;
+            },
+
+            async refreshSelectedRun() {
+                if (!this.selectedRun)
+                    return;
+                this.loading.runs = true;
+                try {
+                    this.selectedRun = (await this.request('runs/' + this.selectedRun.id + '/')).result;
+                    await this.loadRuns();
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.loading.runs = false;
+                }
+            },
+
+            onAdvancedToggle(unlocked) {
+                if (!unlocked) {
+                    // Discard unsubmitted advanced edits when the operator relocks them.
+                    ['server_host', 'server_port', 'max_interval_hours'].forEach(k => this.settingDraft[k] = this.savedSettings[k]);
+                    this.advancedConfirm = '';
+                }
+            },
+
+            async saveSettings() {
+                if (this.saving)
+                    return;
+                this.saving = true;
+                try {
+                    const body = Object.assign({}, this.settingDraft);
+                    if (this.advancedChanged)
+                        body.confirm_advanced = this.advancedConfirm;
+                    await this.request('settings/update/', 'POST', body);
+                    this.notify('LRGS configuration saved. Changes will be used by subsequent pulls.');
+                    await this.loadSettings();
+                }
+                catch (e) {
+                    this.fail(e);
+                }
+                finally {
+                    this.saving = false;
+                }
+            }
+        }
+    });
+})();
+</script>
+
+<style>
+/* Scoped to this screen. Preserve the established SURFACE white page shell. */
+
+/* Page shell and shared layout */
+.lrgs-page {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  background: #fff;
+  color: #303239;
+  padding-bottom: 32px;
+}
+
+.lrgs-page [v-cloak] {
+  display: none;
+}
+
+.lrgs-page .lrgs-v-app, .lrgs-page .lrgs-v-app .v-application--wrap {
+  background: #fff !important;
+  min-height: 0 !important;
+  color: #303239 !important;
+}
+
+.lrgs-page .lrgs-page-header {
+  padding: 20px 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.lrgs-page .lrgs-page-header .srf-display-1 {
+  color: #262a30;
+}
+
+.lrgs-page .lrgs-page-header p {
+  font-size: 13px;
+  color: #747982;
+  margin: 6px 0 0;
+}
+
+.lrgs-page .lrgs-header-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: #6d7684;
+  border: 1px solid #e6ebef;
+  background: #fbfcfd;
+  border-radius: 7px;
+  padding: 9px 12px;
+}
+
+.lrgs-page .lrgs-overview {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 12px;
+  padding: 0 24px 18px;
+}
+
+.lrgs-page .lrgs-stat {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 1px solid #e7e9ed;
+  border-radius: 9px;
+  padding: 15px 17px;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(0,0,0,.02);
+}
+
+.lrgs-page .lrgs-stat>div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lrgs-page .lrgs-stat strong {
+  font-size: 21px;
+  line-height: 1.1;
+  color: #292b33;
+  font-weight: 750;
+}
+
+.lrgs-page .lrgs-stat span:not(.lrgs-stat-icon) {
+  font-size: 11px;
+  color: #707781;
+}
+
+.lrgs-page .lrgs-stat-icon, .lrgs-page .lrgs-title-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  flex: none;
+}
+
+.lrgs-page .lrgs-stat-blue {
+  background: #eaf2fd;
+  color: #226bc2;
+}
+
+.lrgs-page .lrgs-stat-blue .v-icon {
+  color: #226bc2;
+}
+
+.lrgs-page .lrgs-stat-teal {
+  background: #e6f6f1;
+  color: #197d64;
+}
+
+.lrgs-page .lrgs-stat-teal .v-icon {
+  color: #197d64;
+}
+
+.lrgs-page .lrgs-stat-purple {
+  background: #f1ebfc;
+  color: #7352b7;
+}
+
+.lrgs-page .lrgs-stat-purple .v-icon {
+  color: #7352b7;
+}
+
+.lrgs-page .lrgs-tabs {
+  background: #fff !important;
+}
+
+.lrgs-page .lrgs-tabs .v-tabs-bar {
+  background: #fff !important;
+}
+
+.lrgs-page .lrgs-tabs .v-tab {
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  font-weight: 650;
+  min-width: 0;
+  padding: 0 19px !important;
+  color: #69727d !important;
+}
+
+.lrgs-page .lrgs-tabs .v-tab--active {
+  color: #1976d2 !important;
+}
+
+.lrgs-page .lrgs-tab-panels, .lrgs-page .lrgs-tab-panels>.v-window__container {
+  background: #fff !important;
+}
+
+.lrgs-page .lrgs-section {
+  padding: 23px 24px 30px;
+  min-width: 0;
+}
+
+.lrgs-page .lrgs-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.lrgs-page .lrgs-section-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lrgs-page .lrgs-section-name h2 {
+  font-size: 16px;
+  font-weight: 750;
+  color: #292d33;
+  margin: 0 0 3px;
+}
+
+.lrgs-page .lrgs-section-name p {
+  font-size: 12px;
+  color: #858a92;
+  margin: 0;
+}
+
+.lrgs-page .lrgs-title-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.lrgs-page .lrgs-main-btn {
+  text-transform: none !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+  border-radius: 6px !important;
+}
+
+.lrgs-page .lrgs-panel {
+  border: 1px solid #e5e9ee;
+  background: #fff;
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: 0 2px 7px rgba(20,30,45,.02);
+}
+
+.lrgs-page .lrgs-toolbar {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #ecedf1;
+}
+
+.lrgs-page .lrgs-toolbar strong {
+  font-size: 12px;
+  color: #353b43;
+}
+
+.lrgs-page .lrgs-count {
+  margin-left: 10px;
+  color: #989da5;
+  font-size: 11px;
+}
+
+.lrgs-page .lrgs-toolbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.lrgs-page .lrgs-search {
+  width: 260px;
+  max-width: 100%;
+}
+
+/* Tables, statuses and filters */
+.lrgs-page .lrgs-table .v-data-table-header th {
+  font-size: 11px !important;
+  background: #fafbfc;
+  color: #59616a !important;
+  text-transform: none;
+  font-weight: 700;
+}
+
+.lrgs-page .lrgs-table tbody td {
+  font-size: 12px !important;
+  color: #373a41;
+  height: 52px;
+}
+
+.lrgs-page .lrgs-item-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lrgs-page .lrgs-mono {
+  font-family: ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size: 11px;
+}
+
+.lrgs-page .lrgs-muted {
+  color: #868d98;
+  font-size: 11px;
+}
+
+.lrgs-page .lrgs-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.lrgs-page .lrgs-actions .v-btn {
+  font-size: 11px !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.lrgs-page .lrgs-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e8ebef;
+  border-radius: 5px;
+  padding: 4px 6px;
+  background: #f7f8fa;
+  color: #59616b;
+  font-size: 11px;
+}
+
+.lrgs-page .lrgs-pill {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 750;
+  border-radius: 5px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  text-transform: capitalize;
+}
+
+.lrgs-page .lrgs-pill-green {
+  background: #e7f7ee;
+  border-color: #bfe7d0;
+  color: #167744;
+}
+
+.lrgs-page .lrgs-pill-blue {
+  background: #eaf3ff;
+  border-color: #cadffb;
+  color: #255fa3;
+}
+
+.lrgs-page .lrgs-pill-amber {
+  background: #fff4dc;
+  border-color: #f4dfae;
+  color: #94610b;
+}
+
+.lrgs-page .lrgs-pill-red {
+  background: #fff0ef;
+  border-color: #f6ceca;
+  color: #ab3c38;
+}
+
+.lrgs-page .lrgs-pill-slate {
+  background: #f2f3f5;
+  border-color: #e6e8eb;
+  color: #6b727a;
+}
+
+.lrgs-page .lrgs-empty {
+  padding: 30px 12px;
+  text-align: center;
+  color: #8a8f96;
+  font-size: 12px;
+}
+
+.lrgs-page .lrgs-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #f7fafe;
+  border: 1px solid #e1eafa;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #566476;
+  margin-bottom: 16px;
+}
+
+.lrgs-page .lrgs-note .v-icon {
+  flex: none;
+}
+
+.lrgs-page .lrgs-filters {
+  padding: 16px;
+}
+
+.lrgs-page .lrgs-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 12px;
+}
+
+.lrgs-page .lrgs-filter-grid .v-input {
+  min-width: 0;
+}
+
+.lrgs-page .lrgs-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.lrgs-page .lrgs-pagination {
+  display: flex;
+  gap: 9px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 14px;
+  font-size: 12px;
+  color: #727b83;
+}
+
+.lrgs-page .lrgs-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(400px,1.2fr) minmax(280px,1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.lrgs-page .lrgs-settings-form {
+  padding: 21px;
+}
+
+.lrgs-page .lrgs-help {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lrgs-page .lrgs-help-block {
+  padding: 21px;
+}
+
+.lrgs-page .lrgs-help-block p {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #626a73;
+  margin: 11px 0;
+}
+
+.lrgs-page .lrgs-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 17px;
+}
+
+.lrgs-page .lrgs-panel-heading>div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lrgs-page .lrgs-panel-heading strong {
+  font-size: 14px;
+  color: #32363c;
+}
+
+.lrgs-page .lrgs-panel-heading span {
+  font-size: 11px;
+  color: #90969f;
+}
+
+.lrgs-page .lrgs-lookback {
+  background: #f2f7fc;
+  border: 1px solid #dceafa;
+  border-radius: 8px;
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lrgs-page .lrgs-lookback strong {
+  font-size: 19px;
+  color: #205e9c;
+}
+
+.lrgs-page .lrgs-lookback span {
+  font-size: 11px;
+  color: #56718b;
+}
+
+.lrgs-page .lrgs-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+/* Message History navigation: two equal, discoverable views instead of
+   a long page with retrieval activity hidden below the message table. */
+.lrgs-page .lrgs-history-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.lrgs-page .lrgs-history-choice {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  text-align: left;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid #e4e8ed;
+  border-radius: 9px;
+  cursor: pointer;
+  color: #30343a;
+  font-family: inherit;
+  box-shadow: 0 2px 5px rgba(20, 30, 45, .025);
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+
+.lrgs-page .lrgs-history-choice:hover {
+  border-color: #b7cde5;
+  background: #fcfdff;
+}
+
+.lrgs-page .lrgs-history-choice:focus-visible {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+
+.lrgs-page .lrgs-history-choice--active {
+  border-color: #86b3e7;
+  background: #f5f9ff;
+  box-shadow: inset 0 0 0 1px #b4d0ed;
+}
+
+.lrgs-page .lrgs-history-choice-icon {
+  width: 43px;
+  height: 43px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.lrgs-page .lrgs-history-choice-icon--messages {
+  background: #eeeafb;
+}
+
+.lrgs-page .lrgs-history-choice-icon--messages .v-icon {
+  color: #7352b7;
+}
+
+.lrgs-page .lrgs-history-choice-icon--activity {
+  background: #e6f6f1;
+}
+
+.lrgs-page .lrgs-history-choice-icon--activity .v-icon {
+  color: #197d64;
+}
+
+.lrgs-page .lrgs-history-choice-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.lrgs-page .lrgs-history-choice-copy strong {
+  color: #2d333b;
+  font-weight: 750;
+  font-size: 14px;
+}
+
+.lrgs-page .lrgs-history-choice-copy span {
+  color: #7c858f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.lrgs-page .lrgs-history-choice-count {
+  border: 1px solid #e5e8ec;
+  border-radius: 6px;
+  color: #697581;
+  background: #fff;
+  padding: 5px 8px;
+  white-space: nowrap;
+  font-weight: 650;
+  font-size: 10px;
+}
+
+.lrgs-page .lrgs-history-view-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 15px;
+}
+
+.lrgs-page .lrgs-history-view-heading h3 {
+  color: #30363e;
+  font-size: 15px;
+  font-weight: 750;
+  margin: 0 0 4px;
+}
+
+.lrgs-page .lrgs-history-view-heading p {
+  color: #858d96;
+  font-size: 12px;
+  margin: 0;
+}
+
+.lrgs-page .lrgs-history-timezone {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #f6f7f9;
+  border: 1px solid #e9ebef;
+  color: #68727d;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.lrgs-page .lrgs-history-context {
+  font-size: 12px;
+}
+
+.lrgs-page .lrgs-history-filters {
+  margin-bottom: 15px;
+}
+
+.lrgs-page .lrgs-history-filter-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.lrgs-page .lrgs-history-filter-heading strong {
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #383f48;
+}
+
+.lrgs-page .lrgs-history-filter-heading span {
+  color: #969da6;
+  font-size: 11px;
+}
+
+/* Wider columns keep the side-by-side date and Vuetify time pickers usable. */
+.lrgs-page .lrgs-history-filter-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  row-gap: 13px;
+}
+
+.lrgs-page .lrgs-history-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  margin-bottom: 15px;
+}
+
+.lrgs-page .lrgs-history-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid #e7e9ed;
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px 15px;
+}
+
+.lrgs-page .lrgs-history-metric span {
+  color: #7c848e;
+  font-size: 11px;
+}
+
+.lrgs-page .lrgs-history-metric strong {
+  color: #30363e;
+  font-size: 19px;
+  font-weight: 750;
+}
+
+.lrgs-page .lrgs-history-metric .lrgs-history-metric-date {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lrgs-page .lrgs-history-run-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 15px 16px;
+  background: #fcfcfd;
+  border-bottom: 1px solid #ebedf0;
+}
+
+.lrgs-page .lrgs-history-run-filters .v-input {
+  flex: 1;
+  min-width: 180px;
+  max-width: 300px;
+}
+
+.lrgs-page .lrgs-run-deliveries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lrgs-page .lrgs-run-deliveries strong {
+  font-size: 12px;
+  color: #30363e;
+}
+
+.lrgs-page .lrgs-run-deliveries span {
+  color: #9198a0;
+  font-size: 10px;
+}
+
+.lrgs-page .lrgs-history-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.lrgs-page .lrgs-history-row-actions .v-btn {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.lrgs-page .lrgs-history-footnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #ebedf0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #76808b;
+}
+
+@media (max-width: 1050px) {
+  .lrgs-page .lrgs-history-choice-count {
+    display: none;
+  }
+
+}
+
+@media (max-width: 720px) {
+  .lrgs-page .lrgs-history-switcher,
+  .lrgs-page .lrgs-history-metrics,
+  .lrgs-page .lrgs-history-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lrgs-page .lrgs-history-choice {
+    padding: 13px;
+  }
+
+  .lrgs-page .lrgs-history-run-filters .v-input {
+    flex: 1 0 100%;
+    max-width: none;
+  }
+}
+
+/* Dialogs and form controls */
+.lrgs-page .lrgs-dialog-heading {
+  border-bottom: 1px solid #ecedf0;
+  padding: 17px 20px !important;
+  font-size: 15px !important;
+}
+
+.lrgs-page .lrgs-dialog-content {
+  padding: 20px !important;
+}
+
+.lrgs-page .lrgs-dialog-content h3 {
+  font-size: 12px;
+  font-weight: 800;
+  color: #424850;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  margin: 13px 0 15px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #ebeef0;
+}
+
+.lrgs-page .lrgs-dialog-content h3:first-child {
+  margin-top: 0;
+}
+
+.lrgs-page .lrgs-dialog-actions {
+  border-top: 1px solid #ecedf0;
+  padding: 12px 20px !important;
+}
+
+.lrgs-page .lrgs-details {
+  display: grid;
+  grid-template-columns: 160px minmax(0,1fr);
+  gap: 12px;
+  font-size: 12px;
+}
+
+.lrgs-page .lrgs-details dt {
+  font-weight: 700;
+  color: #727984;
+}
+
+.lrgs-page .lrgs-details dd {
+  margin: 0;
+  color: #343b45;
+  overflow-wrap: anywhere;
+}
+
+.lrgs-page .lrgs-message-payload {
+  background: #f7f8fa;
+  border: 1px solid #e7e8eb;
+  border-radius: 6px;
+  padding: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow: auto;
+  font-size: 11px;
+}
+
+.lrgs-page .lrgs-pull-target {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #e4eaf4;
+  background: #f7faff;
+  border-radius: 7px;
+  padding: 12px 14px;
+  margin-bottom: 15px;
+}
+
+.lrgs-page .lrgs-pull-target span {
+  color: #697380;
+  font-size: 12px;
+}
+
+.lrgs-page .lrgs-pull-target strong {
+  color: #2764a5;
+  font-size: 14px;
+}
+
+.lrgs-page .lrgs-date-group {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lrgs-page .lrgs-date-group>.v-menu {
+  flex: 1;
+}
+
+.lrgs-page .lrgs-date-group .v-input {
+  min-width: 0;
+}
+
+/* A compact time input beside each date, with a full-width clock popup. */
+.lrgs-page .lrgs-date-group .lrgs-time-control--compact {
+  flex: 0 0 132px;
+  min-width: 0;
+}
+
+.lrgs-page .lrgs-time-control .v-input {
+  min-width: 0;
+}
+
+/* Responsive layout */
+@media (max-width:1120px) {
+  .lrgs-page .lrgs-settings-layout {
+    grid-template-columns: 1fr;
+  }
+  .lrgs-page .lrgs-filter-grid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width:720px) {
+  .lrgs-page .lrgs-page-header {
+    padding: 16px 14px;
+  }
+  .lrgs-page .lrgs-overview {
+    padding: 0 14px 14px;
+    grid-template-columns: 1fr;
+  }
+  .lrgs-page .lrgs-section {
+    padding: 17px 13px;
+  }
+  .lrgs-page .lrgs-toolbar-tools {
+    width: 100%;
+  }
+  .lrgs-page .lrgs-search {
+    flex: 1;
+    width: auto;
+    min-width: 150px;
+  }
+  .lrgs-page .lrgs-settings-form, .lrgs-page .lrgs-help-block {
+    padding: 14px;
+  }
+  .lrgs-page .lrgs-filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .lrgs-page .lrgs-date-group {
+    flex-wrap: wrap;
+  }
+  /* Stack date and time on small screens instead of squeezing either field. */
+  .lrgs-page .lrgs-date-group .lrgs-time-control--compact {
+    flex: 1 0 100%;
+  }
+  .lrgs-page .lrgs-details {
+    grid-template-columns: 110px 1fr;
+  }
+}
+</style>
+{% endblock %}

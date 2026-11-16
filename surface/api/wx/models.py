@@ -1399,8 +1399,24 @@ class DcpMessages(BaseModel):
 
     payload = models.TextField()
 
-    def station(self):
-        return NoaaDcpsStation.objects.get(noaa_dcp=self.noaa_dcp).station
+    def stations(self):
+        """
+        Return all stations associated with this DCP
+        when the message was received.
+
+        Start dates are inclusive, end dates are exclusive.
+        A NULL end date means the association remains active.
+        """
+
+        associations = NoaaDcpsStation.objects.filter(
+            noaa_dcp=self.noaa_dcp,
+            start_date__lte=self.datetime
+        ).filter(
+            Q(end_date__isnull=True) |
+            Q(end_date__gt=self.datetime)
+        ).select_related('station')
+
+        return [association.station for association in associations]
 
     class Meta:
         unique_together = ('noaa_dcp', 'datetime')
@@ -2659,3 +2675,82 @@ class SynopTableConfiguration(BaseModel):
                 name='unique_synop_table_order'
             ),
         ]
+
+
+class LRGSConfiguration(models.Model):
+    """One global LRGS connection record; settings.py remains the bootstrap fallback.
+
+    The primary key and database constraint enforce the singleton even if an
+    administrator bypasses the management page. Credentials are stored as-is,
+    matching SURFACE's current FTP policy; never serialize or log the password.
+    """
+
+    id = dj_models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    server_host = dj_models.CharField(max_length=255)
+    server_port = dj_models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(65535)]
+    )
+    max_interval_hours = dj_models.PositiveIntegerField(
+        validators=[MinValueValidator(3), MaxValueValidator(8760)],
+        help_text="Automatic retrieval lookback cap in HOURS (not the server retention period).",
+    )
+    username = dj_models.CharField(max_length=128)
+    password = dj_models.CharField(max_length=256)
+    updated_at = dj_models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "LRGS configuration"
+        constraints = [
+            dj_models.CheckConstraint(check=Q(id=1), name="wx_lrgs_config_singleton_pk")
+        ]
+
+    def save(self, *args, **kwargs):
+        # Keep the single-row invariant even when called outside the API.
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return "Global LRGS configuration"
+
+
+class LRGSIngestionRun(models.Model):
+    """Audit a scheduled or manual retrieval without changing NoaaDcp.last_datetime.
+
+    Exactly one queued/running manual pull per DCP can exist at a time; scheduled
+    pulls also use the same PostgreSQL advisory lock while executing.
+    """
+
+    MODES = (("scheduled", "Scheduled"), ("recent", "Pull now: recent"),
+             ("historical", "Pull now: historical"))
+    STATUSES = (("queued", "Queued"), ("running", "Running"),
+                ("success", "Succeeded"), ("partial", "Partially succeeded"),
+                ("failed", "Failed"), ("skipped", "Skipped"))
+
+    noaa_dcp = dj_models.ForeignKey("wx.NoaaDcp", on_delete=dj_models.PROTECT,
+                                related_name="lrgs_ingestion_runs")
+    mode = dj_models.CharField(max_length=16, choices=MODES)
+    status = dj_models.CharField(max_length=16, choices=STATUSES, default="queued")
+    requested_by = dj_models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                     on_delete=dj_models.SET_NULL)
+    since_utc = dj_models.DateTimeField()
+    until_utc = dj_models.DateTimeField()
+    messages_received = dj_models.PositiveIntegerField(default=0)
+    station_deliveries = dj_models.PositiveIntegerField(default=0)
+    error_message = dj_models.TextField(blank=True, default="")
+    celery_task_id = dj_models.CharField(max_length=100, blank=True, default="")
+    created_at = dj_models.DateTimeField(auto_now_add=True)
+    started_at = dj_models.DateTimeField(null=True, blank=True)
+    finished_at = dj_models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        constraints = [
+            dj_models.UniqueConstraint(
+                fields=["noaa_dcp"],
+                condition=Q(status__in=["queued", "running"]),
+                name="wx_one_pending_lrgs_pull_per_dcp",
+            )
+        ]
+
+    def __str__(self):
+        return "%s (%s, %s)" % (self.noaa_dcp_id, self.mode, self.status)

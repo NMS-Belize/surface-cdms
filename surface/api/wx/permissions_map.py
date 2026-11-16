@@ -215,6 +215,30 @@ ENDPOINT_PARENT_PAGE = {
     "ftp-ingestion-file-availability": ("ftp-ingestion", "read"),
     "ftp-ingestion-file-download": ("ftp-ingestion", "write"),
 
+    # -------------------------------------------------------------------------
+    # LRGS Config Page (ftp-ingestion)
+    # -------------------------------------------------------------------------
+    # Page:
+    #   lrgs-ingestion (GET page)
+    'lrgs-references': ('lrgs-ingestion', 'read'),
+    'lrgs-dcps-list': ('lrgs-ingestion', 'read'),
+    'lrgs-dcps-create': ('lrgs-ingestion', 'write'),
+    'lrgs-dcp-update': ('lrgs-ingestion', 'write'),
+    'lrgs-dcp-delete': ('lrgs-ingestion', 'delete'),
+    'lrgs-dcp-config': ('lrgs-ingestion', 'write'),
+    'lrgs-dcp-ssf-upload': ('lrgs-ingestion', 'write'),
+    'lrgs-associations-list': ('lrgs-ingestion', 'read'),
+    'lrgs-associations-create': ('lrgs-ingestion', 'write'),
+    'lrgs-association-update': ('lrgs-ingestion', 'write'),
+    'lrgs-association-delete': ('lrgs-ingestion', 'delete'),
+    'lrgs-messages-list': ('lrgs-ingestion', 'read'),
+    'lrgs-message-detail': ('lrgs-ingestion', 'read'),
+    'lrgs-settings-read': ('lrgs-ingestion', 'read'),
+    'lrgs-settings-update': ('lrgs-ingestion', 'write'),
+    'lrgs-pull-create': ('lrgs-ingestion', 'write'),
+    'lrgs-runs-list': ('lrgs-ingestion', 'read'),
+    'lrgs-run-detail': ('lrgs-ingestion', 'read'),
+
 
     # -------------------------------------------------------------------------
     # Data Export Page (data-export)

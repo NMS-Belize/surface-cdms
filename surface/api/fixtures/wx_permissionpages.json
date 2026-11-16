@@ -5,7 +5,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Manual Data Import",
+            "name": "Import",
             "url_name": "manual-data-import",
             "description": "Upload and process manually collected station data files.",
             "category_id": 4
@@ -41,7 +41,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Data Export",
+            "name": "Export",
             "url_name": "data-export",
             "description": "Generate, download, combine, schedule, and delete exported data files.",
             "category_id": 4
@@ -320,6 +320,18 @@
             "name": "FTP Ingestion",
             "url_name": "ftp-ingestion",
             "description": "View and manage FTP connections, scheduled station ingestion, and locally stored files.",
+		    "category_id": 4
+        }
+    },
+    {
+        "model": "wx.wxpermissionpages",
+        "pk": 31,
+        "fields": {
+            "created_at": "2026-09-25T00:00:00Z",
+            "updated_at": "2026-09-25T00:00:00Z",
+            "name": "LRGS Ingestion",
+            "url_name": "lrgs-ingestion",
+            "description": "View and manage GOES DCPs, station routing, incoming messages, and LRGS access.",
 		    "category_id": 4
         }
     }
