@@ -77,7 +77,7 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Stations",
+            "name": "Stations (List, Create, Metadata, ...)",
             "url_name": "stations-list",
             "description": "View and manage stations, metadata, files, and station variables.",
 		    "category_id": 2
