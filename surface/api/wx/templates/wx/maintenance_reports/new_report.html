@@ -116,7 +116,7 @@
                 Missing a station? Its <strong>Local Profile</strong> may need to be configured under Station Metadata.
               </div>
 
-              <v-alert v-if="notFutureDate()" type="error" dense outlined class="mt-3 mb-0">
+              <v-alert v-if="notFutureDate()" type="error" dense class="mt-3 mb-0">
                 The visit date and initial time cannot be in the future.
               </v-alert>
 
@@ -130,7 +130,7 @@
             </div>
           </section>
 
-          <v-alert v-if="request_error" type="error" dismissible outlined class="mt-4"
+          <v-alert v-if="request_error" type="error" dismissible class="mt-4"
                    @input="request_error = false">[[ request_error_message ]]</v-alert>
 
           <!-- The workflow becomes available after the initial report is created. -->
@@ -877,10 +877,10 @@
               </div>
             </div>
 
-            <v-alert v-if="futureTime()" type="error" outlined dense class="mt-3">
+            <v-alert v-if="futureTime()" type="error" dense class="mt-3">
               End time must be after initial time.
             </v-alert>
-            <v-alert v-if="futureDate()" type="error" outlined dense class="mt-3">
+            <v-alert v-if="futureDate()" type="error" dense class="mt-3">
               Next visit must be in the future.
             </v-alert>
 

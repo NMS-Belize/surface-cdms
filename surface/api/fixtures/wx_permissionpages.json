@@ -185,9 +185,9 @@
         "fields": {
             "created_at": "2026-03-04T00:00:00Z",
             "updated_at": "2026-03-04T00:00:00Z",
-            "name": "Permissions",
-            "url_name": "manage-permissions",
-            "description": "Manage groups, user group membership, and group page access permissions.",
+            "name": "Users",
+            "url_name": "user-management",
+            "description": "Create accounts, manage groups, and control page permissions.",
 		    "category_id": 9
         }
     },

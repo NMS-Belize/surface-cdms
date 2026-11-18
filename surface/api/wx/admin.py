@@ -140,58 +140,58 @@ class NoaaTransmissionTypeAdmin(admin.ModelAdmin):
 #     search_fields = ("rate",)
 
 
-@admin.register(models.NoaaDcp)
-class NoaaDcpAdmin(admin.ModelAdmin):
-    search_fields = ("dcp_address",)
-    list_display = ("dcp_address", "first_channel", "first_channel_type", "second_channel", "second_channel_type",
-                    "first_transmission_time", "transmission_window", "transmission_period", "last_datetime",)
+# @admin.register(models.NoaaDcp)
+# class NoaaDcpAdmin(admin.ModelAdmin):
+#     search_fields = ("dcp_address",)
+#     list_display = ("dcp_address", "first_channel", "first_channel_type", "second_channel", "second_channel_type",
+#                     "first_transmission_time", "transmission_window", "transmission_period", "last_datetime",)
 
 
-    change_form_template = "admin/noaaDcp_change_form.html"  # Custom template
+#     change_form_template = "admin/noaaDcp_change_form.html"  # Custom template
 
-    # Custom view to handle the dcp address test
-    def test_dcp(self, request):
-        if request.method == "POST":
+#     # Custom view to handle the dcp address test
+#     def test_dcp(self, request):
+#         if request.method == "POST":
 
-            # Try to verify dcp address
-            try:
-                # Retrieve form data from the AJAX request
-                dcp_address = request.POST.get('dcp_address')
-                first_channel = request.POST.get('first_channel')
+#             # Try to verify dcp address
+#             try:
+#                 # Retrieve form data from the AJAX request
+#                 dcp_address = request.POST.get('dcp_address')
+#                 first_channel = request.POST.get('first_channel')
 
-                # ensure first channel and dcp address are entered
-                if not first_channel or not dcp_address:
-                    raise Exception("Enter values for both the DCP Address and the First Channel!")
+#                 # ensure first channel and dcp address are entered
+#                 if not first_channel or not dcp_address:
+#                     raise Exception("Enter values for both the DCP Address and the First Channel!")
 
-                dcp_info = {
-                    'first_channel': first_channel,
-                    'dcp_address': dcp_address,
-                }
+#                 dcp_info = {
+#                     'first_channel': first_channel,
+#                     'dcp_address': dcp_address,
+#                 }
 
-                dcp_address_test_result = tasks.test_dcp_transmit(dcp_info)
+#                 dcp_address_test_result = tasks.test_dcp_transmit(dcp_info)
 
-                # raise an exception if the test result is empty
-                if not dcp_address_test_result:
-                    raise Exception("The message is empty! Please ensure values for the DCP Address and the First Channel are correct. Also ensure that the station is transmitting.")
+#                 # raise an exception if the test result is empty
+#                 if not dcp_address_test_result:
+#                     raise Exception("The message is empty! Please ensure values for the DCP Address and the First Channel are correct. Also ensure that the station is transmitting.")
 
-                return JsonResponse({"status": "success", "message": dcp_address_test_result})
-            except Exception as e:
-                return JsonResponse({"status": "error", "message": str(e)})
+#                 return JsonResponse({"status": "success", "message": dcp_address_test_result})
+#             except Exception as e:
+#                 return JsonResponse({"status": "error", "message": str(e)})
 
-        return JsonResponse({"status": "error", "message": "Invalid request method"})
+#         return JsonResponse({"status": "error", "message": "Invalid request method"})
 
-    # Add custom URL for the AJAX request
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path('test-dcp/', self.admin_site.admin_view(self.test_dcp), name='test-dcp'),
-        ]
-        return custom_urls + urls
+#     # Add custom URL for the AJAX request
+#     def get_urls(self):
+#         urls = super().get_urls()
+#         custom_urls = [
+#             path('test-dcp/', self.admin_site.admin_view(self.test_dcp), name='test-dcp'),
+#         ]
+#         return custom_urls + urls
 
-@admin.register(models.NoaaDcpsStation)
-class NoaaDcpsStationAdmin(admin.ModelAdmin):
-    search_fields = ("station__name",)
-    list_display = ("station", "noaa_dcp", "decoder", "interval", "format", "start_date", "end_date",)
+# @admin.register(models.NoaaDcpsStation)
+# class NoaaDcpsStationAdmin(admin.ModelAdmin):
+#     search_fields = ("station__name",)
+#     list_display = ("station", "noaa_dcp", "decoder", "interval", "format", "start_date", "end_date",)
 
 
 @admin.register(models.Flash)
@@ -302,10 +302,10 @@ class DailySummaryTaskAdmin(admin.ModelAdmin):
     search_fields = ("station__name",)
 
 
-@admin.register(models.DcpMessages)
-class DcpMessagesAdmin(admin.ModelAdmin):
-    list_display = ("noaa_dcp", "datetime", "frequency_offset", "failure_code", "data_quality",)
-    search_fields = ("noaa_dcp__dcp_address",)
+# @admin.register(models.DcpMessages)
+# class DcpMessagesAdmin(admin.ModelAdmin):
+#     list_display = ("noaa_dcp", "datetime", "frequency_offset", "failure_code", "data_quality",)
+#     search_fields = ("noaa_dcp__dcp_address",)
 
 @admin.register(models.RatingCurve)
 class RatingCurveAdmin(admin.ModelAdmin):

@@ -1,0 +1,3274 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<!--
+  SURFACE — User Management
+
+  SURFACE permission-controlled account management. user-management:read
+  displays accounts and group permissions; :write permits editing ordinary
+  accounts and group permission rules. Only active Django superusers may
+  grant/revoke superuser status or activate/deactivate accounts.
+
+  All access checks are ALSO enforced by Django on the server. This template
+  only hides/disables controls for clarity; it is not an authorization layer.
+  The existing Change Password page is intentionally untouched.
+-->
+<div class="srf-container um-page up-page">
+  <div id="user-management-app" v-cloak>
+    <header class="um-page-heading">
+      <div>
+        <span class="srf-display-1 text-uppercase">User Management</span>
+        <p>Create accounts, manage groups, and control page permissions.</p>
+      </div>
+    </header>
+
+    <v-app>
+      <main class="um-main">
+        <!-- Native Vuetify navigation preserves the original permissions editor. -->
+        <v-tabs
+          v-model="tabSelection"
+          class="up-tabs um-nav-tabs"
+          background-color="white"
+          aria-label="User and permission management"
+        >
+          <v-tabs-slider color="blue"></v-tabs-slider>
+
+          <v-tab :disabled="hasUnsavedChanges || loading.saveGroupPermissions">
+            <v-icon left>mdi-account-multiple-outline</v-icon>
+            Users &amp; Groups
+          </v-tab>
+
+          <v-tab>
+            <v-icon left>mdi-shield-key-outline</v-icon>
+            Group Permissions
+          </v-tab>
+        </v-tabs>
+
+        <section v-if="activeTab === 0" class="um-panel">
+          <div class="um-panel-heading">
+            <div>
+              <h2>User accounts</h2>
+              <p>Manage Django user accounts without opening Django Admin.</p>
+            </div>
+
+            <v-btn
+              color="primary"
+              depressed
+              class="um-primary-btn"
+              v-if="canWriteUsers"
+              :disabled="!!groupsError || loading.groups"
+              @click="openCreateDialog"
+            >
+              <v-icon left size="18">mdi-account-plus-outline</v-icon>
+              Add user
+            </v-btn>
+          </div>
+
+          <v-alert
+            v-if="groupsError"
+            type="error"
+            dense
+            class="um-alert"
+          >
+            [[ groupsError ]]
+            <v-btn small text color="error" @click="fetchGroups">Retry</v-btn>
+          </v-alert>
+
+          <v-alert
+            v-if="usersError"
+            type="error"
+            dense
+            outlined
+            class="um-alert"
+          >
+            [[ usersError ]]
+            <v-btn small text color="error" @click="fetchUsers">Retry</v-btn>
+          </v-alert>
+
+          <!--
+            List controls intentionally send filters to Django rather than
+            filtering the current table page. That way users on other pages
+            are searchable without loading the entire User table into Vue.
+          -->
+          <div class="um-toolbar">
+            <v-text-field
+              v-model="search"
+              outlined
+              dense
+              hide-details
+              clearable
+              autocomplete="off"
+              prepend-inner-icon="mdi-magnify"
+              label="Search users or groups"
+              class="um-search"
+            ></v-text-field>
+
+            <v-select
+              v-model="statusFilter"
+              :items="statusOptions"
+              item-text="text"
+              item-value="value"
+              outlined
+              dense
+              hide-details
+              label="Account status"
+              class="um-status-filter"
+            ></v-select>
+
+            <v-autocomplete
+              v-model="groupFilter"
+              :items="groups"
+              item-text="name"
+              item-value="id"
+              outlined
+              dense
+              clearable
+              hide-details
+              label="Filter by group"
+              class="um-group-filter"
+            ></v-autocomplete>
+
+            <v-btn
+              icon
+              outlined
+              class="um-refresh"
+              :loading="loading.users"
+              aria-label="Refresh users"
+              title="Refresh users"
+              @click="fetchUsers"
+            >
+              <v-icon size="19">mdi-refresh</v-icon>
+            </v-btn>
+          </div>
+
+          <!--
+            Server-side v-data-table: the API owns sorting, paging, and counts.
+            The table represents only one page of users at any given time.
+          -->
+          <div class="um-table-container">
+            <v-data-table
+              :headers="userHeaders"
+              :items="users"
+              :options.sync="tableOptions"
+              :server-items-length="totalUsers"
+              :loading="loading.users"
+              :footer-props="{ 'items-per-page-options': [10, 20, 25, 50, 100] }"
+              item-key="id"
+              class="um-user-table"
+              loading-text="Loading user accounts..."
+              no-data-text="No users match your filters."
+              fixed-header
+            >
+              <template v-slot:item.name="{ item }">
+                <div class="um-identity">
+                  <span class="um-avatar">[[ initials(item) ]]</span>
+
+                  <div>
+                    <strong>[[ displayName(item) ]]</strong>
+                    <small>@[[ item.username ]]</small>
+                  </div>
+                </div>
+              </template>
+
+              <template v-slot:item.email="{ item }">
+                <span :class="{ 'um-muted': !item.email }">
+                  [[ item.email || '—' ]]
+                </span>
+              </template>
+
+              <template v-slot:item.groups="{ item }">
+                <div v-if="item.groups.length" class="um-chips">
+                  <span
+                    v-for="groupId in item.groups"
+                    :key="groupId"
+                    class="um-group-chip"
+                  >
+                    [[ groupById[groupId] || ('Group #' + groupId) ]]
+                  </span>
+                </div>
+                <span v-else class="um-muted">No groups</span>
+              </template>
+
+              <!-- Account type reflects Django is_superuser, not is_staff.
+                   Staff/admin-site access is intentionally out of scope. -->
+              <template v-slot:item.is_superuser="{ item }">
+                <span
+                  class="um-type-pill"
+                  :class="item.is_superuser ? 'um-type-superuser' : 'um-type-standard'"
+                >
+                  [[ item.is_superuser ? 'Superuser' : 'Standard' ]]
+                </span>
+              </template>
+
+              <template v-slot:item.is_active="{ item }">
+                <span class="um-status-pill" :class="item.is_active ? 'um-active' : 'um-inactive'">
+                  <span class="um-status-dot"></span>
+                  [[ item.is_active ? 'Active' : 'Inactive' ]]
+                </span>
+              </template>
+
+              <template v-slot:item.date_joined="{ item }">
+                <span>[[ formatDate(item.date_joined) ]]</span>
+              </template>
+
+              <template v-slot:item.last_login="{ item }">
+                <span :class="{ 'um-muted': !item.last_login }">
+                  [[ formatDate(item.last_login) ]]
+                </span>
+              </template>
+
+              <template v-slot:item.actions="{ item }">
+                <div class="um-table-actions">
+                  <v-btn
+                    text
+                    small
+                    color="primary"
+                    v-if="canWriteUsers && (isCurrentSuperuser || !item.is_restricted)"
+                    :disabled="!!groupsError || loading.groups"
+                    @click="openEditDialog(item)"
+                  >
+                    <v-icon left size="16">mdi-pencil-outline</v-icon>
+                    Edit
+                  </v-btn>
+
+                  <v-menu
+                    v-if="canWriteUsers && (isCurrentSuperuser ||
+                      (!item.is_restricted && item.id !== currentAdminId))"
+                    bottom
+                    left
+                    offset-y
+                  >
+                    <template v-slot:activator="{ on, attrs }">
+                      <v-btn
+                        icon
+                        small
+                        v-bind="attrs"
+                        v-on="on"
+                        :aria-label="'Account actions for ' + item.username"
+                      >
+                        <v-icon size="20">mdi-dots-vertical</v-icon>
+                      </v-btn>
+                    </template>
+
+                    <v-list dense class="um-action-menu">
+                      <v-list-item
+                        v-if="(isCurrentSuperuser || !item.is_restricted) && item.id !== currentAdminId"
+                        @click="openPasswordDialog(item)"
+                      >
+                        <v-list-item-icon>
+                          <v-icon size="18">mdi-lock-reset</v-icon>
+                        </v-list-item-icon>
+                        <v-list-item-title>Reset password</v-list-item-title>
+                      </v-list-item>
+
+                      <v-list-item
+                        v-if="isCurrentSuperuser"
+                        :disabled="item.id === currentAdminId && item.is_active"
+                        @click="openStatusDialog(item)"
+                      >
+                        <v-list-item-icon>
+                          <v-icon size="18">
+                            [[ item.is_active ? 'mdi-account-off-outline' : 'mdi-account-check-outline' ]]
+                          </v-icon>
+                        </v-list-item-icon>
+                        <v-list-item-title>
+                          [[ item.is_active ? 'Deactivate account' : 'Reactivate account' ]]
+                        </v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </v-menu>
+                </div>
+              </template>
+            </v-data-table>
+          </div>
+
+          <div class="um-footnote">
+            <v-icon size="16">mdi-information-outline</v-icon>
+            <span>
+              Accounts are deactivated rather than deleted. Password changes made by
+              an administrator are not emailed or displayed again after saving.
+            </span>
+          </div>
+        </section>
+
+        <section
+          v-else
+          id="up-permissions-panel"
+          class="up-permissions-layout"
+          role="tabpanel"
+          aria-label="Group page permissions"
+        >
+          <!--
+            Group Permissions remains the original matrix and URL contract.
+            PUT replaces all rows for one group's page access; guard edits.
+          -->
+          <aside class="up-section up-groups-panel" aria-labelledby="up-group-list-heading">
+            <div class="up-section-head up-side-head">
+              <div class="up-section-heading">
+                <h2 id="up-group-list-heading">Groups</h2>
+                <p>Select a group to edit its access.</p>
+              </div>
+            </div>
+
+            <div class="up-group-search">
+              <v-text-field
+                v-model="groupSearch"
+                label="Find a group"
+                prepend-inner-icon="mdi-magnify"
+                clearable
+                outlined
+                dense
+                hide-details
+                autocomplete="off"
+              ></v-text-field>
+            </div>
+
+            <div v-if="groupsError" class="up-side-message">
+              [[ groupsError ]]
+              <v-btn small text color="primary" @click="fetchGroups">Retry</v-btn>
+            </div>
+
+            <div v-else-if="!groups.length" class="up-side-message">
+              [[ loading.groups ? 'Loading groups...' : 'No groups available.' ]]
+            </div>
+
+            <div v-else-if="!filteredGroups.length" class="up-side-message">
+              No matching groups.
+            </div>
+
+            <div v-else class="up-group-list">
+              <button
+                v-for="group in filteredGroups"
+                :key="group.id"
+                type="button"
+                class="up-group-button"
+                :class="{ 'up-group-selected': selectedGroupId === group.id }"
+                :aria-pressed="String(selectedGroupId === group.id)"
+                :disabled="loading.saveGroupPermissions || loading.permissionPages"
+                @click="selectGroup(group)"
+              >
+                <span class="up-group-icon" aria-hidden="true">
+                  <v-icon size="17">mdi-account-group-outline</v-icon>
+                </span>
+
+                <span class="up-group-name">[[ group.name ]]</span>
+
+                <v-icon v-if="selectedGroupId === group.id" size="18" color="primary">
+                  mdi-check-circle
+                </v-icon>
+                <v-icon v-else size="16" color="grey lighten-1">
+                  mdi-chevron-right
+                </v-icon>
+              </button>
+            </div>
+
+            <div class="up-group-footer">
+              [[ groups.length ]] [[ groups.length === 1 ? 'group' : 'groups' ]] available
+            </div>
+          </aside>
+
+          <div class="up-section up-access-panel" aria-labelledby="up-access-heading">
+            <div class="up-section-head up-access-head">
+              <div class="up-section-heading">
+                <h2 id="up-access-heading">
+                  [[ selectedGroupId !== null ? selectedGroupName : 'Page permissions' ]]
+                </h2>
+                <p>Set read, write and delete access to individual pages.</p>
+              </div>
+
+              <span v-if="hasUnsavedChanges" class="up-unsaved-indicator">
+                <span class="up-unsaved-dot"></span>
+                Unsaved changes
+              </span>
+            </div>
+
+            <div v-if="selectedGroupId === null" class="up-empty-state">
+              <div class="up-empty-icon">
+                <v-icon size="31">mdi-shield-key-outline</v-icon>
+              </div>
+              <strong>Select a group to manage permissions</strong>
+              <p>Choose a group from the left panel to see its available page access.</p>
+            </div>
+
+            <template v-else>
+              <div class="up-access-body">
+                <div class="up-access-toolbar">
+                  <v-text-field
+                    v-model="permissionSearch"
+                    label="Search pages or categories"
+                    prepend-inner-icon="mdi-magnify"
+                    clearable
+                    outlined
+                    dense
+                    hide-details
+                    autocomplete="off"
+                    class="up-search-field"
+                    :disabled="loading.permissionPages || loading.groupAccess || !!groupAccessError"
+                  ></v-text-field>
+
+                  <span class="up-count-label">[[ permissionPages.length ]] pages</span>
+                </div>
+
+                <div class="up-permission-hint">
+                  <v-icon size="16">mdi-information-outline</v-icon>
+                  <span v-if="canWriteUsers">
+                    Disabling Read also disables Write and Delete for that page.
+                  </span>
+                  <span v-else>
+                    Read-only access. A User Management write grant is required to edit group permissions.
+                  </span>
+                </div>
+
+                <div v-if="loading.permissionPages || loading.groupAccess" class="up-loading-state">
+                  <v-progress-circular indeterminate color="primary" size="28"></v-progress-circular>
+                  <span>Loading page permissions...</span>
+                </div>
+
+                <v-alert
+                  v-else-if="permissionPagesError || groupAccessError"
+                  type="error"
+                  dense
+                  class="up-inline-alert"
+                >
+                  [[ permissionPagesError || groupAccessError ]]
+                  <v-btn
+                    small
+                    text
+                    color="error"
+                    @click="permissionPagesError ? fetchPermissionPages() : loadGroupAccess(selectedGroupId)"
+                  >
+                    Retry
+                  </v-btn>
+                </v-alert>
+
+                <div v-else-if="!permissionPages.length" class="up-empty-state up-inline-empty">
+                  <v-icon size="30" color="grey lighten-1">mdi-file-question-outline</v-icon>
+                  <strong>No permission pages found</strong>
+                  <p>Make sure WxPermissionPages has been populated.</p>
+                </div>
+
+                <div v-else-if="!groupedPermissionCategories.length" class="up-empty-state up-inline-empty">
+                  <v-icon size="30" color="grey lighten-1">mdi-magnify</v-icon>
+                  <strong>No matching pages</strong>
+                  <p>Try another search term.</p>
+                </div>
+
+                <v-expansion-panels
+                  v-else
+                  v-model="expandedPanels"
+                  multiple
+                  class="up-category-panels"
+                >
+                  <v-expansion-panel
+                    v-for="category in groupedPermissionCategories"
+                    :key="category.name"
+                    class="up-category-panel"
+                  >
+                    <v-expansion-panel-header class="up-category-header">
+                      <span class="up-category-title">[[ category.name ]]</span>
+                      <span class="up-category-count">
+                        [[ category.pages.length ]]
+                        [[ category.pages.length === 1 ? 'page' : 'pages' ]]
+                      </span>
+                    </v-expansion-panel-header>
+
+                    <v-expansion-panel-content class="up-category-content">
+                      <div class="up-permission-table-wrap">
+                        <table class="up-permission-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">Page / route</th>
+                              <th scope="col">Read</th>
+                              <th scope="col">Write</th>
+                              <th scope="col">Delete</th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            <tr v-for="page in category.pages" :key="page.url_name">
+                              <th scope="row" class="up-page-cell">
+                                <strong>[[ page.name ]]</strong>
+                                <small v-if="page.description">[[ page.description ]]</small>
+                                <code>[[ page.url_name ]]</code>
+                              </th>
+
+                              <td>
+                                <v-switch
+                                  v-if="editedAccessMap[page.url_name]"
+                                  v-model="editedAccessMap[page.url_name].can_read"
+                                  inset
+                                  dense
+                                  hide-details
+                                  class="up-access-switch"
+                                  color="success"
+                                  :disabled="!canWriteUsers || loading.saveGroupPermissions"
+                                  :aria-label="'Read access for ' + page.name"
+                                  @change="onReadToggle(page.url_name)"
+                                ></v-switch>
+                              </td>
+
+                              <td>
+                                <v-switch
+                                  v-if="editedAccessMap[page.url_name]"
+                                  v-model="editedAccessMap[page.url_name].can_write"
+                                  inset
+                                  dense
+                                  hide-details
+                                  class="up-access-switch"
+                                  color="primary"
+                                  :disabled="!canWriteUsers || loading.saveGroupPermissions || !getAccess(page.url_name).can_read"
+                                  :aria-label="'Write access for ' + page.name"
+                                ></v-switch>
+                              </td>
+
+                              <td>
+                                <v-switch
+                                  v-if="editedAccessMap[page.url_name]"
+                                  v-model="editedAccessMap[page.url_name].can_delete"
+                                  inset
+                                  dense
+                                  hide-details
+                                  class="up-access-switch"
+                                  color="error"
+                                  :disabled="!canWriteUsers || loading.saveGroupPermissions || !getAccess(page.url_name).can_read"
+                                  :aria-label="'Delete access for ' + page.name"
+                                ></v-switch>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </v-expansion-panel-content>
+                  </v-expansion-panel>
+                </v-expansion-panels>
+              </div>
+
+              <!--
+                Keep Save/Reset visible while editing. The server interprets
+                a missing row as "no access"; the full matrix is submitted.
+              -->
+              <div class="up-save-bar">
+                <span class="up-save-explanation">
+                  [[ groupAccessError || permissionPagesError
+                    ? 'Permissions could not be loaded.'
+                    : (loading.groupAccess || loading.permissionPages
+                      ? 'Loading permissions...'
+                      : (hasUnsavedChanges
+                        ? 'You have changes that have not been saved.'
+                        : 'No unsaved permission changes.')) ]]
+                </span>
+
+                <div v-if="canWriteUsers" class="up-save-actions">
+                  <v-btn
+                    outlined
+                    color="grey darken-2"
+                    class="up-action-btn"
+                    :disabled="!hasUnsavedChanges || !canEditPermissions"
+                    @click="resetGroupPermissions"
+                  >
+                    <v-icon left size="17">mdi-restore</v-icon>
+                    Reset
+                  </v-btn>
+
+                  <v-btn
+                    color="primary"
+                    depressed
+                    class="up-action-btn"
+                    :loading="loading.saveGroupPermissions"
+                    :disabled="!hasUnsavedChanges || !canEditPermissions"
+                    @click="saveGroupPermissions"
+                  >
+                    <v-icon left size="17">mdi-content-save-outline</v-icon>
+                    Save changes
+                  </v-btn>
+                </div>
+              </div>
+            </template>
+          </div>
+        </section>
+      </main>
+
+      <!--
+        Create and edit share one dialog, but passwords are sent only when
+        creating a user. Password resets have a separate audited API action;
+        editing an account must never accidentally overwrite credentials.
+      -->
+      <v-dialog v-model="userDialog" max-width="690" persistent scrollable>
+        <v-card class="um-dialog-card">
+          <v-card-title class="um-dialog-heading">
+            <div>
+              <h2>[[ editingUser ? 'Edit user account' : 'Create new user' ]]</h2>
+              <p>
+                [[ editingUser
+                  ? 'Update account information, assigned groups, and superuser access.'
+                  : 'Create an account and assign an initial password.' ]]
+              </p>
+            </div>
+
+            <v-btn icon :disabled="loading.savingUser" aria-label="Close dialog" @click="closeUserDialog">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+
+          <v-divider></v-divider>
+
+          <!--
+            Vuetify's scrollable dialog expects v-card-text and v-card-actions
+            to be *direct* children of v-card. Wrapping them in v-form breaks
+            the flex layout and can cause the fixed footer to be clipped.
+            The Save button calls saveUser explicitly; Django still validates
+            every submitted field on the server.
+          -->
+          <v-card-text class="um-dialog-content">
+            <div class="um-form-section-title">Account information</div>
+
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.trim="form.username"
+                  label="Username *"
+                  outlined
+                  dense
+                  maxlength="150"
+                  autocomplete="off"
+                  :disabled="loading.savingUser"
+                  :rules="[rules.required]"
+                ></v-text-field>
+              </v-col>
+
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.trim="form.email"
+                  label="Email address (optional)"
+                  outlined
+                  dense
+                  maxlength="254"
+                  autocomplete="off"
+                  :disabled="loading.savingUser"
+                ></v-text-field>
+              </v-col>
+
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.trim="form.first_name"
+                  label="First name"
+                  outlined
+                  dense
+                  maxlength="150"
+                  autocomplete="off"
+                  :disabled="loading.savingUser"
+                ></v-text-field>
+              </v-col>
+
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.trim="form.last_name"
+                  label="Last name"
+                  outlined
+                  dense
+                  maxlength="150"
+                  autocomplete="off"
+                  :disabled="loading.savingUser"
+                ></v-text-field>
+              </v-col>
+            </v-row>
+
+            <div class="um-form-section-title">Account access</div>
+
+            <v-autocomplete
+              v-model="form.groups"
+              :items="groups"
+              item-text="name"
+              item-value="id"
+              label="Assigned groups"
+              multiple
+              chips
+              small-chips
+              deletable-chips
+              outlined
+              dense
+              clearable
+              :disabled="loading.savingUser || loading.groups"
+              :loading="loading.groups"
+              hint="Group membership controls the user's normal SURFACE access."
+              persistent-hint
+            ></v-autocomplete>
+
+            <!--
+              This switch grants full Django superuser permissions. The
+              acknowledgement is a usability safeguard only: the backend
+              independently checks authorization and prevents self-demotion.
+            -->
+            <div v-if="isCurrentSuperuser" class="um-superuser-control">
+              <div>
+                <strong>Superuser access</strong>
+                <p>Grants unrestricted Django permissions. Assign only to trusted administrators.</p>
+              </div>
+
+              <v-switch
+                v-model="form.is_superuser"
+                color="primary"
+                inset
+                hide-details
+                class="um-switch"
+                :disabled="loading.savingUser || (editingUser && editingUser.id === currentAdminId)"
+                @change="privilegeAcknowledged = false"
+              ></v-switch>
+            </div>
+
+            <v-alert
+              v-if="isCurrentSuperuser && requiresPrivilegeAcknowledgement"
+              type="warning"
+              shaped
+              text
+              dense
+              class="um-privilege-warning"
+            >
+              Granting superuser access gives this account broad control over SURFACE.
+              <v-checkbox
+                v-model="privilegeAcknowledged"
+                dense
+                light
+                hide-details
+                color="warning"
+                label="I understand the privileges being granted."
+              ></v-checkbox>
+            </v-alert>
+
+            <v-alert
+              v-if="isCurrentSuperuser && removingSuperuser"
+              type="warning"
+              dense
+            >
+              Saving will remove superuser access from this account.
+            </v-alert>
+
+            <!-- Passwords appear only while creating the account. Neither
+                 the API nor the table returns a password after save. -->
+            <template v-if="!editingUser">
+              <div class="um-form-section-title">Initial password</div>
+
+              <p class="um-help-text">
+                Set a password and copy it before saving. SURFACE cannot retrieve or display
+                that password after the account is created. Share it through an approved
+                secure method. Passwords must have at least 12 characters and pass
+                Django's password validators.
+              </p>
+
+              <v-row dense>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="form.password"
+                    label="Initial password *"
+                    :type="showPassword ? 'text' : 'password'"
+                    :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                    @click:append="showPassword = !showPassword"
+                    outlined
+                    dense
+                    autocomplete="new-password"
+                    :disabled="loading.savingUser"
+                  ></v-text-field>
+                </v-col>
+
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="form.passwordConfirm"
+                    label="Confirm password *"
+                    :type="showPassword ? 'text' : 'password'"
+                    outlined
+                    dense
+                    autocomplete="new-password"
+                    :disabled="loading.savingUser"
+                  ></v-text-field>
+                </v-col>
+              </v-row>
+
+              <v-btn
+                small
+                outlined
+                color="grey darken-2"
+                :disabled="loading.savingUser"
+                @click="generateUserPassword"
+              >
+                <v-icon left size="16">mdi-key-plus</v-icon>
+                Generate strong password
+              </v-btn>
+
+              <v-btn
+                small
+                outlined
+                color="primary"
+                :disabled="!form.password || loading.savingUser"
+                @click="copyPassword(form.password)"
+              >
+                <v-icon left size="16">mdi-content-copy</v-icon>
+                Copy password
+              </v-btn>
+
+              <!--
+                Explain disabled Save state instead of merely fading the
+                button: the frontend requires 12+ characters and matching
+                entries, in addition to the other account fields.
+              -->
+              <p v-if="form.password && form.password.length < 12" class="um-field-warning">
+                Password must be at least 12 characters (currently [[ form.password.length ]]).
+              </p>
+
+              <p v-if="form.passwordConfirm && form.password !== form.passwordConfirm" class="um-field-warning">
+                The password fields do not match.
+              </p>
+
+              <p
+                v-if="clipboardFeedback.message"
+                class="um-copy-feedback"
+                :class="{ 'um-copy-feedback-error': clipboardFeedback.isError }"
+                role="status"
+              >
+                [[ clipboardFeedback.message ]]
+              </p>
+            </template>
+
+            <v-alert
+              v-if="userSaveError"
+              type="error"
+              dense
+              class="um-form-error"
+            >
+              [[ userSaveError ]]
+            </v-alert>
+          </v-card-text>
+
+          <v-divider></v-divider>
+
+          <v-card-actions class="um-dialog-actions">
+            <v-btn dark color="error" :disabled="loading.savingUser" @click="closeUserDialog">
+              Cancel
+            </v-btn>
+            <v-spacer></v-spacer>
+            <v-btn
+              color="primary"
+              depressed
+              class="um-primary-btn"
+              :loading="loading.savingUser"
+              :disabled="!canSaveUser || loading.savingUser"
+              @click="saveUser"
+            >
+              <v-icon left size="17">mdi-content-save-outline</v-icon>
+              [[ editingUser ? 'Save changes' : 'Create user' ]]
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!--
+        Administrator reset does not request or reveal the old password.
+        Backend uses Django set_password() and returns only a status message.
+        No email/SMTP/Resend workflow is involved in this version.
+      -->
+      <v-dialog v-model="passwordDialog" max-width="520" persistent>
+        <v-card class="um-dialog-card">
+          <v-card-title class="um-dialog-heading">
+            <div>
+              <h2>Reset user password</h2>
+              <p>Set a replacement password for [[ passwordTarget ? passwordTarget.username : '' ]].</p>
+            </div>
+            <v-btn icon :disabled="loading.resettingPassword" aria-label="Close dialog" @click="closePasswordDialog">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </v-card-title>
+
+          <v-divider></v-divider>
+
+          <v-card-text class="um-dialog-content">
+            <v-alert type="info" text dense>
+              The existing password will be replaced immediately. Give the new password to
+              the account owner through a secure channel.
+            </v-alert>
+
+            <v-text-field
+              v-model="passwordForm.password"
+              label="New password"
+              :type="showResetPassword ? 'text' : 'password'"
+              :append-icon="showResetPassword ? 'mdi-eye-off' : 'mdi-eye'"
+              @click:append="showResetPassword = !showResetPassword"
+              outlined
+              dense
+              autocomplete="new-password"
+              :disabled="loading.resettingPassword"
+            ></v-text-field>
+
+            <v-text-field
+              v-model="passwordForm.confirm"
+              label="Confirm new password"
+              :type="showResetPassword ? 'text' : 'password'"
+              outlined
+              dense
+              autocomplete="new-password"
+              :disabled="loading.resettingPassword"
+            ></v-text-field>
+
+            <v-btn
+              small
+              outlined
+              color="grey darken-2"
+              :disabled="loading.resettingPassword"
+              @click="generateResetPassword"
+            >
+              <v-icon left size="16">mdi-key-plus</v-icon>
+              Generate strong password
+            </v-btn>
+
+            <v-btn
+              small
+              outlined
+              color="primary"
+              :disabled="!passwordForm.password || loading.resettingPassword"
+              @click="copyPassword(passwordForm.password)"
+            >
+              <v-icon left size="16">mdi-content-copy</v-icon>
+              Copy password
+            </v-btn>
+
+            <p class="um-help-text">Copy the password before saving. Once submitted, it cannot be retrieved.</p>
+
+            <p v-if="passwordForm.password && passwordForm.password.length < 12" class="um-field-warning">
+              Password must be at least 12 characters (currently [[ passwordForm.password.length ]]).
+            </p>
+
+            <p v-if="passwordForm.confirm && passwordForm.password !== passwordForm.confirm" class="um-field-warning">
+              The password fields do not match.
+            </p>
+
+            <p
+              v-if="clipboardFeedback.message"
+              class="um-copy-feedback"
+              :class="{ 'um-copy-feedback-error': clipboardFeedback.isError }"
+              role="status"
+            >
+              [[ clipboardFeedback.message ]]
+            </p>
+
+            <v-alert
+              v-if="passwordError"
+              type="error"
+              dense
+              class="um-form-error"
+            >
+              [[ passwordError ]]
+            </v-alert>
+          </v-card-text>
+
+          <v-divider></v-divider>
+
+          <v-card-actions class="um-dialog-actions">
+            <v-btn dark color="error" :disabled="loading.resettingPassword" @click="closePasswordDialog">Cancel</v-btn>
+            <v-spacer></v-spacer>
+            <v-btn
+              color="primary"
+              depressed
+              :loading="loading.resettingPassword"
+              :disabled="!canResetPassword || loading.resettingPassword"
+              @click="resetPassword"
+            >
+              Reset password
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!--
+        Activation is reversible: it only changes Django is_active, preserving
+        observations and other records that reference the User row.
+        The API protects the administrator and the last active superuser.
+      -->
+      <v-dialog v-model="statusDialog" max-width="470" persistent>
+        <v-card class="um-dialog-card">
+          <v-card-title class="um-dialog-heading">
+            <div>
+              <h2>[[ statusTarget && statusTarget.is_active ? 'Deactivate account?' : 'Reactivate account?' ]]</h2>
+              <p>[[ statusTarget ? statusTarget.username : '' ]]</p>
+            </div>
+          </v-card-title>
+
+          <v-card-text class="um-dialog-content">
+            <p v-if="statusTarget && statusTarget.is_active">
+              This user will no longer be able to log in. Their account and historical
+              records will be preserved.
+            </p>
+            <p v-else>
+              This account will be enabled again. The user's existing password will remain valid.
+            </p>
+
+            <v-alert v-if="statusError" type="error" dense>
+              [[ statusError ]]
+            </v-alert>
+          </v-card-text>
+
+          <v-card-actions class="um-dialog-actions">
+            <v-btn dark :color="statusTarget && statusTarget.is_active ? 'success' : 'error'" :disabled="loading.status" @click="closeStatusDialog">Cancel</v-btn>
+            <v-spacer></v-spacer>
+            <v-btn
+              :color="statusTarget && statusTarget.is_active ? 'error' : 'success'"
+              depressed
+              :loading="loading.status"
+              @click="saveAccountStatus"
+            >
+              [[ statusTarget && statusTarget.is_active ? 'Deactivate' : 'Reactivate' ]]
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <v-snackbar v-model="snackbar.show" :timeout="4500" :color="snackbar.color" bottom>
+        [[ snackbar.message ]]
+        <template v-slot:action="{ attrs }">
+          <v-btn text v-bind="attrs" @click="snackbar.show = false">Close</v-btn>
+        </template>
+      </v-snackbar>
+    </v-app>
+  </div>
+</div>
+{% endblock %}
+
+{% block localjavascript %}
+<script>
+  new Vue({
+    el: '#user-management-app',
+    vuetify: new Vuetify(),
+    delimiters: ['[[', ']]'],
+
+    data() {
+      return {
+        // Used only for contextual UI restrictions. Django also checks the
+        // authenticated actor independently, so changing this value in the
+        // browser cannot grant permission or bypass server-side safeguards.
+        currentAdminId: {{ request.user.pk|default:0 }},
+        // Server-rendered flags come from the same WxGroupPageAccess checks
+        // used by Django APIs. Never trust these alone for authorization.
+        canWriteUsers: {{ um_can_write|yesno:"true,false" }},
+        isCurrentSuperuser: {{ request.user.is_superuser|yesno:"true,false" }},
+
+        // The two tabs share the group list but keep independent editor state.
+        activeTab: 0,
+        groupSearch: '',
+        permissionSearch: '',
+        expandedPanels: [],
+        permissionPages: [],
+        permissionPagesError: '',
+        selectedGroupId: null,
+        selectedGroupName: '',
+        groupAccessMap: {},
+        editedAccessMap: {},
+        groupAccessError: '',
+        groupRequestId: 0,
+
+        users: [],
+        groups: [],
+        totalUsers: 0,
+        usersError: '',
+        groupsError: '',
+        search: '',
+        statusFilter: 'all',
+        groupFilter: null,
+        // Vuetify .sync emits page/sort changes here. A deep watcher below
+        // then reloads the corresponding slice from Django.
+        tableOptions: {
+          page: 1,
+          itemsPerPage: 20,
+          sortBy: ['name'],
+          sortDesc: [false]
+        },
+        // In-flight requests may finish out of order. Incrementing this ID
+        // lets us discard responses from old search/filter requests.
+        userRequestId: 0,
+
+        // Holds the input debounce timer; cleared when the component unmounts.
+        searchDebounceTimer: null,
+
+        loading: {
+          users: false,
+          groups: false,
+          savingUser: false,
+          resettingPassword: false,
+          status: false,
+          permissionPages: false,
+          groupAccess: false,
+          saveGroupPermissions: false
+        },
+
+        // Creation and editing share form fields. ``editingUser`` being null
+        // means POST/create; otherwise PATCH/edit (without password fields).
+        userDialog: false,
+        editingUser: null,
+        form: this.emptyUserForm(),
+        userSaveError: '',
+        privilegeAcknowledged: false,
+        showPassword: false,
+        // Local feedback stays in the password dialog; a bottom snackbar can
+        // appear under a modal backdrop and obscure the Save action.
+        clipboardFeedback: { message: '', isError: false },
+
+        // Reset credentials are transient UI state, never part of the user
+        // records fetched from Django or persisted to browser storage.
+        passwordDialog: false,
+        passwordTarget: null,
+        passwordForm: { password: '', confirm: '' },
+        passwordError: '',
+        showResetPassword: false,
+
+        statusDialog: false,
+        statusTarget: null,
+        statusError: '',
+
+        snackbar: { show: false, message: '', color: 'success' },
+        rules: {
+          required: value => Boolean(String(value || '').trim()) || 'This field is required.'
+        },
+        statusOptions: [
+          { text: 'All accounts', value: 'all' },
+          { text: 'Active', value: 'active' },
+          { text: 'Inactive', value: 'inactive' }
+        ],
+        userHeaders: [
+          { text: 'Name / Username', value: 'name' },
+          { text: 'Email address', value: 'email' },
+          { text: 'Groups', value: 'groups', sortable: false },
+          { text: 'Account type', value: 'is_superuser' },
+          { text: 'Status', value: 'is_active' },
+          { text: 'Created', value: 'date_joined' },
+          { text: 'Last login', value: 'last_login' },
+          { text: 'Actions', value: 'actions', sortable: false, align: 'end' }
+        ]
+      };
+    },
+
+    computed: {
+      tabSelection: {
+        get() {
+          return this.activeTab;
+        },
+        set(index) {
+          this.changeTab(index);
+        }
+      },
+
+      groupById() {
+        return this.groups.reduce((result, group) => {
+          result[group.id] = group.name;
+          return result;
+        }, {});
+      },
+
+      requiresPrivilegeAcknowledgement() {
+        // The confirmation is needed only when privileges are *added*, not
+        // for a regular edit of an existing superuser.
+        // Granting superuser privileges requires explicit acknowledgement.
+        return this.isCurrentSuperuser && Boolean(this.form.is_superuser) &&
+          (!this.editingUser || !this.editingUser.is_superuser);
+      },
+
+      removingSuperuser() {
+        return this.isCurrentSuperuser && Boolean(this.editingUser &&
+          this.editingUser.is_superuser && !this.form.is_superuser);
+      },
+
+      canSaveUser() {
+        // A disabled button helps catch incomplete forms early. The backend
+        // repeats all validation and permission checks on every submission.
+        if (!this.canWriteUsers) return false;
+        if (!String(this.form.username || '').trim()) return false;
+        if (this.groupsError || this.loading.groups) return false;
+        if (this.requiresPrivilegeAcknowledgement && !this.privilegeAcknowledged) return false;
+
+        if (!this.editingUser) {
+          return this.passwordsMatch(this.form.password, this.form.passwordConfirm);
+        }
+
+        return true;
+      },
+
+      canResetPassword() {
+        return this.canWriteUsers && this.passwordTarget &&
+          this.passwordsMatch(this.passwordForm.password, this.passwordForm.confirm);
+      },
+
+      filteredGroups() {
+        const term = (this.groupSearch || '').trim().toLowerCase();
+        return term
+          ? this.groups.filter(group => group.name.toLowerCase().includes(term))
+          : this.groups;
+      },
+
+      groupedPermissionCategories() {
+        const term = (this.permissionSearch || '').trim().toLowerCase();
+        const categories = [];
+        const indexes = new Map();
+
+        this.permissionPages.forEach(page => {
+          const raw = page.category && typeof page.category === 'object'
+            ? page.category.name
+            : page.category;
+          const categoryName = typeof raw === 'string' && raw.trim()
+            ? raw : 'Other';
+          const matches = !term || [categoryName, page.name, page.description, page.url_name]
+            .some(value => String(value || '').toLowerCase().includes(term));
+
+          if (!matches) return;
+          if (!indexes.has(categoryName)) {
+            indexes.set(categoryName, categories.length);
+            categories.push({ name: categoryName, pages: [] });
+          }
+          categories[indexes.get(categoryName)].pages.push(page);
+        });
+
+        return categories;
+      },
+
+      hasUnsavedChanges() {
+        if (this.selectedGroupId === null || this.loading.groupAccess || this.groupAccessError) {
+          return false;
+        }
+
+        return this.permissionPages.some(page => {
+          const key = page.url_name;
+          const original = this.groupAccessMap[key] || this.blankAccess();
+          const edited = this.editedAccessMap[key] || this.blankAccess();
+          return ['can_read', 'can_write', 'can_delete'].some(field =>
+            Boolean(original[field]) !== Boolean(edited[field]));
+        });
+      },
+
+      canEditPermissions() {
+        return this.canWriteUsers && this.selectedGroupId !== null &&
+          !this.loading.groupAccess &&
+          !this.loading.permissionPages &&
+          !this.loading.saveGroupPermissions &&
+          !this.groupAccessError &&
+          !this.permissionPagesError &&
+          this.permissionPages.length > 0;
+      }
+    },
+
+    watch: {
+      // Changes initiated by Vuetify's paging/sorting controls trigger a
+      // server request. Other filters reset the page before requesting data.
+      tableOptions: {
+        deep: true,
+        handler() {
+          this.fetchUsers();
+        }
+      },
+
+      search() {
+        this.scheduleUserRefresh();
+      },
+
+      statusFilter() {
+        this.resetPaginationAndFetch();
+      },
+
+      groupFilter() {
+        this.resetPaginationAndFetch();
+      },
+
+      permissionSearch() {
+        // Expand all matching categories so filtered pages are visible.
+        this.$nextTick(() => {
+          this.expandedPanels = this.permissionSearch
+            ? this.groupedPermissionCategories.map((_, index) => index)
+            : [0];
+        });
+      }
+    },
+
+    methods: {
+      emptyUserForm() {
+        // Construct a fresh object rather than reusing a previous user's
+        // credential or group values when the dialog is opened again.
+        return {
+          username: '',
+          first_name: '',
+          last_name: '',
+          email: '',
+          groups: [],
+          is_superuser: false,
+          password: '',
+          passwordConfirm: ''
+        };
+      },
+
+      displayName(user) {
+        return [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username;
+      },
+
+      initials(user) {
+        const parts = this.displayName(user).trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return '?';
+        return (parts.length > 1
+          ? parts[0].charAt(0) + parts[parts.length - 1].charAt(0)
+          : parts[0].charAt(0)).toUpperCase();
+      },
+
+      formatDate(value) {
+        // Django serializes UTC-aware timestamps. The browser displays them
+        // in the viewer's local timezone (not an assumed Belize timezone).
+        if (!value) return 'Never';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        return date.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        });
+      },
+
+      notice(message, color) {
+        this.snackbar = { show: true, message: message, color: color || 'success' };
+      },
+
+      passwordsMatch(password, confirm) {
+        // Client-side minimum mirrors the server's configured floor; Django
+        // password validators remain authoritative for actual acceptance.
+        return typeof password === 'string' && password.length >= 12 &&
+          password === confirm;
+      },
+
+      // Use a browser CSPRNG; never use Math.random() for password generation.
+      strongPassword() {
+        if (!window.crypto || !window.crypto.getRandomValues) {
+          throw new Error('Secure password generation is unavailable in this browser.');
+        }
+
+        // 64 distinct characters allows unbiased selection from six random bits.
+        const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%_-';
+        const chars = [];
+        const bytes = new Uint8Array(48);
+        window.crypto.getRandomValues(bytes);
+
+        for (const byte of bytes) {
+          if (byte >= Math.floor(256 / alphabet.length) * alphabet.length) continue;
+          chars.push(alphabet[byte % alphabet.length]);
+          if (chars.length === 24) break;
+        }
+
+        // Very unlikely with 48 bytes, but fail closed rather than use weak entropy.
+        if (chars.length !== 24) {
+          throw new Error('Unable to generate a secure password. Try again.');
+        }
+
+        return chars.join('');
+      },
+
+      async copyPassword(password) {
+        // Never log passwords or store them in browser storage.
+        if (!password) return;
+
+        this.clipboardFeedback = {
+          message: '',
+          isError: false
+        };
+
+        // ---------------------------------------------------------
+        // 1. Attempt automatic copying using the modern Clipboard API.
+        //
+        // This normally requires HTTPS or localhost.
+        // ---------------------------------------------------------
+        if (
+          window.isSecureContext &&
+          navigator.clipboard &&
+          typeof navigator.clipboard.writeText === 'function'
+        ) {
+          try {
+            await navigator.clipboard.writeText(password);
+
+            this.clipboardFeedback = {
+              message: 'Password copied successfully.',
+              isError: false
+            };
+
+            return;
+
+          } catch (error) {
+            // The browser may reject clipboard access because of
+            // security restrictions or permissions.
+            //
+            // Fall back to selecting the actual password field.
+            console.warn('Automatic clipboard access unavailable:', error);
+          }
+        }
+
+        // ---------------------------------------------------------
+        // 2. Fallback for HTTP and browsers that block clipboard access.
+        //
+        // Instead of copying through an invisible textarea, reveal
+        // and select the actual password field.
+        //
+        // The administrator can then use the native copy shortcut.
+        // ---------------------------------------------------------
+
+        // Determine which dialog is currently open.
+        if (this.passwordDialog) {
+          this.showResetPassword = true;
+        } else {
+          this.showPassword = true;
+        }
+
+        // Wait for Vue to update the password input type.
+        await this.$nextTick();
+
+        // Find the active Vuetify dialog.
+        const dialog = document.querySelector('.v-dialog--active');
+
+        if (!dialog) {
+          this.clipboardFeedback = {
+            message: 'Unable to locate the password field.',
+            isError: true
+          };
+
+          return;
+        }
+
+        // Locate the input containing the password.
+        // This works for both Create User and Reset Password.
+        const passwordInput = Array.from(
+          dialog.querySelectorAll('input')
+        ).find(input => input.value === password);
+
+        if (!passwordInput) {
+          this.clipboardFeedback = {
+            message: 'Unable to locate the password field. Please copy it manually.',
+            isError: true
+          };
+
+          return;
+        }
+
+        // Focus and select the entire password.
+        passwordInput.focus();
+        passwordInput.select();
+
+        if (typeof passwordInput.setSelectionRange === 'function') {
+          passwordInput.setSelectionRange(
+            0,
+            passwordInput.value.length
+          );
+        }
+
+        // ---------------------------------------------------------
+        // 3. Display accurate feedback.
+        //
+        // We deliberately do not claim the password was copied,
+        // because the browser has not confirmed clipboard access.
+        // ---------------------------------------------------------
+        this.clipboardFeedback = {
+          message: 'Password selected. Press Command + C to copy it.',
+          isError: true
+        };
+      },
+
+      generateUserPassword() {
+        try {
+          this.clipboardFeedback = { message: '', isError: false };
+          const password = this.strongPassword();
+          this.form.password = password;
+          this.form.passwordConfirm = password;
+          this.showPassword = true;
+        } catch (error) {
+          this.userSaveError = error.message;
+        }
+      },
+
+      generateResetPassword() {
+        try {
+          this.clipboardFeedback = { message: '', isError: false };
+          const password = this.strongPassword();
+          this.passwordForm = { password: password, confirm: password };
+          this.showResetPassword = true;
+        } catch (error) {
+          this.passwordError = error.message;
+        }
+      },
+
+      async readError(response, fallback) {
+        try {
+          const data = await response.json();
+          const message = data.message || data.detail || fallback;
+          return data.field ? `${data.field}: ${message}` : message;
+        } catch (error) {
+          return fallback;
+        }
+      },
+
+      async getList(path) {
+        // Group and permission-page list endpoints accept plain arrays.
+        // Keep compatibility with DRF-paginated results where applicable.
+        const output = [];
+        const seen = new Set();
+        let next = new URL(path, window.location.origin);
+
+        while (next) {
+          if (next.origin !== window.location.origin) {
+            throw new Error('Unexpected pagination origin.');
+          }
+
+          // Stop loops or abusive pagination URLs. Only this origin is
+          // allowed so wxFetch never follows a foreign API URL.
+          if (seen.has(next.href) || seen.size >= 100) {
+            throw new Error('Invalid pagination sequence.');
+          }
+
+          seen.add(next.href);
+          const response = await wxFetch(next.pathname + next.search);
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Unable to load groups.'));
+          }
+
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            output.push(...data);
+            break;
+          }
+
+          if (!data || !Array.isArray(data.results)) {
+            throw new Error('Unexpected group-list response.');
+          }
+
+          output.push(...data.results);
+          next = data.next ? new URL(data.next, next) : null;
+        }
+
+        return output;
+      },
+
+      async fetchGroups() {
+        this.loading.groups = true;
+        this.groupsError = '';
+
+        try {
+          this.groups = await this.getList('/api/groups/');
+        } catch (error) {
+          this.groupsError = error.message || 'Unable to load groups.';
+          this.notice(this.groupsError, 'error');
+        } finally {
+          this.loading.groups = false;
+        }
+      },
+
+      async fetchUsers() {
+        // A request ID prevents a slow older response from overwriting a
+        // newer result when the administrator changes filters rapidly.
+        const requestId = ++this.userRequestId;
+        this.loading.users = true;
+        this.usersError = '';
+
+        // UI column IDs differ from the API's approved sort identifiers.
+        // Keep this mapping explicit rather than transmitting raw field names.
+        const sortMap = {
+          name: 'name',
+          email: 'email',
+          is_superuser: 'superuser',
+          is_active: 'status',
+          last_login: 'last_login',
+          date_joined: 'date_joined',
+          username: 'username'
+        };
+        const options = this.tableOptions;
+        const selectedSort = options.sortBy && options.sortBy[0];
+        const sort = sortMap[selectedSort] || 'username';
+        const descending = Boolean(options.sortDesc && options.sortDesc[0]);
+        const query = new URLSearchParams({
+          page: String(options.page || 1),
+          page_size: String(options.itemsPerPage || 20),
+          search: this.search || '',
+          status: this.statusFilter,
+          group: this.groupFilter === null ? '' : String(this.groupFilter),
+          sort: sort,
+          descending: String(descending)
+        });
+
+        try {
+          const response = await wxFetch(`/api/user-management/users/?${query.toString()}`);
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Unable to load user accounts.'));
+          }
+
+          const data = await response.json();
+          // Filter/sort may have changed while this request was running.
+          // Ignore stale results instead of displaying the wrong user page.
+          if (requestId !== this.userRequestId) return;
+
+          if (!Array.isArray(data.results) || typeof data.total !== 'number') {
+            throw new Error('Unexpected user-list response.');
+          }
+
+          // If the selected page disappeared, let the table options watcher
+          // issue one new request for the valid page returned by Django.
+          if (data.page !== this.tableOptions.page) {
+            this.tableOptions = { ...this.tableOptions, page: data.page };
+            return;
+          }
+
+          this.users = data.results;
+          this.totalUsers = data.total;
+        } catch (error) {
+          if (requestId !== this.userRequestId) return;
+          this.usersError = error.message || 'Unable to load user accounts.';
+          this.notice(this.usersError, 'error');
+        } finally {
+          if (requestId === this.userRequestId) this.loading.users = false;
+        }
+      },
+
+      scheduleUserRefresh() {
+        // Avoid one HTTP request per keystroke while searching.
+        if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = setTimeout(() => {
+          this.resetPaginationAndFetch();
+        }, 300);
+      },
+
+      resetPaginationAndFetch() {
+        // Searching from page 4 might otherwise show an empty table even
+        // though matching users exist on page 1.
+        if (this.tableOptions.page !== 1) {
+          // Vue's deep watcher triggers a fetch when the page is reset.
+          this.tableOptions = { ...this.tableOptions, page: 1 };
+        } else {
+          this.fetchUsers();
+        }
+      },
+
+      openCreateDialog() {
+        if (!this.canWriteUsers) return;
+        this.editingUser = null;
+        this.form = this.emptyUserForm();
+        this.userSaveError = '';
+        this.privilegeAcknowledged = false;
+        this.showPassword = false;
+        this.clipboardFeedback = { message: '', isError: false };
+        this.userDialog = true;
+      },
+
+      openEditDialog(user) {
+        if (!this.canWriteUsers || (!this.isCurrentSuperuser && user.is_restricted)) return;
+        // Copy the API row before editing. Mutating ``users`` directly would
+        // display unsaved changes in the underlying table.
+        this.editingUser = { ...user };
+        this.form = {
+          username: user.username,
+          first_name: user.first_name || '',
+          last_name: user.last_name || '',
+          email: user.email || '',
+          groups: Array.isArray(user.groups) ? user.groups.slice() : [],
+          is_superuser: Boolean(user.is_superuser),
+          password: '',
+          passwordConfirm: ''
+        };
+        this.userSaveError = '';
+        this.privilegeAcknowledged = false;
+        this.showPassword = false;
+        this.clipboardFeedback = { message: '', isError: false };
+        this.userDialog = true;
+      },
+
+      closeUserDialog() {
+        if (this.loading.savingUser) return;
+        this.userDialog = false;
+        // Clear password values from Vue state immediately on close.
+        this.form = this.emptyUserForm();
+        this.editingUser = null;
+        this.userSaveError = '';
+      },
+
+      async saveUser() {
+        // The write APIs use an explicit field allowlist. Passwords are sent
+        // only on creation; editing must never reset them implicitly.
+        if (!this.canSaveUser || this.loading.savingUser) return;
+        this.userSaveError = '';
+        this.loading.savingUser = true;
+
+        const creating = !this.editingUser;
+        const payload = {
+          username: this.form.username,
+          first_name: this.form.first_name,
+          last_name: this.form.last_name,
+          email: this.form.email,
+          groups: this.form.groups
+        };
+
+        // Only genuine superusers may submit the is_superuser field. Omitting
+        // it entirely for group-based managers keeps their normal edits valid
+        // and prevents accidental privilege changes during profile updates.
+        if (this.isCurrentSuperuser &&
+            (creating || this.form.is_superuser !== this.editingUser.is_superuser)) {
+          payload.is_superuser = this.form.is_superuser;
+        }
+
+        if (creating) payload.password = this.form.password;
+
+        const endpoint = creating
+          ? '/api/user-management/users/'
+          : `/api/user-management/users/${this.editingUser.id}/`;
+
+        try {
+          const response = await wxFetch(endpoint, {
+            method: creating ? 'POST' : 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Unable to save user.'));
+          }
+
+          this.closeUserDialogAfterSave();
+          await this.fetchUsers();
+          this.notice(creating ? 'User created successfully.' : 'User updated successfully.');
+        } catch (error) {
+          this.userSaveError = error.message || 'Unable to save user.';
+        } finally {
+          this.loading.savingUser = false;
+        }
+      },
+
+      closeUserDialogAfterSave() {
+        // Do not retain the new password after Django confirms creation.
+        this.userDialog = false;
+        this.form = this.emptyUserForm();
+        this.editingUser = null;
+        this.showPassword = false;
+      },
+
+      openPasswordDialog(user) {
+        if (!this.canWriteUsers || user.id === this.currentAdminId ||
+            (!this.isCurrentSuperuser && user.is_restricted)) return;
+        this.passwordTarget = { id: user.id, username: user.username };
+        this.passwordForm = { password: '', confirm: '' };
+        this.passwordError = '';
+        this.showResetPassword = false;
+        this.clipboardFeedback = { message: '', isError: false };
+        this.passwordDialog = true;
+      },
+
+      closePasswordDialog() {
+        if (this.loading.resettingPassword) return;
+        this.passwordDialog = false;
+        this.passwordTarget = null;
+        this.passwordForm = { password: '', confirm: '' };
+        this.passwordError = '';
+        this.showResetPassword = false;
+      },
+
+      async resetPassword() {
+        // A successful response contains no password. Clear the temporary
+        // credential from Vue state as soon as the server accepts the reset.
+        if (!this.canResetPassword || this.loading.resettingPassword) return;
+        this.loading.resettingPassword = true;
+        this.passwordError = '';
+
+        try {
+          const response = await wxFetch(
+            `/api/user-management/users/${this.passwordTarget.id}/password/`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password: this.passwordForm.password })
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Unable to reset password.'));
+          }
+
+          this.passwordDialog = false;
+          this.passwordTarget = null;
+          this.passwordForm = { password: '', confirm: '' };
+          this.showResetPassword = false;
+          this.notice('Password updated. Share it with the user securely.');
+        } catch (error) {
+          this.passwordError = error.message || 'Unable to reset password.';
+        } finally {
+          this.loading.resettingPassword = false;
+        }
+      },
+
+      openStatusDialog(user) {
+        if (!this.isCurrentSuperuser) return;
+        this.statusTarget = { ...user };
+        this.statusError = '';
+        this.statusDialog = true;
+      },
+
+      closeStatusDialog() {
+        if (this.loading.status) return;
+        this.statusDialog = false;
+        this.statusTarget = null;
+        this.statusError = '';
+      },
+
+      async saveAccountStatus() {
+        // This is an explicit confirmation action rather than a table toggle:
+        // deactivation affects authentication and must not happen accidentally.
+        if (!this.isCurrentSuperuser || !this.statusTarget || this.loading.status) return;
+        this.loading.status = true;
+        this.statusError = '';
+        const desiredActive = !this.statusTarget.is_active;
+
+        try {
+          const response = await wxFetch(
+            `/api/user-management/users/${this.statusTarget.id}/status/`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_active: desiredActive })
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Unable to change account status.'));
+          }
+
+          this.statusDialog = false;
+          this.statusTarget = null;
+          await this.fetchUsers();
+          this.notice(desiredActive ? 'Account reactivated.' : 'Account deactivated.');
+        } catch (error) {
+          this.statusError = error.message || 'Unable to change account status.';
+        } finally {
+          this.loading.status = false;
+        }
+      },
+
+      // The permission matrix is intentionally kept on the same page, but
+      // still uses the existing API contracts and "no access = no row" rule.
+      blankAccess() {
+        return { can_read: false, can_write: false, can_delete: false };
+      },
+
+      changeTab(index) {
+        if (index === this.activeTab) return;
+
+        // Do not discard edits just because the administrator clicked a tab.
+        if (this.hasUnsavedChanges || this.loading.saveGroupPermissions) {
+          this.notice('Save or reset your permission changes before switching tabs.', 'warning');
+
+          return;
+        }
+
+        this.activeTab = index;
+      },
+
+      getAccess(urlName) {
+        return this.editedAccessMap[urlName] || this.blankAccess();
+      },
+
+      onReadToggle(urlName) {
+        const access = this.editedAccessMap[urlName];
+
+        // Write and Delete are meaningful only when Read is enabled.
+        if (access && !access.can_read) {
+          access.can_write = false;
+          access.can_delete = false;
+        }
+      },
+
+      async fetchPermissionPages() {
+        this.loading.permissionPages = true;
+        this.permissionPagesError = '';
+
+        try {
+          this.permissionPages = await this.getList('/api/permission_pages/');
+
+          if (this.selectedGroupId !== null) {
+            await this.loadGroupAccess(this.selectedGroupId);
+          }
+        } catch (error) {
+          console.error('User Management: permission pages', error);
+          this.permissionPagesError = error.message || 'Unable to load permission pages.';
+          this.notice(this.permissionPagesError, 'error');
+        } finally {
+          this.loading.permissionPages = false;
+        }
+      },
+
+      async selectGroup(group) {
+        if (group.id === this.selectedGroupId) return;
+
+        // Group switching before saving would silently lose changes.
+        if (this.hasUnsavedChanges || this.loading.saveGroupPermissions) {
+          this.notice('Save or reset your permission changes before selecting another group.', 'warning');
+          return;
+        }
+
+        if (this.loading.permissionPages || this.permissionPagesError) {
+          this.notice('Permission pages are not ready. Try again.', 'warning');
+          return;
+        }
+
+        this.selectedGroupId = group.id;
+        this.selectedGroupName = group.name;
+        this.permissionSearch = '';
+        await this.loadGroupAccess(group.id);
+      },
+
+      async loadGroupAccess(groupId) {
+        // A response from a previously selected group must never overwrite
+        // the matrix for the currently selected group.
+        const requestId = ++this.groupRequestId;
+        this.loading.groupAccess = true;
+        this.groupAccessError = '';
+        this.groupAccessMap = {};
+        this.editedAccessMap = {};
+
+        try {
+          const response = await wxFetch(`/api/groups/${groupId}/page_access/`);
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Unable to load group access.'));
+          }
+
+          const result = await response.json();
+          if (!result || typeof result !== 'object' || Array.isArray(result)) {
+            throw new Error('Unexpected group access response.');
+          }
+
+          if (requestId !== this.groupRequestId) return;
+
+          const original = {};
+          const edited = {};
+
+          this.permissionPages.forEach(page => {
+            const existing = result[page.url_name] || this.blankAccess();
+            const access = {
+              can_read: Boolean(existing.can_read),
+              can_write: Boolean(existing.can_write),
+              can_delete: Boolean(existing.can_delete)
+            };
+
+            // The API omits an all-false row. Populate every displayed page
+            // so unsaved changes can be calculated reliably.
+            original[page.url_name] = { ...access };
+            edited[page.url_name] = { ...access };
+          });
+
+          this.groupAccessMap = original;
+          this.editedAccessMap = edited;
+          this.expandedPanels = this.permissionPages.length ? [0] : [];
+        } catch (error) {
+          if (requestId !== this.groupRequestId) return;
+          console.error('User Management: group access', error);
+          this.groupAccessError = error.message || 'Unable to load group permissions.';
+          this.notice(this.groupAccessError, 'error');
+        } finally {
+          if (requestId === this.groupRequestId) this.loading.groupAccess = false;
+        }
+      },
+
+      resetGroupPermissions() {
+        if (!this.canEditPermissions) return;
+
+        const reset = {};
+        this.permissionPages.forEach(page => {
+          reset[page.url_name] = {
+            ...(this.groupAccessMap[page.url_name] || this.blankAccess())
+          };
+        });
+
+        this.editedAccessMap = reset;
+        this.notice('Unsaved permission changes discarded.', 'info');
+      },
+
+      async saveGroupPermissions() {
+        if (!this.canWriteUsers || !this.canEditPermissions || !this.hasUnsavedChanges) return;
+
+        this.loading.saveGroupPermissions = true;
+
+        try {
+          // PUT replaces this group's entire access matrix. Never submit a
+          // filtered/search-only subset; include every permission page.
+          const payload = {};
+          this.permissionPages.forEach(page => {
+            payload[page.url_name] = { ...this.editedAccessMap[page.url_name] };
+          });
+
+          const response = await wxFetch(
+            `/api/groups/${this.selectedGroupId}/page_access/`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(await this.readError(response, 'Failed to save group permissions.'));
+          }
+
+          this.groupAccessMap = JSON.parse(JSON.stringify(this.editedAccessMap));
+          this.notice('Group permissions saved successfully.');
+        } catch (error) {
+          console.error('User Management: save permissions', error);
+          this.notice(error.message || 'Could not save group permissions.', 'error');
+        } finally {
+          this.loading.saveGroupPermissions = false;
+        }
+      }
+    },
+
+    mounted() {
+      this.beforeUnloadHandler = event => {
+        if (!this.hasUnsavedChanges) return;
+        event.preventDefault();
+        event.returnValue = '';
+      };
+      window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
+      // Both tabs share the same groups collection, so one request populates
+      // account editors and the permissions sidebar.
+      this.fetchGroups();
+      this.fetchUsers();
+      this.fetchPermissionPages();
+    },
+
+    beforeDestroy() {
+      // Avoid a delayed search callback after navigation destroys this page.
+      if (this.searchDebounceTimer) clearTimeout(this.searchDebounceTimer);
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+    }
+  });
+</script>
+{% endblock %}
+
+{% block extrastyle %}
+<style>
+  /*
+    Page-scoped styles deliberately preserve SURFACE's shared base.html and
+    avoid modifying Vuetify controls elsewhere in the application. Standard
+    text stays dark on white; blue is reserved for interactive accents.
+  */
+  .um-page {
+    width: 100%;
+    background: #fff;
+    color: #292929;
+  }
+
+  .um-page [v-cloak] {
+    display: none;
+  }
+
+  .um-page .v-application,
+  .um-page .v-application--wrap {
+    background: #fff !important;
+  }
+
+  .um-page .v-application--wrap {
+    min-height: auto !important;
+  }
+
+  .um-page .um-page-heading {
+    padding: 20px 20px 13px;
+  }
+
+  .um-page .um-page-heading .srf-display-1 {
+    display: inline-block;
+    color: #252525;
+  }
+
+  .um-page .um-page-heading p {
+    margin: 5px 0 0;
+    color: #7c7c7c;
+    font-size: 13px;
+  }
+
+  .um-page .um-main {
+    padding: 0 20px 30px;
+  }
+
+  .um-page .um-panel {
+    border: 1px solid #e8e8e8;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .025);
+    overflow: hidden;
+  }
+
+  .um-page .um-panel-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 17px 19px;
+    border-bottom: 1px solid #ededed;
+  }
+
+  .um-page .um-panel-heading h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #252525;
+  }
+
+  .um-page .um-panel-heading p {
+    margin: 4px 0 0;
+    color: #858585;
+    font-size: 12px;
+  }
+
+  .um-page .um-primary-btn {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 650;
+    border-radius: 7px;
+  }
+
+  .um-page .um-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 11px;
+    padding: 16px 19px;
+  }
+
+  .um-page .um-search {
+    flex: 1 1 295px;
+    max-width: 470px;
+  }
+
+  .um-page .um-status-filter {
+    flex: 0 1 168px;
+  }
+
+  .um-page .um-group-filter {
+    flex: 0 1 215px;
+  }
+
+  .um-page .um-refresh {
+    height: 39px;
+    width: 39px;
+    border-color: #e0e0e0;
+  }
+
+  .um-page .um-alert {
+    margin: 0 19px 12px;
+    font-size: 12px;
+  }
+
+  .um-page .um-table-container {
+    padding: 0 17px 6px;
+    overflow-x: auto;
+  }
+
+  .um-page .um-user-table {
+    border: 1px solid #e9e9e9;
+    border-radius: 8px;
+    box-shadow: none !important;
+    min-width: 1010px;
+  }
+
+  .um-page .um-user-table .v-data-table-header th {
+    background: #f9f9f9 !important;
+    color: #6c6c6c !important;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .015em;
+    font-weight: 700;
+  }
+
+  .um-page .um-user-table tbody td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    color: #383838;
+    font-size: 12px;
+  }
+
+  .um-page .um-user-table tbody tr:hover {
+    background: #fcfcfc !important;
+  }
+
+  .um-page .um-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 160px;
+  }
+
+  .um-page .um-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: #f0f1f2;
+    border: 1px solid #e4e5e8;
+    color: #5f6770;
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .um-page .um-identity strong {
+    display: block;
+    color: #303030;
+    font-size: 12px;
+  }
+
+  .um-page .um-identity small {
+    display: block;
+    color: #858585;
+    font-size: 11px;
+    margin-top: 3px;
+  }
+
+  .um-page .um-muted {
+    color: #999;
+    font-size: 11px;
+  }
+
+  .um-page .um-chips {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .um-page .um-group-chip,
+  .um-page .um-type-pill,
+  .um-page .um-status-pill {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    border: 1px solid #e7e7e7;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 10px;
+    line-height: 1.3;
+    font-weight: 700;
+  }
+
+  .um-page .um-group-chip {
+    background: #f5f5f5;
+    color: #616161;
+  }
+
+  .um-page .um-type-standard {
+    background: #c8e4fa;
+    border-color: #98bbd8;
+    color: #2196F3;
+  }
+
+  .um-page .um-type-superuser {
+    background: rgb(255, 202, 202);
+    color: red;
+    border-color: rgb(219, 173, 173);
+  }
+
+  .um-page .um-active {
+    background: #edf8f1;
+    border-color: #d5ecd9;
+    color: #357b52;
+  }
+
+  .um-page .um-inactive {
+    background: #fce5c1;
+    border-color: #d9c5a6;
+    color: #FF5722;
+  }
+
+  .um-page .um-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    margin-right: 6px;
+  }
+
+  .um-page .um-table-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    white-space: nowrap;
+  }
+
+  .um-page .um-table-actions .v-btn {
+    text-transform: none;
+    font-size: 12px;
+    letter-spacing: 0;
+    font-weight: 650;
+  }
+
+  .um-page .um-footnote {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 19px 16px;
+    color: red;
+    font-size: 11px;
+  }
+
+  .um-page .um-footnote .v-icon {
+    color: red;
+  }
+
+  .um-page .um-dialog-card {
+    border-radius: 11px;
+  }
+
+  .um-page .um-dialog-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 20px 22px 16px;
+  }
+
+  .um-page .um-dialog-heading h2 {
+    margin: 0;
+    color: #292929;
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .um-page .um-dialog-heading p {
+    font-size: 12px;
+    color: #808080;
+    margin: 5px 0 0;
+    font-weight: 400;
+  }
+
+  .um-page .um-dialog-content {
+    padding: 21px 22px !important;
+    color: #454545;
+    font-size: 12px;
+  }
+
+  .um-page .um-form-section-title {
+    margin: 3px 0 16px;
+    font-size: 12px;
+    font-weight: 750;
+    color: #2c2c2c;
+  }
+
+  .um-page .um-form-section-title:not(:first-child) {
+    padding-top: 17px;
+    border-top: 1px solid #ededed;
+    margin-top: 16px;
+  }
+
+  .um-page .um-superuser-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 12px 14px;
+    margin: 3px 0 13px;
+    border: 1px solid #ececec;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+
+  .um-page .um-superuser-control strong {
+    font-size: 12px;
+    color: #333;
+  }
+
+  .um-page .um-superuser-control p {
+    margin: 4px 0 0;
+    color: #828282;
+    font-size: 11px;
+  }
+
+  .um-page .um-switch {
+    margin: 0;
+    padding: 0;
+    flex: 0 0 auto;
+  }
+
+  .um-page .um-privilege-warning {
+    font-size: 12px;
+  }
+
+  .um-page .um-help-text {
+    margin: 0 0 15px;
+    color: #818181;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .um-page .um-field-warning {
+    margin: 7px 0;
+    color: #b24646;
+    font-size: 11px;
+  }
+
+  /* Clipboard feedback belongs beside the password fields, not in a
+     viewport-bottom snackbar that can overlap a tall dialog. */
+  .um-page .um-copy-feedback {
+    margin: 10px 0 0;
+    color: #4CAF50;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .um-page .um-copy-feedback-error {
+    color: #F44336;
+  }
+
+  .um-page .um-form-error {
+    margin: 16px 0 0;
+    font-size: 12px;
+  }
+
+  .um-page .um-dialog-actions {
+    padding: 12px 20px;
+  }
+
+  .um-page .um-dialog-actions .v-btn {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .um-page .v-text-field,
+  .um-page .v-autocomplete,
+  .um-page .v-select {
+    font-size: 13px;
+  }
+
+  @media (max-width: 830px) {
+    .um-page .um-search {
+      max-width: none;
+    }
+  }
+
+  @media (max-width: 650px) {
+    .um-page .um-page-heading {
+      padding: 14px 11px 10px;
+    }
+
+    .um-page .um-main {
+      padding: 0 11px 24px;
+    }
+
+    .um-page .um-panel-heading {
+      padding: 14px;
+      align-items: flex-start;
+    }
+
+    .um-page .um-panel-heading p {
+      max-width: 220px;
+    }
+
+    .um-page .um-toolbar {
+      padding: 13px;
+    }
+
+    .um-page .um-search,
+    .um-page .um-status-filter,
+    .um-page .um-group-filter {
+      flex: 1 1 100%;
+      max-width: none;
+    }
+
+    .um-page .um-table-container {
+      padding: 0 9px 6px;
+    }
+
+    .um-page .um-dialog-heading {
+      padding: 17px 16px 12px;
+    }
+
+    .um-page .um-dialog-content {
+      padding: 17px 16px !important;
+    }
+  }
+
+  /*
+    Reused Group Permissions styling. All selectors remain scoped to .up-page
+    (the same container as this page), so no other SURFACE screens change.
+  */
+  /* Page-scoped styling preserves the rest of SURFACE's shared base.html. */
+
+  .up-page {
+    width: 100%;
+    background: #fff;
+    color: #262626;
+  }
+
+  .up-page .v-application,
+  .up-page .v-application--wrap {
+    background: #fff !important;
+  }
+
+  .up-page .v-application--wrap {
+    min-height: auto !important;
+  }
+
+  .up-page .up-page-heading {
+    padding: 20px 20px 12px;
+  }
+
+  .up-page .up-page-heading .srf-display-1 {
+    color: #252525;
+    display: inline-block;
+  }
+
+  .up-page .up-page-heading p {
+    margin: 5px 0 0;
+    color: #777;
+    font-size: 13px;
+  }
+
+  .up-page .up-workspace {
+    width: 100%;
+    padding: 0 20px 30px;
+  }
+
+  /* Match Configuration Settings: standard v-tabs with a blue active slider.
+     Scope overrides to this page so other SURFACE screens are unaffected. */
+
+  .up-page .up-tabs {
+    margin: 4px 0 17px;
+    background: #fff !important;
+  }
+
+  .up-page .up-tabs .v-tabs-bar {
+    background: #fff !important;
+  }
+
+  .up-page .up-tabs .v-tab.v-tab--active,
+  .up-page .up-tabs .v-tab.v-tab--active .v-icon {
+    color: #1976d2 !important;
+  }
+
+  .up-page .up-group-button:focus-visible {
+    outline: 2px solid #397bd0;
+    outline-offset: 2px;
+  }
+
+  .up-page .up-section {
+    border: 1px solid #e6e6e6;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.025);
+    overflow: hidden;
+  }
+
+  /* Section headings are intentionally simple—no decorative step numbers. */
+
+  .up-page .up-section-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 62px;
+    padding: 13px 19px;
+    border-bottom: 1px solid #ededed;
+    background: #fff;
+  }
+
+  .up-page .up-section-heading {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .up-page .up-section-heading h2 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #252525;
+    line-height: 1.4;
+  }
+
+  .up-page .up-section-heading p {
+    margin: 2px 0 0;
+    font-size: 11px;
+    color: #777;
+    line-height: 1.5;
+  }
+
+  .up-page .up-count-label {
+    font-size: 11px;
+    color: #666;
+    background: #f7f7f7;
+    border: 1px solid #ebebeb;
+    border-radius: 20px;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+
+  .up-page .up-toolbar {
+    padding: 16px 19px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .up-page .up-search-field {
+    flex: 0 1 325px;
+    max-width: 100%;
+  }
+
+  .up-page .up-toolbar-hint {
+    color: #929292;
+    font-size: 11px;
+  }
+
+  .up-page .v-text-field.v-text-field--enclosed .v-input__slot {
+    background: #fff !important;
+  }
+
+  .up-page .v-input {
+    font-size: 13px;
+  }
+
+  .up-page .up-inline-alert {
+    margin: 0 19px 14px;
+    font-size: 12px;
+  }
+
+  .up-page .up-user-table-wrap {
+    padding: 0 17px 2px;
+  }
+
+  .up-page .up-user-table {
+    border: 1px solid #e7e7e7;
+    border-radius: 8px;
+    box-shadow: none !important;
+  }
+
+  .up-page .up-user-table .v-data-table-header th {
+    background: #f8f8f8 !important;
+    font-size: 11px;
+    color: #666 !important;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: .015em;
+  }
+
+  .up-page .up-user-table tbody td {
+    font-size: 12px;
+    color: #343434;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .up-page .up-user-table tbody tr:hover {
+    background: #fbfbfb !important;
+  }
+
+  .up-page .up-user-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 160px;
+  }
+
+  .up-page .up-user-avatar {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    background: #f0f1f2;
+    border: 1px solid #e4e6e9;
+    border-radius: 50%;
+    color: #62676e;
+    font-size: 11px;
+    font-weight: 750;
+  }
+
+  .up-page .up-user-identity strong, .up-page .up-dialog-user strong {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .up-page .up-user-identity small, .up-page .up-dialog-user small {
+    display: block;
+    color: #858585;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .up-page .up-muted {
+    font-size: 11px;
+    color: #999;
+  }
+
+  .up-page .up-account-pill, .up-page .up-role-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 10px;
+    line-height: 1.3;
+    font-weight: 700;
+    white-space: nowrap;
+    border: 1px solid #e9e9e9;
+  }
+
+  .up-page .up-account-user {
+    background: #f5f5f5;
+    color: #666;
+  }
+
+  .up-page .up-account-admin {
+    background: #fff0f1;
+    color: #ae3d46;
+    border-color: #f4dadd;
+  }
+
+  .up-page .up-role-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: 420px;
+  }
+
+  .up-page .up-role-neutral {
+    background: #f6f6f6;
+    color: #626262;
+  }
+
+  .up-page .up-role-admin {
+    background: #fff1f1;
+    color: #a83b3b;
+    border-color: #f2dcdc;
+  }
+
+  .up-page .up-role-purple {
+    background: #f5f0fb;
+    color: #7956a6;
+    border-color: #e8dbf4;
+  }
+
+  .up-page .up-role-green {
+    background: #edf7f1;
+    color: #317a59;
+    border-color: #d8eade;
+  }
+
+  .up-page .up-role-teal {
+    background: #edf7f7;
+    color: #317c78;
+    border-color: #d6eae8;
+  }
+
+  .up-page .up-edit-btn {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .up-page .up-section-footnote {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 19px 15px;
+    color: #858585;
+    font-size: 11px;
+  }
+
+  .up-page .up-section-footnote .v-icon {
+    color: #919191;
+  }
+
+  .up-page .up-permissions-layout {
+    display: grid;
+    grid-template-columns: minmax(215px, 255px) minmax(0, 1fr);
+    gap: 17px;
+    align-items: start;
+  }
+
+  .up-page .up-side-head {
+    padding: 13px 16px;
+  }
+
+  .up-page .up-side-head .up-section-heading h2 {
+    font-size: 14px;
+  }
+
+  .up-page .up-group-search {
+    padding: 15px 13px 11px;
+  }
+
+  .up-page .up-group-list {
+    padding: 0 8px 12px;
+    max-height: 520px;
+    overflow-y: auto;
+  }
+
+  .up-page .up-group-button {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: #fff;
+    padding: 10px 8px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    color: #4f4f4f;
+    font-size: 12px;
+    transition: background-color .15s;
+  }
+
+  .up-page .up-group-button:hover {
+    background: #f7f7f7;
+  }
+
+  .up-page .up-group-button:disabled {
+    cursor: default;
+    opacity: .65;
+  }
+
+  .up-page .up-group-button.up-group-selected {
+    background: #f0f5fb;
+    color: #245f9a;
+    border-color: #d9e6f5;
+    font-weight: 700;
+  }
+
+  .up-page .up-group-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 27px;
+    height: 27px;
+    flex: 0 0 auto;
+    border-radius: 7px;
+    background: #f3f3f3;
+  }
+
+  .up-page .up-group-icon .v-icon {
+    color: #828282;
+  }
+
+  .up-page .up-group-selected .up-group-icon {
+    background: #dfeaf8;
+  }
+
+  .up-page .up-group-selected .up-group-icon .v-icon {
+    color: #2665a2;
+  }
+
+  .up-page .up-group-name {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .up-page .up-group-footer {
+    border-top: 1px solid #f0f0f0;
+    color: #999;
+    font-size: 11px;
+    padding: 12px 15px;
+  }
+
+  .up-page .up-side-message {
+    padding: 13px 15px;
+    font-size: 12px;
+    color: #888;
+  }
+
+  .up-page .up-unsaved-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    color: #916319;
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .up-page .up-unsaved-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #d69c37;
+  }
+
+  .up-page .up-access-body {
+    padding: 17px 19px 18px;
+  }
+
+  .up-page .up-access-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .up-page .up-permission-hint {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    font-size: 11px;
+    color: #777;
+    background: #fafafa;
+    border: 1px solid #eeeeee;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 15px;
+  }
+
+  .up-page .up-permission-hint .v-icon {
+    color: #888;
+  }
+
+  .up-page .up-loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    color: #777;
+    font-size: 12px;
+    padding: 70px 20px;
+  }
+
+  .up-page .up-empty-state {
+    padding: 70px 22px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .up-page .up-empty-state strong {
+    color: #4d4d4d;
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .up-page .up-empty-state p {
+    color: #888;
+    font-size: 12px;
+    margin: 0;
+  }
+
+  .up-page .up-empty-icon {
+    width: 62px;
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #eee;
+    border-radius: 14px;
+    background: #fafafa;
+  }
+
+  .up-page .up-empty-icon .v-icon {
+    color: #a6a6a6;
+  }
+
+  .up-page .up-inline-empty {
+    padding: 34px 20px 48px;
+  }
+
+  .up-page .up-category-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .up-page .up-category-panel {
+    border: 1px solid #e7e7e7;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+  }
+
+  .up-page .up-category-panel::before {
+    box-shadow: none !important;
+  }
+
+  /* Remove Vuetify's default separator between expansion panels.
+    Each category already has its own border. */
+
+  .up-page .up-category-panel::after {
+    display: none !important;
+  }
+
+  .up-page .up-category-header {
+    min-height: 48px;
+    padding: 12px 15px;
+  }
+
+  .up-page .up-category-title {
+    font-weight: 700;
+    color: #343434;
+    font-size: 12px;
+    flex: 0 1 auto;
+  }
+
+  .up-page .up-category-count {
+    color: #999;
+    font-size: 11px;
+    margin-left: 12px;
+    margin-right: auto;
+  }
+
+  .up-page .up-category-content .v-expansion-panel-content__wrap {
+    padding: 0 0 3px;
+  }
+
+  .up-page .up-permission-table-wrap {
+    max-height: 480px;
+    overflow: auto;
+  }
+
+  .up-page .up-permission-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 530px;
+    font-size: 12px;
+  }
+
+  .up-page .up-permission-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    color: #666;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .025em;
+    font-weight: 750;
+    background: #fafafa;
+    text-align: center;
+    padding: 11px 12px;
+    border-top: 1px solid #eeeeee;
+    border-bottom: 1px solid #e9e9e9;
+  }
+
+  .up-page .up-permission-table thead th:first-child {
+    text-align: left;
+    width: 64%;
+    padding-left: 16px;
+  }
+
+  .up-page .up-permission-table tbody th, .up-page .up-permission-table tbody td {
+    padding: 12px;
+    border-bottom: 1px solid #efefef;
+    background: #fff;
+  }
+
+  .up-page .up-permission-table tbody tr:last-child > * {
+    border-bottom: none;
+  }
+
+  .up-page .up-permission-table tbody tr:hover > * {
+    background: #fbfbfb;
+  }
+
+  .up-page .up-permission-table tbody td {
+    width: 12%;
+    text-align: center;
+  }
+
+  .up-page .up-permission-table tbody th {
+    padding-left: 16px;
+    text-align: left;
+    font-weight: normal;
+  }
+
+  .up-page .up-page-cell strong {
+    display: block;
+    font-weight: 650;
+    color: #303030;
+  }
+
+  .up-page .up-page-cell small {
+    display: block;
+    font-weight: 400;
+    color: #858585;
+    font-size: 11px;
+    line-height: 1.5;
+    margin-top: 3px;
+  }
+
+  .up-page .up-page-cell code {
+    display: inline-block;
+    font-weight: 400;
+    color: #797979;
+    background: #f5f5f5;
+    border-radius: 3px;
+    font-size: 10px;
+    padding: 2px 5px;
+    margin-top: 5px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .up-page .up-access-switch {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 !important;
+    padding: 0 !important;
+    justify-content: center;
+  }
+
+  .up-page .up-access-switch .v-input__slot {
+    margin: 0 !important;
+  }
+
+  .up-page .up-access-switch .v-messages {
+    display: none;
+  }
+
+  .up-page .up-save-bar {
+    padding: 14px 19px;
+    border-top: 1px solid #eee;
+    background: #fcfcfc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .up-page .up-save-explanation {
+    font-size: 11px;
+    color: #858585;
+  }
+
+  .up-page .up-save-actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .up-page .up-action-btn {
+    text-transform: none;
+    font-size: 12px;
+    letter-spacing: 0;
+    font-weight: 650;
+    border-radius: 7px;
+    min-height: 37px;
+    box-shadow: none;
+  }
+
+  .up-page .up-edit-dialog {
+    border-radius: 11px;
+  }
+
+  .up-page .up-dialog-title {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 22px 16px;
+  }
+
+  .up-page .up-dialog-title h2 {
+    margin: 0;
+    font-size: 17px;
+    color: #252525;
+    font-weight: 700;
+  }
+
+  .up-page .up-dialog-title p {
+    margin: 5px 0 0;
+    color: #777;
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .up-page .up-dialog-body {
+    padding: 20px 22px !important;
+  }
+
+  .up-page .up-dialog-user {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 12px 13px;
+    border: 1px solid #ededed;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    background: #fafafa;
+  }
+
+  .up-page .up-dialog-help {
+    color: #858585;
+    font-size: 11px;
+    margin: 10px 0 0;
+  }
+
+  .up-page .up-dialog-error {
+    margin: 15px 0 0;
+  }
+
+  .up-page .up-dialog-actions {
+    padding: 12px 20px;
+  }
+
+  @media (max-width: 1000px) {
+    .up-page .up-permissions-layout {
+      grid-template-columns: minmax(190px, 235px) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .up-page .up-toolbar-hint {
+      display: none;
+    }
+
+  }
+
+  @media (max-width: 760px) {
+    .up-page .up-page-heading {
+      padding: 14px 11px 10px;
+    }
+
+    .up-page .up-workspace {
+      padding: 0 11px 22px;
+    }
+
+    .up-page .up-permissions-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .up-page .up-group-list {
+      max-height: 240px;
+    }
+
+    .up-page .up-section-head {
+      padding: 12px 14px;
+      gap: 9px;
+    }
+
+    .up-page .up-count-label {
+      display: none;
+    }
+
+    .up-page .up-toolbar {
+      padding: 13px;
+    }
+
+    .up-page .up-search-field {
+      flex: 1 1 100%;
+    }
+
+    .up-page .up-user-table-wrap {
+      padding: 0 10px 2px;
+    }
+
+    .up-page .up-access-body {
+      padding: 13px;
+    }
+
+    .up-page .up-save-bar {
+      padding: 13px;
+    }
+
+  }
+
+</style>
+{% endblock %}

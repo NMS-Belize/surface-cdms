@@ -479,15 +479,23 @@ ENDPOINT_PARENT_PAGE = {
 
 
     # -------------------------------------------------------------------------
-    # Manage Permissions Page (manage-permissions)
+    # User Management Page (user-management)
     # -------------------------------------------------------------------------
     # Page:
-    #   manage-permissions (GET page)
-    "groups-info": ("manage-permissions", "read"),
-    "users-groups-info": ("manage-permissions", "read"),
-    "users-groups-update": ("manage-permissions", "write"),
-    "permission-pages-info": ("manage-permissions", "read"),
-    "group-page-access": ("manage-permissions", "write"),  # saving perms is write
+    #   user-management (GET page)
+    #
+    # API endpoints:
+    #   groups-info           - Retrieve available Django groups.
+    #   permission-pages-info - Retrieve available permission pages.
+    #   group-page-access     - View and update group page permissions.
+    #
+    # Security:
+    #   User Management is restricted to authenticated superusers.
+    # -------------------------------------------------------------------------
+
+    "groups-info": ("user-management", "read"),
+    "permission-pages-info": ("user-management", "read"),
+    "group-page-access": ("user-management", "write"),
 
 
     # -------------------------------------------------------------------------

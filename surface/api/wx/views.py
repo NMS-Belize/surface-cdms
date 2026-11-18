@@ -87,7 +87,10 @@ from wx.decoders.weatherlink_json import read_file as read_file_weatherlink_json
 from wx.decoders.f2000 import validate_content as f2000_content_check
 from wx.decoders.f2000 import validate_structure as f2000_structure_check
 from wx.forms import StationForm
+
+from wx.permissions import user_can
 from wx.permissions import IsSuperUser
+
 from wx.models import AdministrativeRegion, StationFile, Decoder, QualityFlag, DataFile, DataFileStation, \
     DataFileVariable, StationImage, WMOStationType, WMORegion, WMOProgram, StationCommunication, CombineDataFile, \
     ManualStationDataFile, SynopTableConfiguration
@@ -99,6 +102,7 @@ from .utils import get_raw_data, get_station_raw_data
 from wx.models import MaintenanceReport, VisitType, Technician
 from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
 from base64 import b64encode
 
 from wx.models import QualityFlag, WxPermissionPages, WxGroupPageAccess
@@ -13206,11 +13210,6 @@ class ConfigurationSettingsView(WxPermissionRequiredMixin, LoginRequiredMixin,  
         ]
 
         return ctx
-
-
-@method_decorator(require_http_methods(["GET"]), name="dispatch")
-class ManagePermissionsView(WxPermissionRequiredMixin, LoginRequiredMixin,  TemplateView):
-    template_name = "wx/manage_permissions.html"
     
 
 @method_decorator(wx_mapped_permission_required, name="dispatch")
@@ -14886,247 +14885,30 @@ class AquacropAvailableDataView(views.APIView):
         return start_datetime_history, end_datetime_history
 
 
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class GroupsInfo(views.APIView):
-    # permission_classes = (IsAuthenticated, IsSuperUser)
-
-    def get(self, request, *args, **kwargs):
-        query = "SELECT id, name FROM auth_group ORDER BY id;"
-
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            rows = cursor.fetchall()
-
-        # Convert tuples to JSON-safe structures
-        groups_data = [
-            {"id": row[0], "name": row[1]}
-            for row in rows
-        ]
-
-        return Response(groups_data)
-
-
-# retrive the all users info
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class UsersGroupsInfo(views.APIView):
-    # permission_classes = (IsAuthenticated, IsSuperUser)
-
-    def get(self, request, *args, **kwargs):
-        query = """
-                    SELECT
-                        AU.id,
-                        AU.first_name,
-                        AU.last_name,
-                        AU.username,
-                        AU.email,
-                        AU.is_superuser,
-                        COALESCE(array_agg(AUG.group_id ORDER BY AUG.group_id)
-                                FILTER (WHERE AUG.group_id IS NOT NULL),
-                                '{}') AS all_group_ids
-                    FROM auth_user AS AU
-                    LEFT JOIN auth_user_groups AS AUG
-                        ON AU.id = AUG.user_id
-                    GROUP BY
-                        AU.id,
-                        AU.first_name,
-                        AU.last_name,
-                        AU.username,
-                        AU.email
-                    ORDER BY AU.id;
-                """
-
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-            rows = cursor.fetchall()
-
-        # Convert tuples to JSON-safe structures
-        users_groups_data = [
-            {"id": row[0], "first_name": row[1], "last_name": row[2], "username": row[3], "email": row[4], "acc_type": row[5], "roles": row[6]}
-            for row in rows
-        ]
-
-        return Response(users_groups_data)
-
-# update users info
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class UpdateUserRoles(views.APIView):
-    # permission_classes = (IsAuthenticated, IsSuperUser)
-
-    def patch(self, request, user_id):
-        roles = request.data.get("roles", [])
-
-        if not isinstance(roles, list) or not all(isinstance(x, int) for x in roles):
-            return Response({"message": "roles must be a list of integers"}, status=400)
-
-        # transaction atomic ensure that everything with the with block is successfull otherwise it roles back the changes made
-        # this matters as we are delting all old roles and then updating
-        with transaction.atomic():
-            # delete existing roles
-            User.groups.through.objects.filter(user_id=user_id).delete()
-
-            # insert new roles
-            through_objs = [
-                User.groups.through(user_id=user_id, group_id=gid) for gid in roles
-            ]
-            User.groups.through.objects.bulk_create(through_objs)
-
-        return Response({"message": "ok"})
-    
-
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class PermissionPagesInfo(views.APIView):
+@method_decorator(never_cache, name="dispatch")
+class CombinedUserManagementView(
+    WxPermissionRequiredMixin,
+    LoginRequiredMixin,
+    TemplateView
+):
     """
-    Returns all WxPermissionPages (including category info)
-    so the frontend can group permissions by category.
+    Combined User Management page.
 
-    Response example:
-    [
-      {
-        "id": 1,
-        "name": "Stations List",
-        "url_name": "stations-list",
-        "description": "View and manage stations.",
-        "category": { "id": 2, "name": "Stations" }
-      },
-      ...
-    ]
+    Uses SURFACE's existing page permission system rather
+    than requiring Django superuser status for all users.
     """
 
-    def get(self, request):
-        # select_related avoids an extra query per row when reading p.category
-        pages = (
-            WxPermissionPages.objects
-            .select_related("category")
-            .all()
-            .order_by("category__sort_order", "category__name", "name")
+    template_name = "wx/user_management.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Controls whether ordinary editing features appear.
+        # API endpoints independently enforce authorization.
+        context["um_can_write"] = user_can(
+            self.request.user,
+            "user-management",
+            "write"
         )
 
-        data = [
-            {
-                "id": p.id,
-                "name": p.name,
-                "url_name": p.url_name,
-                "description": p.description,
-                "category": {
-                    "id": p.category_id,
-                    "name": p.category.name if p.category_id else None,
-                },
-            }
-            for p in pages
-        ]
-
-        return Response(data, status=status.HTTP_200_OK)
-
-
-@method_decorator(wx_mapped_permission_required, name="dispatch")
-class GroupPageAccessView(views.APIView):
-    """
-    GET  -> return the current page access matrix for a group
-    PUT  -> replace the group's access matrix (bulk save)
-
-    Storage rule (important):
-    - We do NOT store rows that grant nothing (read/write/delete all False).
-      "No access" is represented by the absence of a row.
-    """
-
-    def get(self, request, group_id: int):
-        # Ensure the group exists (404 is nicer, but keeping style)
-        Group.objects.get(id=group_id)
-
-        rows = WxGroupPageAccess.objects.filter(group_id=group_id).select_related("page")
-
-        access_map = {
-            r.page.url_name: {
-                "can_read": r.can_read,
-                "can_write": r.can_write,
-                "can_delete": r.can_delete,
-            }
-            for r in rows
-        }
-
-        return Response(access_map, status=status.HTTP_200_OK)
-
-    def put(self, request, group_id: int):
-        """
-        Expected payload:
-        {
-          "<page_url_name>": {"can_read": true, "can_write": false, "can_delete": false},
-          ...
-        }
-
-        Behavior:
-        - If all flags are False -> we SKIP it (no DB row gets created).
-        - If write/delete is True but read is False -> we either:
-            A) reject (400), OR
-            B) auto-fix (set read=True)
-          Below: I chose to REJECT to match your model constraints strictly.
-        """
-        payload = request.data
-
-        if not isinstance(payload, dict):
-            return Response(
-                {"message": "Invalid payload. Must be an object keyed by page url_name."},
-                status=400
-            )
-
-        # Ensure group exists
-        Group.objects.get(id=group_id)
-
-        # Look up pages once
-        pages_by_url = {p.url_name: p for p in WxPermissionPages.objects.all()}
-
-        objs_to_create = []
-
-        for page_url, perms in payload.items():
-            page = pages_by_url.get(page_url)
-            if not page:
-                return Response({"message": f"Unknown page url_name: {page_url}"}, status=400)
-
-            # Defensive reads (payload might be missing keys)
-            can_read = bool((perms or {}).get("can_read", False))
-            can_write = bool((perms or {}).get("can_write", False))
-            can_delete = bool((perms or {}).get("can_delete", False))
-
-            # 1) Skip rows that grant nothing (represents "no access")
-            if not (can_read or can_write or can_delete):
-                continue
-
-            # 2) Enforce rule: write/delete implies read
-            # Choose ONE behavior:
-
-            # Option A (strict): reject bad payload
-            if (can_write or can_delete) and not can_read:
-                return Response(
-                    {"message": f"{page_url}: can_read must be True if can_write or can_delete is True."},
-                    status=400
-                )
-
-            # Option B (auto-fix): uncomment instead of Option A
-            # if (can_write or can_delete) and not can_read:
-            #     can_read = True
-
-            objs_to_create.append(
-                WxGroupPageAccess(
-                    group_id=group_id,
-                    page=page,
-                    can_read=can_read,
-                    can_write=can_write,
-                    can_delete=can_delete
-                )
-            )
-
-        # Bulk replace in a transaction
-        with transaction.atomic():
-            # Delete existing rows (fresh overwrite)
-            WxGroupPageAccess.objects.filter(group_id=group_id).delete()
-
-            # Only create valid rows (no all-false rows)
-            if objs_to_create:
-                WxGroupPageAccess.objects.bulk_create(objs_to_create)
-
-        return Response({"message": "ok"}, status=status.HTTP_200_OK)
-
-
-
-# FTP Ingestion FXNS START
-# FTP Ingestion FXNS END
+        return context

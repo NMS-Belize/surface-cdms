@@ -7,7 +7,9 @@ from django.contrib.auth.decorators import login_required
 
 from wx import views
 from wx import ftp_ingestion_views as ftp_views
-from wx import lrgs_views as lrgs_views
+from wx import lrgs_views
+from wx import user_management_views as user_man_views
+from wx import user_management_permission_views as user_man_perm_views
 
 router = routers.DefaultRouter()
 router.register(r'station_images', views.StationImageViewSet)
@@ -69,15 +71,6 @@ urlpatterns = [
     # Station Map Pages (default page)
     path('', views.StationsMapView.as_view(), name='stations-map'),
     path('wx/stations/map/', views.StationsMapView.as_view(), name='stations-map'),
-
-    
-    # Permission Management Page
-    path('wx/permissions/', views.ManagePermissionsView.as_view(), name='manage-permissions'),
-    path('api/groups/', views.GroupsInfo.as_view(), name="groups-info"),
-    path('api/users_groups/', views.UsersGroupsInfo.as_view(), name="users-groups-info"),
-    path("api/users/<int:user_id>/roles/", views.UpdateUserRoles.as_view(), name="users-groups-update"),
-    path("api/permission_pages/", views.PermissionPagesInfo.as_view(), name="permission-pages-info"),
-    path("api/groups/<int:group_id>/page_access/", views.GroupPageAccessView.as_view(), name="group-page-access"),
     
 
     # Configuration / Settings Page
@@ -324,6 +317,24 @@ urlpatterns = [
     path('wx/lrgs-ingestion/api/pull/', lrgs_views.lrgs_pull_create, name='lrgs-pull-create'),
     path('wx/lrgs-ingestion/api/runs/', lrgs_views.lrgs_runs_list, name='lrgs-runs-list'),
     path('wx/lrgs-ingestion/api/runs/<int:pk>/', lrgs_views.lrgs_run_detail, name='lrgs-run-detail'),
+
+
+
+
+    # User Manangement Page
+    # Combines user account administration, group memberships, and
+    # SURFACE group/page permissions in a single management interface.
+    #
+    # API authorization is enforced inside the corresponding views.
+    # -------------------------------------------------------------------------
+    path("wx/users/manage/", views.CombinedUserManagementView.as_view(), name="user-management",), # Main User Management page.
+    path("api/user-management/users/", user_man_views.managed_users, name="user-management-users",), # List users and create new accounts.
+    path("api/user-management/users/<int:user_id>/", user_man_views.managed_user_detail, name="user-management-detail",), # Retrieve and update user information and group memberships.
+    path("api/user-management/users/<int:user_id>/status/", user_man_views.managed_user_status, name="user-management-status",), # Activate or deactivate a user (superuser only).
+    path("api/user-management/users/<int:user_id>/password/", user_man_views.managed_user_password, name="user-management-password",), # Administrator password reset.
+    path("api/groups/", user_man_perm_views.managed_groups_info, name="groups-info",), # Retrieve available Django groups.
+    path("api/permission_pages/", user_man_perm_views.managed_permission_pages_info, name="permission-pages-info",), # Retrieve registered SURFACE permission pages.
+    path("api/groups/<int:group_id>/page_access/", user_man_perm_views.managed_group_page_access, name="group-page-access",), # Retrieve or update group/page permissions.
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

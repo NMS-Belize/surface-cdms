@@ -1035,12 +1035,12 @@
                 </span>
               </a>
                
-              {% if request|has_any_feature_permission:"maintenance-reports:read" %}             
-                <a id="maintenance-reports" href="{% url 'maintenance-reports' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Maint. Reports<i class="material-icons-outlined secondary-content">article</i></a>
-              {% endif %}
-
               {% if request|has_any_feature_permission:"equipment-inventory:read" %}
                 <a id="equipment-inventory" href="{% url 'equipment-inventory' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Equip. Inventory<i class="material-icons-outlined secondary-content">inventory</i></a>
+              {% endif %}
+
+              {% if request|has_any_feature_permission:"maintenance-reports:read" %}             
+                <a id="maintenance-reports" href="{% url 'maintenance-reports' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Maint. Reports<i class="material-icons-outlined secondary-content">article</i></a>
               {% endif %}
 
               <!-- pill border at the bottom of the dropdown -->
@@ -1235,14 +1235,12 @@
                   <i class="material-icons">more_vert</i>
                 </span>
               </a>
+              {% if request|has_any_feature_permission:"user-management:read" %}
+                 <a id="user-management"  href="{% url 'user-management' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Users<i class="material-icons secondary-content">groups</i></a>
+              {% endif %}
 
               {% if request|has_any_feature_permission:"configuration-settings:read" %}
                 <a id="configuration-settings"  href="{% url 'configuration-settings' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Configuration<i class="material-icons secondary-content">build</i></a>
-              {% endif %}
-
-
-              {% if request|has_any_feature_permission:"manage-permissions:read" %}
-                 <a id="manage-permissions"  href="{% url 'manage-permissions' %}" class="left-space hidden-link" onclick="mainOverlayLoader()">Permissions<i class="material-icons secondary-content">key_vertical</i></a>
               {% endif %}
 
               {% if request.user.is_superuser %}
@@ -1417,12 +1415,8 @@
     <!-- AG Grid Vue (UMD) -->
     <script src="https://cdn.jsdelivr.net/npm/ag-grid-vue@31.3.4/dist/ag-grid-vue.umd.min.js"></script>
 
-
-
-
-
-
     <script type="text/javascript" src="https://cdn.datatables.net/v/bs4/dt-1.10.20/b-1.6.1/b-html5-1.6.1/fh-3.1.6/datatables.min.js"></script>
+
     <!--
       SHARED DEPENDENCY: Moment.js + Moment Timezone.
 
@@ -1437,6 +1431,7 @@
     -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.31.0/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.6.1/moment-timezone-with-data-10-year-range.min.js"></script>
+    
     <script>
       /*
        * Record dependency health right after loading. This helps distinguish

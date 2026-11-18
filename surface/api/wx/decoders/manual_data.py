@@ -15,7 +15,7 @@ from wx.quality_control.thresholds import preload_qc_thresholds
 from wx.quality_control.helpers import reuse_qc_connection
 
 from tempestas_api import settings
-from wx.decoders.insert_raw_data import insert
+from wx.decoders.insert_manual_form_raw_data import MANUAL_RANGE_DESCRIPTIONS, insert
 from wx.decoders.insert_hf_data import insert as insert_hf
 from wx.decoders.insert_staged_raw_data import insert as insert_staged
 from wx.models import Station
@@ -86,6 +86,37 @@ def is_integer_num(num):
         return num.is_integer()
     return False
 
+def parse_measurement(variable_id, value, evap_initial, evap_residual):
+    """Return the measured value, or None to skip this observation."""
+
+    if isinstance(value, str):
+        value = value.strip()
+
+        # Recognize PRECIP = T and EVAPINI = OF before trying numeric conversion.
+        if (variable_id, value.upper()) in MANUAL_RANGE_DESCRIPTIONS:
+            return 0
+
+        value = pd.to_numeric(value, errors="coerce")
+
+    if pd.notna(value):
+        return value
+
+    # A numeric reset requires an initial record. This covers both a blank
+    # initial and unrecognized text such as "t". A reset of zero also counts.
+    if variable_id == 4053 and pd.notna(pd.to_numeric(evap_residual, errors="coerce")):
+        return settings.MISSING_VALUE
+
+    # For EVAPRES, only a genuinely blank reset beside OF gets the sentinel.
+    if variable_id == 4054 and isinstance(evap_initial, str):
+        reset_is_blank = pd.isna(evap_residual) or (
+            isinstance(evap_residual, str) and not evap_residual.strip()
+        )
+        if reset_is_blank and evap_initial.strip().upper() == "OF":
+            return settings.MISSING_VALUE
+
+    return None
+
+
 def parse_line(line, station_id, month_datetime, utc_offset):
     """Parse a manual data row"""
 
@@ -96,11 +127,15 @@ def parse_line(line, station_id, month_datetime, utc_offset):
     parsed_date = parse_date(month_datetime, day, utc_offset)
     seconds = 86400
 
-    for variable in variable_dict.keys():
-        variable_id = variable_dict[variable]
-        measurement = line[variable]
-        if measurement is None or type(measurement) == str:
-            measurement = settings.MISSING_VALUE
+    for variable, variable_id in variable_dict.items():
+        measurement = parse_measurement(
+            variable_id,
+            line[variable],
+            line["EVAPINI"],
+            line["EVAPRES"],
+        )
+        if measurement is None:
+            continue
 
         records_list.append((station_id, variable_id, seconds, parsed_date, measurement, None, None, None, None, None,
                              None, None, None, None, True))
@@ -146,6 +181,7 @@ def read_file(
 
     start = time.perf_counter()
     reads = []
+    source_codes = {}
     month_datetime = None
     last_month_day = None
 
@@ -154,6 +190,9 @@ def read_file(
         (column_names.index(name), variable_id)
         for name, variable_id in variable_dict.items()
     )
+
+    evap_initial_index = column_names.index("EVAPINI")
+    evap_residual_index = column_names.index("EVAPRES")
 
     # Preserve the existing use of the supplied decoder timezone offset.
     station_timezone = pytz.FixedOffset(utc_offset)
@@ -233,14 +272,21 @@ def read_file(
                     )
 
                     for column_index, variable_id in variable_columns:
-                        measurement = row[column_index]
+                        measurement = parse_measurement(
+                            variable_id,
+                            row[column_index],
+                            row[evap_initial_index],
+                            row[evap_residual_index],
+                        )
+                        if measurement is None:
+                            continue
 
-                        # Text and empty numeric cells represent missing data.
-                        if (
-                            isinstance(measurement, str)
-                            or pd.isna(measurement)
-                        ):
-                            measurement = settings.MISSING_VALUE
+                        # Only explicit observer codes receive the manual Range result.
+                        original_value = row[column_index]
+                        if isinstance(original_value, str):
+                            code = original_value.strip().upper()
+                            if (variable_id, code) in MANUAL_RANGE_DESCRIPTIONS:
+                                source_codes[len(reads)] = code
 
                         reads.append((
                             station_id,
@@ -302,6 +348,7 @@ def read_file(
                         override_data_on_conflict,
                         is_manually_reviewed,
                         insert_page_size=1000,
+                        source_codes=source_codes,
                     )
         else:
             insert(
