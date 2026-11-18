@@ -20,9 +20,6 @@
           dark
           dismissible  
         >
-          <strong>[[ usesCalendarDates ? 'Station-local calendar periods' : 'UTC date and time' ]]</strong>
-          <span v-if="usesCalendarDates">Daily, monthly, and yearly boundaries use the station's calendar (no timezone conversion).</span>
-          <span v-else>Raw and hourly exports interpret the selected timestamps as UTC.</span>
           <span> The start is included and the end is excluded.</span>
         </v-alert>
 
@@ -155,7 +152,7 @@
             <v-col cols="12" md="6">
               <v-select outlined dense
                 v-model="source"
-                :items="sources"
+                :items="availableSources"
                 label="Data Source"
                 return-object
                 v-on:change="onChangeTimescale"
@@ -233,7 +230,6 @@
             <div class="de-section-body">
               <div class="de-small-label mb-5">
                 REPORTING RANGE 
-                <span class="de-utc-tag">[[ usesCalendarDates ? 'Station Local Time' : 'UTC' ]]</span>
               </div>
               
               <!-- Row 5 -->
@@ -377,8 +373,7 @@
               <v-switch
                 inset
                 v-model="displayUTC"
-                label="Show in UTC"
-                :label="displayUTC === true ? 'Show in UTC' : 'Show in Station Local Time'"
+                :label="displayUTC === true ? 'Show UTC Time' : 'Show Local Time'"
               ></v-switch>
             </v-col>
           </v-row>
@@ -487,6 +482,7 @@
                 dense
                 calculate-widths
                 show-expand
+                style="margin-top: 5px !important;"
     
                 :item-class="getRowClass"
               >
@@ -814,6 +810,13 @@
         ],
       },
       watch: {
+        'filter.isAutomatic'() {
+          // Keep a valid selection when switching station types.
+          if (!this.availableSources.some(item => item.source === this.source.source)) {
+            this.source = this.availableSources[0];
+            this.onChangeTimescale();
+          }
+        },
         station (newSelectedArray, oldSelectedArray) {
           this.searchStations = '';
         },
@@ -825,6 +828,10 @@
         }
       },
       computed: {
+        availableSources() {
+          if (this.filter.isAutomatic) return this.sources;
+          return this.sources.filter(item => !['raw_data'].includes(item.source));
+        },
         usesCalendarDates() {
           return ['daily_summary', 'monthly_summary', 'yearly_summary'].includes(this.source.source);
         },
@@ -910,6 +917,7 @@
           if (name === 'yearly summary') return moment.utc(datetime).format('YYYY');
           return this.handleServerDatetime(datetime);
         },
+        
         selectAllStations(){
           this.station = this.stationList;
         },

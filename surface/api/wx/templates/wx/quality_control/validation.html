@@ -576,104 +576,159 @@
                   </v-card>
               </v-dialog>
 
-              <!-- Dialog for AQC details -->
-              <v-dialog v-model="aqcDetails" width="800" persistent>
-                <v-card class="rounded-lg">
-                  <v-card-title class="headline">
-                    AQC Details
+              <!--
+                AQC diagnostic details.
+                Keep the primary table compact: the selected observation's
+                Range, Step, and Persistence results appear as expandable panels.
+                All descriptions remain plain text (Vue interpolation, never v-html).
+              -->
+              <v-dialog v-model="aqcDetails" max-width="920" scrollable>
+                <v-card class="dv-aqc-dialog">
+                  <v-card-title class="dv-aqc-dialog-header">
+                    <div class="dv-aqc-title-wrap">
+                      <div class="dv-aqc-eyebrow">AUTOMATED QUALITY CONTROL</div>
+                      <div class="dv-aqc-title">Observation diagnostics</div>
+                      <div class="dv-aqc-subtitle">Review the checks and threshold values behind this observation's QC flag.</div>
+                    </div>
+
+                    <v-spacer></v-spacer>
+
+                    <v-btn
+                      icon
+                      small
+                      :ripple="false"
+                      class="dv-aqc-close-btn"
+                      aria-label="Close AQC details"
+                      @click="aqcDetails = false"
+                    >
+                      <v-icon>mdi-close</v-icon>
+                    </v-btn>
                   </v-card-title>
 
-                  <!-- <v-divider></v-divider> -->
+                  <v-divider></v-divider>
 
-                  <v-card-text> 
-                    <!-- Metadata container -->
-                    <div class="metadata-container mb-5">
-                      <!-- Selected station -->
-                      <div class="mb-1">
-                          <v-btn
-                              x-small
-                              depressed
-                              outlined
-                              color="purple"
-                          >
-                              <!-- <v-icon x-small left>mdi-map-marker-outline</v-icon> -->
-                              [[ selectedStationName ]]
-                          </v-btn>
+                  <v-card-text class="dv-aqc-dialog-content">
+                    <!-- Observation context and overall QC flag are always visible. -->
+                    <section class="dv-aqc-overview" aria-label="Observation details">
+                      <div class="dv-aqc-overview-top">
+                        <div>
+                          <div class="dv-aqc-overline">OVERALL AQC RESULT</div>
+                          <div class="dv-aqc-overall-status">
+                            <v-chip small label class="dv-aqc-flag"
+                              :color="paintFlag(aqcDetailsMetadata.final_flag) || 'grey'" dark>
+                              [[ qcFlagName(aqcDetailsMetadata.final_flag) ]]
+                            </v-chip>
+                          </div>
+                        </div>
+                        <div class="dv-aqc-overview-note">
+                          The overall flag follows the existing SURFACE priority:
+                          Bad, Suspicious, Missing, Good, then Not Checked.
+                        </div>
                       </div>
 
-                      <!-- Selected variable -->
-                      <div class="mb-3">
-                          <v-btn
-                              x-small
-                              depressed
-                              outlined
-                              color="orange"
-                          >
-                              <!-- <v-icon x-small left>mdi-chart-line</v-icon> -->
-                              [[ selectedVariableName ]]
-                          </v-btn>
+                      <div class="dv-aqc-observation-grid">
+                        <div class="dv-aqc-observation-field">
+                          <span>Station</span>
+                          <strong>[[ selectedStationName ]]</strong>
+                        </div>
+                        <div class="dv-aqc-observation-field">
+                          <span>Variable</span>
+                          <strong>[[ selectedVariableName ]]</strong>
+                        </div>
+                        <div class="dv-aqc-observation-field">
+                          <span>Observation time (station local)</span>
+                          <strong>[[ aqcDetailsMetadata.datetime || '—' ]]</strong>
+                        </div>
+                        <div class="dv-aqc-observation-field">
+                          <span>Measured value</span>
+                          <strong>[[ aqcDetailsMetadata.measured == null ? '—' : aqcDetailsMetadata.measured ]]</strong>
+                        </div>
                       </div>
+                    </section>
 
+                    <div class="dv-aqc-checks-heading">
                       <div>
-                        <span class="label-text">Date/Hour:</span>
-                        [[ aqcDetailsMetadata.datetime ]]
+                        <h3>Individual QC checks</h3>
+                        <p>Select a check to inspect its configured thresholds, calculations, and final assessment.</p>
                       </div>
-
-                      <div>
-                        <span class="label-text">Measured:</span>
-                        [[ aqcDetailsMetadata.measured ]]
-                      </div>
-
-                      <div>
-                        <span class="label-text">Overall AQC Quality Flag:</span>
-                        <v-chip 
-                          :color="paintFlag(aqcDetailsMetadata.final_flag)" 
-                          style="color: white;"
-                        >
-                          [[ qualityFlagsDict[aqcDetailsMetadata.final_flag]?.name ]]
-                        </v-chip>
-                      </div>
-                      
-                      <div class="mt-2">
-                        [[ aqcDetailsMetadata.description ]]
-                      </div>
+                      <span class="dv-aqc-check-count">[[ aqcDetailsItems.length ]] checks</span>
                     </div>
 
-                    <!-- Threshold table -->
-                    <v-data-table
-                      :headers="aqcDetailsHeaders"
-                      :items="aqcDetailsItems"
-                      hide-default-footer
+                    <!--
+                      Each expansion panel holds a parsed, structured presentation
+                      of the *existing* description string. The original text is
+                      retained (and accessible in every entry); no QC data is
+                      calculated or reclassified by the browser.
+                    -->
+                    <v-expansion-panels
+                      v-model="aqcExpandedPanels"
+                      multiple
+                      class="dv-aqc-panels"
                     >
-                      <!-- flag -->
-                      <template v-slot:item.quality_flag="{ item }">
-                        <v-chip 
-                          :color="paintFlag(item.quality_flag)" 
-                          style="color: white;"
-                        >
-                          [[ qualityFlagsDict[item.quality_flag]?.name ]]
-                        </v-chip>
-                      </template>
-
-                      <!-- description -->
-                      <template v-slot:item.description="{ item }">
-                        <span style="white-space: pre-line;">[[ item.description ]]</span>
-                      </template>
-                    </v-data-table>
-
-                    <!-- close btn -->
-                    <div class="d-flex justify-end mt-5">
-                      <v-btn  
-                        @click="aqcDetails = false" 
-                        class="ml-2"
-                        color="error"
-                        depressed  
+                      <v-expansion-panel
+                        v-for="(check, index) in aqcDetailsItems"
+                        :key="check.threshold"
+                        class="dv-aqc-panel"
                       >
-                        Close
-                      </v-btn>
-                    </div>
-                  </v-card-text> 
+                        <v-expansion-panel-header class="dv-aqc-panel-header" :ripple="false">
+                          <div class="dv-aqc-panel-heading">
+                            <div class="dv-aqc-method-icon" :class="'dv-aqc-method--' + check.kind">
+                              <v-icon size="20">[[ qcMethodIcon(check.kind) ]]</v-icon>
+                            </div>
+                            <div class="dv-aqc-panel-summary">
+                              <div class="dv-aqc-panel-name">[[ check.threshold ]]</div>
+                              <div class="dv-aqc-panel-excerpt">[[ check.preview ]]</div>
+                            </div>
+                            <v-chip small label dark class="dv-aqc-flag dv-aqc-panel-flag"
+                              :color="paintFlag(check.quality_flag) || 'grey'">
+                              [[ qcFlagName(check.quality_flag) ]]
+                            </v-chip>
+                          </div>
+                        </v-expansion-panel-header>
+                        <v-expansion-panel-content class="dv-aqc-panel-content">
+                          <div v-if="!check.sections.length" class="dv-aqc-no-description">
+                            No detailed description is available for this check.
+                          </div>
 
+                          <div v-for="(section, sectionIndex) in check.sections"
+                            :key="check.kind + '-section-' + sectionIndex"
+                            class="dv-aqc-description-section">
+                            <h4 class="dv-aqc-section-heading">
+                              <v-icon size="16" color="blue-grey">[[ qcSectionIcon(section.title) ]]</v-icon>
+                              [[ section.title ]]
+                            </h4>
+
+                            <div v-for="(entry, entryIndex) in section.entries"
+                              :key="entryIndex"
+                              class="dv-aqc-description-entry"
+                              :class="{
+                                'dv-aqc-entry-subheading': entry.kind === 'subheading',
+                                'dv-aqc-entry-status': entry.tone !== 'neutral'
+                              }">
+                              <template v-if="entry.kind === 'subheading'">
+                                <strong>[[ entry.text ]]</strong>
+                              </template>
+                              <template v-else>
+                                <div v-if="entry.label" class="dv-aqc-entry-label">[[ entry.label ]]</div>
+                                <div class="dv-aqc-entry-value">
+                                  <v-icon v-if="entry.tone !== 'neutral'" size="16"
+                                    :color="qcToneColor(entry.tone)">[[ qcToneIcon(entry.tone) ]]</v-icon>
+                                  <span>[[ entry.text ]]</span>
+                                </div>
+                              </template>
+                            </div>
+                          </div>
+                        </v-expansion-panel-content>
+                      </v-expansion-panel>
+                    </v-expansion-panels>
+                  </v-card-text>
+
+                  <v-divider></v-divider>
+                  <v-card-actions class="dv-aqc-dialog-actions">
+                    <span style="color: rgb(245, 104, 104);">Descriptions reflect the stored QC evaluation at the time it was performed.</span>
+                    <v-spacer></v-spacer>
+                    <v-btn depressed dark color="error" @click="aqcDetails = false">Close</v-btn>
+                  </v-card-actions>
                 </v-card>
               </v-dialog>
 
@@ -791,28 +846,8 @@
           color: 'success'
         },
 
-        // Individual AQC details information
-        // item qc headers for the table
-        aqcDetailsHeaders: [
-          {
-            text: "Checks",
-            align: "left",
-            sortable: false,
-            value: "threshold",
-          },
-          {
-            text: "Quality Flag",
-            align: "left",
-            sortable: false,
-            value: "quality_flag",
-          },
-          {
-            text: "Remarks / Description",
-            align: "left",
-            sortable: false,
-            value: "description",
-          }
-        ],
+        // Opened QC panels (one or more indices; Vuetify v-expansion-panels).
+        aqcExpandedPanels: [],
 
         // insert missing vars
         insertMissingDialog: false,
@@ -1353,71 +1388,216 @@
         },
 
 
-        // Open dialog when aqc chip is clicked
-        openAqcDetails(item) {
-          // start loading
-          this.loading = true;
-        
-          // reset the aqc details
-          this.aqcDetailsItems = [];
+        // =====================================================================
+        // AQC DIAGNOSTIC PRESENTATION
+        // =====================================================================
+        // These helpers format the *stored* text. They do NOT recalculate
+        // threshold decisions or modify the underlying QC data.
 
-          //set metadata
+        qcFlagName(flagId) {
+          return (this.qualityFlagsDict[flagId] || {}).name || 'Not available';
+        },
+
+        qcMethodIcon(kind) {
+          return {
+            range: 'mdi-chart-bell-curve-cumulative',
+            step: 'mdi-chart-timeline-variant',
+            persist: 'mdi-timer-outline'
+          }[kind] || 'mdi-check-circle-outline';
+        },
+
+        qcSectionIcon(title) {
+          if (/assessment/i.test(title)) return 'mdi-clipboard-check-outline';
+          if (/threshold/i.test(title)) return 'mdi-tune-vertical';
+          if (/difference|comparison/i.test(title)) return 'mdi-swap-horizontal';
+          if (/evaluation/i.test(title)) return 'mdi-check-all';
+          return 'mdi-information-outline';
+        },
+
+        qcToneIcon(tone) {
+          return {
+            passed: 'mdi-check-circle-outline',
+            failed: 'mdi-close-circle-outline',
+            warning: 'mdi-alert-circle-outline',
+            skipped: 'mdi-minus-circle-outline'
+          }[tone] || 'mdi-information-outline';
+        },
+
+        qcToneColor(tone) {
+          return {
+            passed: 'success',
+            failed: 'error',
+            warning: 'warning',
+            skipped: 'blue-grey'
+          }[tone] || 'blue-grey';
+        },
+
+        // Render the backend's verbose description as a hierarchy of
+        // sections and readable label/value rows. Both new multiline
+        // descriptions and older ' || '-separated descriptions are supported.
+        //
+        // We intentionally use plain Vue interpolation, never v-html:
+        // a QC description is stored data, not trusted markup.
+        parseQcDescription(description) {
+          if (description === null || description === undefined || !String(description).trim()) {
+            return [];
+          }
+
+          const lines = String(description)
+            .replace(/\r\n?/g, '\n')
+            .replace(/\s*\|\|\s*/g, '\n')
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
+
+          const sectionNames = {
+            'CONFIGURED THRESHOLDS (AS EVALUATED)': 'Configured thresholds',
+            'STEP DIFFERENCE': 'Step comparison',
+            'EVALUATION': 'Threshold evaluations',
+            'FINAL ASSESSMENT': 'Final assessment'
+          };
+
+          const sections = [];
+          let current = { title: 'Observation details', entries: [] };
+
+          const flush = () => {
+            if (current.entries.length) sections.push(current);
+          };
+
+          lines.forEach(line => {
+            const upper = line.toUpperCase();
+
+            // The name is already on the expansion panel header.
+            if (/^(RANGE|STEP|PERSISTENCE|PERSIST) QUALITY CONTROL$/.test(upper)) {
+              return;
+            }
+
+            const persistenceHeading = /^(GLOBAL|REFERENCE|CUSTOM) PERSISTENCE THRESHOLD$/.test(upper);
+            if (sectionNames[upper] || persistenceHeading) {
+              flush();
+              current = {
+                title: sectionNames[upper] ||
+                  line.toLowerCase().replace(/^\w/, character => character.toUpperCase()),
+                entries: []
+              };
+              return;
+            }
+
+            // The new Range/Step descriptions contain tier subheadings
+            // such as 'Global threshold:' before their comparison/result.
+            if (/^(Global|Reference|Custom) threshold:$/i.test(line)) {
+              current.entries.push({ kind: 'subheading', text: line.slice(0, -1), tone: 'neutral' });
+              return;
+            }
+
+            const colon = line.indexOf(':');
+            // Separate human-readable keys from values. A standalone legacy
+            // sentence with no colon remains intact as a narrative row.
+            const label = colon > 0 && colon < 56 ? line.slice(0, colon).trim() : '';
+            const value = label ? line.slice(colon + 1).trim() : line;
+
+            let tone = 'neutral';
+            if (/^(?:PASSED|GOOD)\b/i.test(value) && /^(?:Result|QC flag)$/i.test(label)) {
+              tone = 'passed';
+            } else if (/^(?:FAILED|BAD)\b/i.test(value) && /^(?:Result|QC flag)$/i.test(label)) {
+              tone = 'failed';
+            } else if (/\b(?:NOT EVALUATED|NOT CONFIGURED)\b/i.test(value)) {
+              tone = 'skipped';
+            } else if (/\b(?:NOT CHECKED|INCOMPLETE|MISSING|SUSPICIOUS)\b/i.test(value) &&
+                       /^(?:Result|QC flag|Global threshold|Reference threshold|Custom threshold)$/i.test(label)) {
+              tone = 'warning';
+            } else if (!label && /\b(?:Failed|failure)\b/i.test(line)) {
+              tone = 'failed';
+            } else if (!label && /\b(?:Passed|pass)\b/i.test(line)) {
+              tone = 'passed';
+            }
+
+            current.entries.push({ kind: 'detail', label, text: value, tone });
+          });
+
+          flush();
+          return sections;
+        },
+
+        // A short explanation in the closed panel helps an operator locate
+        // failures without opening every check. Prefer the backend's final
+        // 'Reason:' line, but gracefully fall back for older descriptions.
+        qcDescriptionPreview(description) {
+          if (!description || !String(description).trim()) return 'No detailed description available.';
+
+          const text = String(description).replace(/\s*\|\|\s*/g, '\n');
+          const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+          const reason = lines.find(line => /^Reason:\s*/i.test(line));
+          if (reason) return reason.replace(/^Reason:\s*/i, '');
+
+          const significant = lines.find(line => /\b(?:FAILED|NOT CHECKED|NOT EVALUATED|MISSING)\b/i.test(line));
+          if (significant) return significant;
+
+          const fallback = lines.find(line => !/^(RANGE|STEP|PERSISTENCE|PERSIST) QUALITY CONTROL$/i.test(line));
+          return fallback || 'View detailed evaluation.';
+        },
+
+        // Clicking an AQC chip requests the original stored descriptions.
+        // Build the presentation once when the response arrives, not during
+        // each render, and expand any non-Good checks by default.
+        openAqcDetails(item) {
+          this.loading = true;
+          this.aqcDetailsItems = [];
+          this.aqcExpandedPanels = [];
+
           this.aqcDetailsMetadata = {
             datetime: item.formated_datetime,
             measured: item.measured,
-            final_flag: item.automatic_flag,
-            description: `
-                          The Overall AQC Quality Flag follows a worst-case priority: Bad overrides Suspicious, 
-                          which overrides Missing, which overrides Good. Data is only flagged as 'Good' if all threshold 
-                          checks pass.
-                          `,
-          }
+            final_flag: item.automatic_flag
+          };
 
-          axios.get("/api/quality_control/description/", {
+          axios.get('/api/quality_control/description/', {
             params: {
               station_id: this.currentSelection.stationId,
               variable_id: this.currentSelection.variableId,
-              datetime: item.datetime, // sending the utc time instead of the formatted time because this particular view requires tz aware utc values. This saves us from having to re translate the tz on the backend
+              // Use the original UTC instant; do not round-trip through
+              // the displayed station-local date/time.
+              datetime: item.datetime
             }
           })
           .then(res => {
-            //console.log(res.data)
+            const definitions = [
+              { kind: 'range', threshold: 'Range check', flag: item.qc_range_quality_flag || 1,
+                description: res.data.qc_range_description },
+              { kind: 'step', threshold: 'Step check', flag: item.qc_step_quality_flag || 1,
+                description: res.data.qc_step_description },
+              { kind: 'persist', threshold: 'Persistence check', flag: item.qc_persist_quality_flag || 1,
+                description: res.data.qc_persist_description }
+            ];
 
-            // set aqc details
-            // fall back on 1 which is the quality flag for "Not Checked"
-            this.aqcDetailsItems.push(
-              {
-                threshold: "Range Check",
-                quality_flag: item.qc_range_quality_flag || 1,
-                description: res.data.qc_range_description
-              },
-              {
-                threshold: "Step Check",
-                quality_flag: item.qc_step_quality_flag || 1,
-                description: res.data.qc_step_description
-              },
-              {
-                threshold: "Persist Check",
-                quality_flag: item.qc_persist_quality_flag || 1,
-                description: res.data.qc_persist_description
-              },
-            );
+            this.aqcDetailsItems = definitions.map(check => ({
+              kind: check.kind,
+              threshold: check.threshold,
+              quality_flag: check.flag,
+              description: check.description || '',
+              preview: this.qcDescriptionPreview(check.description),
+              sections: this.parseQcDescription(check.description)
+            }));
 
-            // Show dialog
+            this.aqcExpandedPanels = this.aqcDetailsItems
+              .map((check, index) => ({ check, index }))
+              .filter(entry => {
+                const flagName = this.qcFlagName(entry.check.quality_flag);
+                return flagName !== 'Not available' && !/^Good$/i.test(flagName);
+              })
+              .map(entry => entry.index);
+
             this.aqcDetails = true;
-            // set loading to false
-            this.loading = false;
           })
           .catch(err => {
             this.request_error = true;
             this.request_error_message =
-              err?.response?.data?.message || "Request failed";
+              err?.response?.data?.message || 'Unable to retrieve the AQC descriptions.';
+          })
+          .finally(() => {
+            this.loading = false;
           });
-
-          // set loading to false
-          this.loading = false;
         },
-
 
         onFlagChange(item) {
           // if the flag is set to 'Not Checked' set is_validated to false
@@ -2051,6 +2231,134 @@
 @media (max-width: 600px) {
   .dv-station-fields, .dv-advanced-filters { grid-template-columns: 1fr; }
   .dv-period-group { grid-template-columns: minmax(0, 1fr) minmax(95px, .7fr); }
+}
+
+
+/* ================================================================
+   AQC diagnostic dialog — expandable, structured QC descriptions
+   ================================================================ */
+.dv-aqc-dialog { border-radius: 8px !important; color: #303846; }
+.dv-aqc-dialog-header {
+  display: flex; align-items: flex-start; flex-wrap: nowrap;
+  padding: 18px 22px !important; gap: 12px;
+}
+.dv-aqc-title-wrap { min-width: 0; }
+.dv-aqc-eyebrow { font-size: 10px; font-weight: 750; color: #768292; letter-spacing: .11em; }
+.dv-aqc-title { margin-top: 4px; font-size: 20px; font-weight: 650; line-height: 1.25; color: #273240; }
+.dv-aqc-subtitle { margin-top: 5px; color: #798492; font-size: 12px; font-weight: 400; line-height: 1.5; }
+.dv-aqc-dialog-content { padding: 20px 22px 22px !important; }
+.dv-aqc-overview { border: 1px solid #e5e9ee; background: #fafbfc; border-radius: 7px; padding: 17px 18px; }
+.dv-aqc-overview-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.dv-aqc-overline { color: #6b7786; font-size: 10px; letter-spacing: .08em; font-weight: 750; }
+.dv-aqc-overall-status { margin-top: 8px; }
+.dv-aqc-flag { flex-shrink: 0; font-weight: 650; font-size: 11px !important; letter-spacing: .01em; }
+.dv-aqc-overview-note { color: #788391; font-size: 11px; max-width: 295px; line-height: 1.5; }
+.dv-aqc-observation-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 14px 28px; border-top: 1px solid #e8ebef; margin-top: 16px; padding-top: 16px;
+}
+.dv-aqc-observation-field { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.dv-aqc-observation-field span { color: #7b8795; font-size: 11px; }
+.dv-aqc-observation-field strong { color: #344054; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.dv-aqc-checks-heading { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: 23px 0 12px; }
+.dv-aqc-checks-heading h3 { font-size: 15px; font-weight: 650; color: #344054; margin: 0 0 4px; }
+.dv-aqc-checks-heading p { color: #778391; font-size: 12px; line-height: 1.5; margin: 0; }
+.dv-aqc-check-count { white-space: nowrap; color: #758394; font-size: 11px; }
+.dv-aqc-panels { display: flex; flex-direction: column; gap: 10px; }
+.dv-aqc-panels .dv-aqc-panel { border: 1px solid #e4e8ec !important; border-radius: 7px !important; background: white; box-shadow: none !important; overflow: hidden; }
+.dv-aqc-panels .dv-aqc-panel::before { box-shadow: none !important; }
+/* ============================================================
+   AQC DETAILS - UI POLISH
+   ============================================================ */
+
+/*
+ * Vuetify adds a separator to expansion panels after the first.
+ *
+ * Our panels already have their own borders and spacing.
+ * Remove Vuetify's extra separator to prevent double borders.
+ */
+.dv-aqc-panels .dv-aqc-panel::after {
+  display: none !important;
+}
+
+
+/*
+ * Expansion panel headers.
+ * Use a subtle background transition rather than a harsh effect.
+ */
+.dv-aqc-panel-header {
+  padding: 16px 17px !important;
+  min-height: 76px !important;
+  transition: background-color .16s ease;
+}
+
+
+/*
+ * Remove Vuetify's default dark focus/active overlay.
+ *
+ * This affects only the AQC expansion headers and
+ * the close button inside the AQC dialog.
+ */
+.dv-aqc-panels .dv-aqc-panel-header::before,
+.dv-aqc-dialog-header .dv-aqc-close-btn::before {
+  opacity: 0 !important;
+}
+
+
+/*
+ * Subtle hover backgrounds.
+ */
+.dv-aqc-panels .dv-aqc-panel-header:hover {
+  background: #fafbfc;
+}
+
+.dv-aqc-dialog-header .dv-aqc-close-btn:hover {
+  background: #f5f7f9;
+}
+
+
+/*
+ * Preserve a visible focus indicator for keyboard users.
+ */
+.dv-aqc-panels .dv-aqc-panel-header:focus-visible,
+.dv-aqc-dialog-header .dv-aqc-close-btn:focus-visible {
+  outline: 2px solid #1976d2;
+  outline-offset: -3px;
+}
+.dv-aqc-panel-heading { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding-right: 9px; }
+.dv-aqc-method-icon { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+.dv-aqc-method--range { background: #e2f4f0; }
+.dv-aqc-method--range .v-icon { color: #158577 !important; }
+.dv-aqc-method--step { background: #fff2dd; }
+.dv-aqc-method--step .v-icon { color: #a66b15 !important; }
+.dv-aqc-method--persist { background: #f0eaff; }
+.dv-aqc-method--persist .v-icon { color: #7b55b6 !important; }
+.dv-aqc-panel-summary { min-width: 0; flex: 1; }
+.dv-aqc-panel-name { font-size: 14px; font-weight: 650; color: #354050; line-height: 1.3; }
+.dv-aqc-panel-excerpt { font-size: 11px; color: #778291; line-height: 1.5; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.dv-aqc-panel-flag { margin: 0 4px; }
+.dv-aqc-panel-content .v-expansion-panel-content__wrap { padding: 0 17px 18px !important; }
+.dv-aqc-description-section { padding: 14px 0 5px; border-top: 1px solid #edf0f2; }
+.dv-aqc-section-heading { display: flex; align-items: center; gap: 7px; color: #46546a; font-weight: 700; font-size: 11px; letter-spacing: .045em; text-transform: uppercase; margin: 0 0 11px; }
+.dv-aqc-description-entry { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 12px; padding: 6px 0; font-size: 12px; line-height: 1.55; color: #4a5667; overflow-wrap: anywhere; }
+.dv-aqc-entry-label { width: min(42%, 260px); flex: 0 0 min(42%, 260px); color: #6f7b89; font-weight: 550; }
+.dv-aqc-entry-value { flex: 1 1 170px; min-width: 0; display: flex; align-items: flex-start; gap: 7px; color: #344054; }
+.dv-aqc-entry-value > .v-icon { margin-top: 1px; flex-shrink: 0; }
+.dv-aqc-entry-subheading { font-weight: 700; color: #364354; margin-top: 7px; padding: 9px 10px; background: #f7f8fa; border-radius: 4px; }
+.dv-aqc-entry-status .dv-aqc-entry-value { font-weight: 650; }
+.dv-aqc-no-description { color: #8b95a2; font-size: 12px; padding: 12px; }
+.dv-aqc-dialog-actions { padding: 11px 18px !important; gap: 14px; }
+.dv-aqc-dialog-actions span {font-size: 11px; line-height: 1.45; }
+@media (max-width: 650px) {
+  .dv-aqc-dialog-header, .dv-aqc-dialog-content { padding-left: 14px !important; padding-right: 14px !important; }
+  .dv-aqc-overview-top { flex-direction: column; align-items: flex-start; }
+  .dv-aqc-observation-grid { grid-template-columns: 1fr; gap: 12px; }
+  .dv-aqc-panel-heading { flex-wrap: wrap; gap: 8px; }
+  .dv-aqc-panel-summary { flex-basis: calc(100% - 52px); }
+  .dv-aqc-panel-flag { margin-left: 50px; }
+  .dv-aqc-entry-label { width: 100%; flex-basis: 100%; }
+  .dv-aqc-entry-value { flex-basis: 100%; }
+  .dv-aqc-dialog-actions span { display: none; }
 }
 
 </style>

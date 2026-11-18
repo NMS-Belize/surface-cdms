@@ -440,6 +440,12 @@
         popupAnchor:   [0, 0],
         tooltipAnchor: [0, -34]
       }),
+      // Reuse one icon for stations without valid wind observations.
+      // Do not create a new Leaflet icon on every refresh.
+      missingWindIcon: L.icon({
+        iconUrl: "{% static 'images/close.png' %}",
+        iconSize: [8, 8]
+      }),
       showWindBarbs: true,
       popupOptions: { closeButton: false, className: 'windbarbPopup', autoClose: false, closeOnClick: false, autoPan: false },
       tooltipOptions: { permanent: false, direction: 'top', className: '' },
@@ -567,6 +573,7 @@
       sandbox: null,
       stationsDetail: false,
       stationDetailError: null,
+      selectedStationId: null, // Tracks which station is currently open in the details sidebar.
       stationDetailRequestId: 0,
       summaryRequestId: 0,
       popupContent: "",
@@ -605,6 +612,7 @@
         if (this.timeToggle === 1) return 'Current day';
         return this.requestObject.currentDate ? `Pick a day · ${this.requestObject.currentDate}` : 'Pick a day';
       },
+      
       filteredMarkers() {
         return this.markers.filter(marker =>
           (
@@ -627,51 +635,61 @@
           (this.defaultFilter.inputSearch === "" || marker.name.toUpperCase().includes(this.defaultFilter.inputSearch.toUpperCase()))
         )
       },
+      
       SelectedVariable() {
         if (this.requestObject.summaryId === null && this.variables.length > 0) {
           this.requestObject.summaryId = this.variables[0].id;
         }
         return this.variables.find(item => item.id === this.requestObject.summaryId) || this.variables[0]
       },
+      
       Attribution() {
         return this.attribution
       },
+      
       Url() {
         return this.url
       },
+      
       Sandbox() {
         return this.sandbox;
       },
+      
       Watershed() {
         if (this.showWatershed === true) {
           return true;
         }
         return false;
       },
+      
       Groundwater() {
         if (this.showGroundwater === true) {
           return true;
         }
         return false;
       },
+     
       Basemap() {
         if (this.showBasemap === true) {
           return true;
         }
         return false;
       },
+      
       River() {
         if (this.showRiver === true) {
           return true;
         }
         return false;
       },
+      
       NationalWaters() {
         if (this.showNationalWaters === true) {
           return true;
         }
         return false;
       },
+      
       styleFunctionWatershed() {
         return {
           fillColor: "transparent",
@@ -681,6 +699,7 @@
           fillOpacity: 0.3
         };
       },
+      
       styleFunctionGroundwater() {
         return {
           fillColor: "transparent",
@@ -690,6 +709,7 @@
           fillOpacity: 0.3
         };
       },
+      
       styleFunctionBasemap() {
         return {
           fillColor: "transparent",
@@ -699,6 +719,7 @@
           fillOpacity: 0.3
         };
       },
+      
       styleFunctionRiver() {
         return {
           fillColor: "transparent",
@@ -708,6 +729,7 @@
           fillOpacity: 0.3
         };
       },
+      
       styleFunctionNationalWaters() {
         return {
           fillColor: "transparent",
@@ -717,31 +739,37 @@
           fillOpacity: 0.3
         };
       },
+      
       geoOptionsWatershed() {
         return {
           onEachFeature: this.onEachFeatureFunctionWatershed
         };
       },
+      
       geoOptionsGroundwater() {
         return {
           onEachFeature: this.onEachFeatureFunctionGroundwater
         };
       },
+      
       geoOptionsBasemap() {
         return {
           onEachFeature: this.onEachFeatureFunctionBasemap
         };
       },
+      
       geoOptionsRivers() {
         return {
           onEachFeature: this.onEachFeatureFunctionRivers
         };
       },
+      
       geoOptionsNationalWaters() {
         return {
           onEachFeature: this.onEachFeatureNationalWaters
         };
       },
+      
       onEachFeatureFunctionWatershed() {
         if (!this.enableTooltip) {
           return;
@@ -758,6 +786,7 @@
           );
         };
       },
+      
       onEachFeatureFunctionGroundwater() {
         if (!this.enableTooltip) {
           return;
@@ -769,6 +798,7 @@
           });
         };
       },
+      
       onEachFeatureFunctionBasemap() {
         if (!this.enableTooltip) {
           return;
@@ -784,6 +814,7 @@
           );
         };
       },
+      
       onEachFeatureFunctionRivers() {
         if (!this.enableTooltip) {
           return;
@@ -798,6 +829,7 @@
           );
         };
       },
+      
       onEachFeatureNationalWaters() {
         if (!this.enableTooltip) {
           return;
@@ -1092,221 +1124,419 @@
         });
       },
       
-      getSummaries() {
+      getSummaries({ background = false } = {}) {
         const requestId = ++this.summaryRequestId;
         const id = this.requestObject.summaryId;
-        if (id === null || id === undefined) return;
+
+        if (id === null || id === undefined) {
+          return Promise.resolve();
+        }
+
         if (this.timeToggle === 0) {
-          return this.getLast24Summaries(id, requestId);
+          return this.getLast24Summaries(id, requestId, background);
         }
-        if (!this.requestObject.currentDate) return;
-        localStorage.setItem('summaryId', id);
-        return this.getDailySummaries(id, this.requestObject.currentDate, requestId);
+
+        if (!this.requestObject.currentDate) {
+          return Promise.resolve();
+        }
+
+        // Only persist the selection when the user changes it.
+        // Background refreshes do not need to rewrite localStorage.
+        if (!background) {
+          localStorage.setItem('summaryId', id);
+        }
+
+        return this.getDailySummaries(
+          id,
+          this.requestObject.currentDate,
+          requestId,
+          background
+        );
       },
 
-      getDailySummaries(id, date, requestId) {
-        if (Number(id) === -1) {
-          return this.showWindBarbSummaries(this.timeToggle, date, requestId);
-        } else {
-          this.showWindBarbs = false;
 
-          const today = date;
-          const tomorrow = moment(date).add(1, 'days').format('YYYY-MM-DD');
-          const params = `api/dailysummaries/?search_type=variable&search_value=${id}&search_date_start=${today}&search_date_end=${tomorrow}`;
+      // Update the EXISTING markers without replacing the markers array.
+      // Vue will update only values that have actually changed.
+      applySimpleSummaries(summaries) {
+        const summaryMap = new Map(
+          summaries.map(summary => [
+            String(summary.station).trim(),
+            summary
+          ])
+        );
 
-          return this.getAll(params).then(res => {
-            if (requestId !== this.summaryRequestId) return;
-            this.lastUpdate = this.configuredNowDisplay();
-
-            this.markers = this.markers.map(e => {
-              const summary = res.find(data => String(data.station) === String(e.id));
-
-              e.icon = this.defaultIcon;
-
-              if (!summary) {
-                e.popupContent = null;
-                e.popupVariable = null;
-                e.windDirection = null;
-                e.windSpeed = null;
-                e.tempMax = null;
-                e.tempMin = null;
-                e.atmPressure = null;
-                e.precipitation = null;
-                return e;
-              }
-
-              e.popupContent = `${summary.value.toFixed(1)}`;
-              e.popupVariable = summary.variable.unit_symbol || "";
-              e.windDirection = null;
-              e.windSpeed = null;
-              e.tempMax = null;
-              e.tempMin = null;
-              e.atmPressure = null;
-              e.precipitation = null;
-              return e;
-            });
-          });
-        }
-      },
-      
-      getLast24Summaries(id, requestId) {
-        if (Number(id) === -1) {
-          return this.showWindBarbSummaries(this.timeToggle, null, requestId);
-        } else {
-          this.showWindBarbs = false;
-          const params = `api/last24hrsummaries/?search_type=variable&search_value=${id}`;
-
-          return this.getAll(params).then(res => {
-            if (requestId !== this.summaryRequestId) return;
-            this.lastUpdate = this.configuredNowDisplay() ;
-
-            this.markers = this.markers.map(e => {
-              const summary = res.find(data => String(data.station) === String(e.id));
-
-              e.icon = this.defaultIcon;
-
-              if (!summary) {
-                e.popupContent = null;
-                e.popupVariable = null;
-                e.windDirection = null;
-                e.windSpeed = null;
-                e.tempMax = null;
-                e.tempMin = null;
-                e.atmPressure = null;
-                e.precipitation = null;
-                return e;
-              }
-
-              e.popupContent = `${summary.value.toFixed(1)}`;
-              e.popupVariable = summary.variable.unit_symbol || "";
-              e.windDirection = null;
-              e.windSpeed = null;
-              e.tempMax = null;
-              e.tempMin = null;
-              e.atmPressure = null;
-              e.precipitation = null;
-              return e;
-            });
-          });
-        }
-      },
-      
-      // to display the wind barbs
-      showWindBarbSummaries(timeToggle, date, requestId) {
-        this.showWindBarbs = true;
-        // Clear last period's icons while requesting the new period.
         this.markers.forEach(marker => {
-          marker.icon = this.defaultIcon;
-          marker.tempMax = '';
-          marker.tempMin = '';
-          marker.atmPressure = '';
-          marker.precipitation = '';
+          const summary = summaryMap.get(String(marker.id).trim());
+
+          let value = null;
+
+          if (summary && summary.value !== null &&
+              summary.value !== undefined &&
+              String(summary.value).trim() !== '') {
+
+            const numericValue = Number(summary.value);
+
+            if (Number.isFinite(numericValue)) {
+              value = numericValue.toFixed(1);
+            }
+          }
+
+          marker.popupContent = value;
+          marker.popupVariable = value !== null
+            ? (summary.variable && summary.variable.unit_symbol || '')
+            : null;
+
+          // Only reset the icon if this marker previously used a wind barb.
+          if (marker.icon !== this.defaultIcon) {
+            marker.icon = this.defaultIcon;
+          }
+
+          // Clear the cached wind icon identity when leaving Synoptic mode.
+          marker._smapWindIconKey = null;
+
+          marker.windDirection = null;
+          marker.windSpeed = null;
+          marker.tempMax = null;
+          marker.tempMin = null;
+          marker.atmPressure = null;
+          marker.precipitation = null;
         });
+      },
+
+
+      getDailySummaries(id, date, requestId, background = false) {
+        if (Number(id) === -1) {
+          return this.showWindBarbSummaries(
+            this.timeToggle,
+            date,
+            requestId,
+            background
+          );
+        }
+
+        this.showWindBarbs = false;
+
+        const tomorrow = moment(date)
+          .add(1, 'days')
+          .format('YYYY-MM-DD');
+
+        const params =
+          `api/dailysummaries/?search_type=variable` +
+          `&search_value=${id}` +
+          `&search_date_start=${date}` +
+          `&search_date_end=${tomorrow}`;
+
+        return this.getAll(params).then(res => {
+          // Ignore outdated responses after a variable/date change.
+          if (requestId !== this.summaryRequestId) return;
+
+          this.applySimpleSummaries(res);
+          this.lastUpdate = this.configuredNowDisplay();
+        });
+      },
+
+
+      getLast24Summaries(id, requestId, background = false) {
+        if (Number(id) === -1) {
+          return this.showWindBarbSummaries(
+            this.timeToggle,
+            null,
+            requestId,
+            background
+          );
+        }
+
+        this.showWindBarbs = false;
+
+        const params =
+          `api/last24hrsummaries/?search_type=variable` +
+          `&search_value=${id}`;
+
+        return this.getAll(params).then(res => {
+          if (requestId !== this.summaryRequestId) return;
+
+          this.applySimpleSummaries(res);
+          this.lastUpdate = this.configuredNowDisplay();
+        });
+      },
+
+      showWindBarbSummaries(timeToggle, date, requestId, background = false) {
+        this.showWindBarbs = true;
+
+        // Only clear previous observations when the user explicitly
+        // changes the selected variable or reporting period.
+        //
+        // During automatic refreshes, leave the existing icons alone
+        // until fresh observations are available.
+        if (!background) {
+          this.markers.forEach(marker => {
+            marker.icon = this.defaultIcon;
+            marker._smapWindIconKey = null;
+
+            marker.tempMax = '';
+            marker.tempMin = '';
+            marker.atmPressure = '';
+            marker.precipitation = '';
+          });
+        }
+
         if (!L.WindBarb || typeof L.WindBarb.icon !== 'function') {
           this.showAlert('Wind-barb plugin is unavailable.', 'error');
           return Promise.resolve();
         }
 
-        return this.getWindBards(timeToggle, date).then(wind => {
-          // A response for an older date or weather variable must never overwrite
-          // the newest selection, even if it resolves after a mode change.
-          if (requestId !== this.summaryRequestId) return;
+        return this.getWindBards(timeToggle, date)
+          .then(wind => {
+            // A response for an older selection must not overwrite
+            // the observations for the currently selected period.
+            if (requestId !== this.summaryRequestId) return;
 
-          // Update "last updated" timestamp for the UI
-          this.lastUpdate = this.configuredNowDisplay();
+            const normalizeId = id => String(id).trim();
 
-          // Normalize station IDs to avoid:
-          // - string vs number mismatches
-          // - trailing whitespace issues
-          const normalizeId = id => String(id).trim();
+            const [
+              windSpeedData,
+              windDirectionData,
+              tempMaxData,
+              tempMinData,
+              atmPressureData,
+              precipitationData
+            ] = wind;
 
-          // Destructure datasets for clarity instead of wind[0], wind[1], etc.
-          const [
-            windSpeedData,
-            windDirectionData,
-            tempMaxData,
-            tempMinData,
-            atmPressureData,
-            precipitationData
-          ] = wind;
+            const toMap = rows => new Map(
+              rows.map(row => [
+                normalizeId(row.station),
+                row
+              ])
+            );
 
-          // Convert arrays into Maps for O(1) station lookup
-          const toMap = arr =>
-            new Map(arr.map(d => [normalizeId(d.station), d]));
-
-          const windSpeedMap = toMap(windSpeedData);
-          const windDirectionMap = toMap(windDirectionData);
-          const tempMaxMap = toMap(tempMaxData);
-          const tempMinMap = toMap(tempMinData);
-          const atmPressureMap = toMap(atmPressureData);
-          const precipitationMap = toMap(precipitationData);
-
-          // Track stations that cannot display wind barbs (for debugging)
-          const missingWindBarbs = [];
-
-          // Update the existing reactive station objects; use only THIS period's values.
-          this.markers.forEach(marker => {
-            const stationId = normalizeId(marker.id);
-            const windSpeed = windSpeedMap.get(stationId);
-            const windDirection = windDirectionMap.get(stationId);
-            const tempMax = tempMaxMap.get(stationId);
-            const tempMin = tempMinMap.get(stationId);
-            const atmPressure = atmPressureMap.get(stationId);
-            const precipitation = precipitationMap.get(stationId);
+            const windSpeedMap = toMap(windSpeedData);
+            const windDirectionMap = toMap(windDirectionData);
+            const tempMaxMap = toMap(tempMaxData);
+            const tempMinMap = toMap(tempMinData);
+            const atmPressureMap = toMap(atmPressureData);
+            const precipitationMap = toMap(precipitationData);
 
             const numberOrNull = summary => {
-              if (!summary || summary.value === null || summary.value === undefined ||
-                  String(summary.value).trim() === '') return null;
-              const n = Number(summary.value);
-              return Number.isFinite(n) ? n : null;
+              if (!summary ||
+                  summary.value === null ||
+                  summary.value === undefined ||
+                  String(summary.value).trim() === '') {
+                return null;
+              }
+
+              const number = Number(summary.value);
+              return Number.isFinite(number) ? number : null;
             };
+
             const displayValue = summary => {
-              const n = numberOrNull(summary);
-              return n === null ? '' : n.toFixed(1);
+              const number = numberOrNull(summary);
+              return number === null ? '' : number.toFixed(1);
             };
 
-            marker.windSpeed = windSpeed || null;
-            marker.windDirection = windDirection || null;
-            marker.tempMax = displayValue(tempMax);
-            marker.tempMin = displayValue(tempMin);
-            marker.atmPressure = displayValue(atmPressure);
-            marker.precipitation = displayValue(precipitation);
+            // Update each EXISTING marker.
+            // Do not replace the markers array or redraw the whole map.
+            this.markers.forEach(marker => {
+              const stationId = normalizeId(marker.id);
 
-            const speed = numberOrNull(windSpeed);
-            const direction = numberOrNull(windDirection);
-            // Wind direction is passed through in degrees, as in the original page.
-            // Do not reverse it: the plugin's meteorological convention must be
-            // checked separately against real observations.
-            if (speed !== null && speed >= 0 && direction !== null &&
-                direction >= 0 && direction <= 360) {
-              marker.icon = L.WindBarb.icon({
-                fillColor: 'black',
-                pointRadius: 1,
-                deg: direction,
-                speed: speed,
-                iconAnchor: [16, 32],
-                forceDir: true
-              });
-            } else {
-              missingWindBarbs.push({ station: stationId, hasSpeed: speed !== null, hasDirection: direction !== null });
-              marker.icon = L.icon({
-                iconUrl: "{% static 'images/close.png' %}",
-                iconSize: [8, 8]
-              });
+              const windSpeed = windSpeedMap.get(stationId);
+              const windDirection = windDirectionMap.get(stationId);
+              const tempMax = tempMaxMap.get(stationId);
+              const tempMin = tempMinMap.get(stationId);
+              const atmPressure = atmPressureMap.get(stationId);
+              const precipitation = precipitationMap.get(stationId);
+
+              // These properties are reactive. Vue updates the displayed
+              // values only when their contents actually change.
+              marker.windSpeed = windSpeed || null;
+              marker.windDirection = windDirection || null;
+
+              marker.tempMax = displayValue(tempMax);
+              marker.tempMin = displayValue(tempMin);
+              marker.atmPressure = displayValue(atmPressure);
+              marker.precipitation = displayValue(precipitation);
+
+              const speed = numberOrNull(windSpeed);
+              const direction = numberOrNull(windDirection);
+
+              const hasValidWind =
+                speed !== null &&
+                speed >= 0 &&
+                direction !== null &&
+                direction >= 0 &&
+                direction <= 360;
+
+              // An icon's visual appearance depends on wind speed and direction.
+              // This signature lets us detect whether it really needs rebuilding.
+              const iconKey = hasValidWind
+                ? `wind:${speed}:${direction}`
+                : 'missing';
+
+              // CRITICAL:
+              // Do nothing if this marker's icon already represents
+              // the latest wind speed and direction.
+              //
+              // This prevents unnecessary Leaflet marker redraws
+              // during every 60-second refresh.
+              if (marker._smapWindIconKey === iconKey) {
+                return;
+              }
+
+              if (hasValidWind) {
+                marker.icon = L.WindBarb.icon({
+                  fillColor: 'black',
+                  pointRadius: 1,
+                  deg: direction,
+                  speed: speed,
+                  iconAnchor: [16, 32],
+                  forceDir: true
+                });
+              } else {
+                marker.icon = this.missingWindIcon;
+              }
+
+              // Cache the state represented by the current icon.
+              // This property is internal and doesn't need to be reactive.
+              marker._smapWindIconKey = iconKey;
+            });
+
+            // Update only after the new observations are successfully applied.
+            this.lastUpdate = this.configuredNowDisplay();
+          })
+          .catch(error => {
+            if (requestId !== this.summaryRequestId) return;
+
+            console.error('Unable to load wind-barb summaries:', error);
+
+            // Keep the previously displayed observations visible on failure.
+            if (!background) {
+              this.showAlert('Unable to load wind-barb observations.', 'error');
             }
           });
-
-          // Log stations that could not render wind barbs and WHY
-          // if (missingWindBarbs.length) {
-          //  console.warn('Stations missing wind barbs:', missingWindBarbs);
-          // }
-        }).catch(error => {
-          if (requestId !== this.summaryRequestId) return;
-          console.error('Unable to load wind-barb summaries:', error);
-          this.showAlert('Unable to load wind-barb observations.', 'error');
-        });
       },
-      
+
+      async refreshMapData() {
+        // Prevent overlapping automatic refresh cycles.
+        if (this._smapRefreshInProgress) return;
+
+        this._smapRefreshInProgress = true;
+
+        try {
+          const tasks = [];
+
+          // ------------------------------------------------------
+          // Refresh map observations.
+          // ------------------------------------------------------
+          if (this.timeToggle !== 2) {
+
+            if (this.timeToggle === 1) {
+              // Current day follows SURFACE's configured timezone.
+              //
+              // At midnight, this automatically advances to the new
+              // reporting day without requiring a page reload.
+              this.requestObject.currentDate = this.configuredToday();
+            }
+
+            tasks.push(
+              Promise.resolve(
+                this.getSummaries({ background: true })
+              ).catch(error => {
+                console.warn('Unable to refresh map observations:', error);
+              })
+            );
+          }
+
+          // ------------------------------------------------------
+          // Refresh the station details sidebar independently.
+          //
+          // Even when Pick a day is selected, the sidebar contains
+          // live/latest information and should remain current.
+          // ------------------------------------------------------
+          if (
+            this.stationsDetail &&
+            this.sandbox &&
+            this.selectedStationId !== null
+          ) {
+            tasks.push(
+              this.refreshStationDetail().catch(error => {
+                console.warn('Unable to refresh station details:', error);
+              })
+            );
+          }
+
+          await Promise.all(tasks);
+
+        } finally {
+          this._smapRefreshInProgress = false;
+        }
+      },
+            
+      updateStationDetailData(data) {
+        const stationId = data.station_id;
+
+        const formattedData = {
+          ...data,
+
+          latest_last_update: this.formatDatetime(
+            data.latest_last_update_station_time
+          ),
+
+          past24h_last_update: this.formatDatetime(
+            data.past24h_last_update_station_time
+          ),
+
+          currentday_last_update: this.formatDatetime(
+            data.currentday_last_update_station_time
+          ),
+
+          station_url: `{% url 'stations-list' %}${stationId}`,
+
+          stationReport:
+            `{% url 'station-report' %}?station_id=${stationId}`
+        };
+
+        this.selected_station_utc_offset = data.station_offset;
+
+        // Keep the existing sidebar mounted while updating its contents.
+        this.sandbox = Object.assign(
+          {},
+          this.sandbox || {},
+          formattedData
+        );
+
+        // Refresh the last-update label for the currently selected tab.
+        this.handleTabUpdate(this.selectedTab);
+      },
+
+      refreshStationDetail() {
+        if (
+          !this.stationsDetail ||
+          !this.sandbox ||
+          this.selectedStationId === null
+        ) {
+          return Promise.resolve();
+        }
+
+        const stationId = this.selectedStationId;
+        const requestId = ++this.stationDetailRequestId;
+
+        return this.getById('api/livedata', stationId)
+          .then(data => {
+
+            // Ignore responses if the administrator has switched stations,
+            // closed the sidebar or started a newer request.
+            if (
+              requestId !== this.stationDetailRequestId ||
+              !this.stationsDetail ||
+              String(this.selectedStationId) !== String(stationId)
+            ) {
+              return;
+            }
+
+            // Update the information without clearing the sidebar.
+            this.updateStationDetailData(data);
+          });
+      },
+
       getStations() {
         return this.getAll("api/stations_simple/").then(data => {
           const stationMarkers = data.map(station => ({
@@ -1350,29 +1580,42 @@
       
       openStationsDetailDialog(marker, event) {
         const requestId = ++this.stationDetailRequestId;
+
+        this.selectedStationId = marker.id;
         this.selected_station_utc_offset = null;
+
+        // A loading spinner is appropriate when selecting a NEW station.
         this.sandbox = null;
         this.stationDetailError = null;
+
         this.drawer = false;
         this.stationsDetail = true;
         this.selectedTab = 0;
 
-        if (event && event.target && event.target.closePopup) event.target.closePopup();
-        this.getById('api/livedata', marker.id).then(data => {
-          if (requestId !== this.stationDetailRequestId) return;
-          data.latest_last_update = this.formatDatetime(data.latest_last_update_station_time);
-          data.past24h_last_update = this.formatDatetime(data.past24h_last_update_station_time);
-          data.currentday_last_update = this.formatDatetime(data.currentday_last_update_station_time);
-          this.selected_station_utc_offset = data.station_offset;
-          this.sandbox = data;
-          this.sandbox.station_url = `{% url 'stations-list' %}${data.station_id}`;
-          this.sandbox.stationReport = `{% url 'station-report' %}?station_id=${data.station_id}`;
-          this.handleTabUpdate(0);
-        }).catch(error => {
-          if (requestId !== this.stationDetailRequestId) return;
-          this.stationDetailError = 'Unable to load station details. Select the station again to retry.';
-          console.error(error);
-        });
+        if (event && event.target && event.target.closePopup) {
+          event.target.closePopup();
+        }
+
+        return this.getById('api/livedata', marker.id)
+          .then(data => {
+
+            if (
+              requestId !== this.stationDetailRequestId ||
+              !this.stationsDetail
+            ) {
+              return;
+            }
+
+            this.updateStationDetailData(data);
+          })
+          .catch(error => {
+            if (requestId !== this.stationDetailRequestId) return;
+
+            this.stationDetailError =
+              'Unable to load station details. Select the station again to retry.';
+
+            console.error(error);
+          });
       },
       
       closeDialog() {
@@ -1581,26 +1824,14 @@
         console.error('Unable to load station markers:', error);
         this.showAlert('Unable to load station markers.', 'error');
       });
-      /*
-      this.markers = this.markers.map(e => {
-        const summary = state.stationSummaries.find(
-          data => data.station === e.id
-        );
 
-        if (!summary) {
-          e.popupContent = null;
-          e.popupVariable = null;
-          return e;
-        }
+      // Avoid starting another background refresh while one is still running.
+      this._smapRefreshInProgress = false;
 
-        const popupContent = `${summary.value.toFixed(1)}`;
-        e.popupContent = popupContent;
-        e.popupVariable = summary.variable.unit_symbol || "";
-        return e;
-      });*/
+      // Refresh observations and the open station sidebar every minute.
       this._smapRefreshInterval = setInterval(() => {
-        this.getSummaries();
-      }, 60000); // 1 minute
+        this.refreshMapData();
+      }, 60000);
     },
 
     beforeDestroy() {

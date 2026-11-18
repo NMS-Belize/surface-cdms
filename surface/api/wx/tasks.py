@@ -2053,6 +2053,22 @@ def build_raw_export_query(export_mode, displayUTC, aqc_checks=False, mqc_checks
 
 
 
+def convert_to_utc(naive_dt, offset_minutes):
+    """
+    Converts a naive local datetime and a UTC offset (in minutes) 
+    into an absolute, timezone-aware UTC datetime.
+    """
+    # 1. Create a timedelta from the offset minutes
+    offset = timedelta(minutes=offset_minutes)
+    
+    # 2. Shift the naive time by subtracting the offset to get UTC
+    utc_dt = naive_dt - offset
+    
+    # 3. Attach the UTC timezone using standard library timezone.utc
+    return utc_dt.replace(tzinfo=timezone.utc)
+
+
+
 # Calendar-based summaries use station-local calendar labels, not UTC instants.
 CALENDAR_EXPORT_SOURCES = frozenset({"daily_summary", "monthly_summary", "yearly_summary"})
 TIMESTAMP_EXPORT_SOURCES = frozenset({"raw_data", "hourly_summary"})
@@ -2083,9 +2099,9 @@ def parse_export_date_range(source, start_date, end_date):
             raise ValueError("Yearly boundaries must be January 1.")
         start_boundary, end_boundary = start.date(), end.date()
     else:
-        # Input timestamps explicitly refer to UTC, irrespective of the browser timezone.
-        start_boundary = pytz.UTC.localize(start)
-        end_boundary = pytz.UTC.localize(end)
+        # Input timestamps explicitly refer to the configured SURFACE default timezone.
+        start_boundary = convert_to_utc(start, settings.TIMEZONE_OFFSET)
+        end_boundary = convert_to_utc(end, settings.TIMEZONE_OFFSET)
 
     if start_boundary >= end_boundary:
         raise ValueError("The start must be before the end (end is exclusive).")

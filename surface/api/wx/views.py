@@ -2913,7 +2913,7 @@ def qc_validate_fill_missing(request):
         type(station_id) is not int
         or type(variable_id) is not int
         or station_id <= 0
-        or variable_id <= 0
+        or variable_id < 0
         or type(interval) is not int
         or interval not in ALLOWED_INTERVALS
     ):
@@ -6049,7 +6049,7 @@ def get_yearly_average(request):
     except (TypeError, ValueError):
         return JsonResponse({"message": "Invalid date, station or variable."}, status=400)
 
-    if station_id <= 0 or variable_id <= 0:
+    if station_id <= 0 or variable_id < 0:
         return JsonResponse({"message": "Station and variable must be positive IDs."}, status=400)
     if begin_date > end_date:
         return JsonResponse({"message": "Start date must not exceed end date."}, status=400)
